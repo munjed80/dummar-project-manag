@@ -13,7 +13,7 @@ def generate_contract_pdf(contract) -> str:
     pdf_dir = os.path.join(settings.UPLOAD_DIR, "contracts", "pdf")
     os.makedirs(pdf_dir, exist_ok=True)
 
-    filename = f"contract_{contract.contract_number.replace('/', '_')}.pdf"
+    filename = f"contract_{contract.contract_number.replace('/', '_').replace('\\', '_').replace('..', '_')}.pdf"
     filepath = os.path.join(pdf_dir, filename)
 
     buffer = io.BytesIO()

@@ -14,6 +14,7 @@ from app.schemas.contract import (
 )
 from app.api.deps import get_current_user, get_current_contracts_manager
 from app.services.audit import write_audit_log
+from app.services.pdf_generator import generate_contract_pdf
 import qrcode
 import io
 import base64
@@ -197,7 +198,6 @@ def generate_contract_pdf_endpoint(
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
 
-    from app.services.pdf_generator import generate_contract_pdf
     pdf_path = generate_contract_pdf(contract)
     contract.pdf_file = pdf_path
     db.commit()
