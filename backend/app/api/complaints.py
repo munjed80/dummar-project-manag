@@ -16,6 +16,7 @@ from app.schemas.complaint import (
     ComplaintActivityResponse,
 )
 from app.api.deps import get_current_user, get_current_complaints_officer
+from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 
@@ -144,6 +145,8 @@ def update_complaint(
         )
         db.add(activity)
         db.commit()
+    
+    write_audit_log(db, action="complaint_update", entity_type="complaint", entity_id=complaint.id, user_id=current_user.id, description=f"Complaint {complaint.tracking_number} updated")
     
     return complaint
 

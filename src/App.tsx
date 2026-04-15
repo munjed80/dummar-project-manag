@@ -10,6 +10,7 @@ import TasksListPage from '@/pages/TasksListPage';
 import TaskDetailsPage from '@/pages/TaskDetailsPage';
 import ContractsListPage from '@/pages/ContractsListPage';
 import ContractDetailsPage from '@/pages/ContractDetailsPage';
+import LocationsListPage from '@/pages/LocationsListPage';
 import { apiService } from '@/services/api';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,7 @@ function App() {
         <Route path="/tasks/:id" element={<ProtectedRoute><TaskDetailsPage /></ProtectedRoute>} />
         <Route path="/contracts" element={<ProtectedRoute><ContractsListPage /></ProtectedRoute>} />
         <Route path="/contracts/:id" element={<ProtectedRoute><ContractDetailsPage /></ProtectedRoute>} />
+        <Route path="/locations" element={<ProtectedRoute><LocationsListPage /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );

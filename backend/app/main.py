@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, complaints, tasks, contracts, locations, dashboard, users
+from fastapi.staticfiles import StaticFiles
+import os
+from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads
+from app.core.config import settings
 
 app = FastAPI(
     title="Dummar Project Management API",
@@ -23,6 +26,10 @@ app.include_router(contracts.router)
 app.include_router(locations.router)
 app.include_router(dashboard.router)
 app.include_router(users.router)
+app.include_router(uploads.router)
+
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 
 @app.get("/")

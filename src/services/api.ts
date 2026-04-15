@@ -289,6 +289,82 @@ class ApiService {
     return response.json();
   }
 
+  async getUsers(): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/users`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch users');
+    return response.json();
+  }
+
+  async getComplaintActivities(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/complaints/${id}/activities`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch activities');
+    return response.json();
+  }
+
+  async getTaskActivities(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/tasks/${id}/activities`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch activities');
+    return response.json();
+  }
+
+  async getContractApprovals(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}/approvals`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch approvals');
+    return response.json();
+  }
+
+  async deleteContract(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete contract');
+    return response.json();
+  }
+
+  async generateContractPdf(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}/generate-pdf`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to generate PDF');
+    return response.json();
+  }
+
+  async getBuildings(areaId?: number): Promise<any[]> {
+    const queryParams = new URLSearchParams();
+    if (areaId) queryParams.append('area_id', areaId.toString());
+    const response = await fetch(`${API_BASE_URL}/locations/buildings?${queryParams}`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch buildings');
+    return response.json();
+  }
+
+  async uploadFile(file: File, category: string): Promise<any> {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('category', category);
+    const response = await fetch(`${API_BASE_URL}/uploads/?category=${category}`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to upload file');
+    return response.json();
+  }
+
   logout() {
     localStorage.removeItem('access_token');
   }

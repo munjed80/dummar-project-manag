@@ -1,4 +1,205 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
+import { apiService } from '@/services/api';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Spinner, ClockCounterClockwise } from '@phosphor-icons/react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+
+const statusLabels: Record<string, string> = {
+  pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
+  completed: 'مكتملة', cancelled: 'ملغاة',
+};
+
+const statusColors: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800', assigned: 'bg-orange-100 text-orange-800',
+  in_progress: 'bg-purple-100 text-purple-800', completed: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-800',
+};
+
+const priorityLabels: Record<string, string> = {
+  low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة',
+};
+
+const priorityColors: Record<string, string> = {
+  low: 'bg-gray-100 text-gray-800', medium: 'bg-blue-100 text-blue-800',
+  high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800',
+};
+
+const sourceLabels: Record<string, string> = {
+  complaint: 'شكوى', internal: 'داخلي', contract: 'عقد',
+};
+
 export default function TaskDetailsPage() {
-  return <Layout><div>تفاصيل المهمة - قيد التطوير</div></Layout>;
+  const { id } = useParams<{ id: string }>();
+  const [task, setTask] = useState<any>(null);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newStatus, setNewStatus] = useState('');
+  const [notes, setNotes] = useState('');
+  const [updating, setUpdating] = useState(false);
+
+  const fetchData = () => {
+    if (!id) return;
+    setLoading(true);
+    const numId = Number(id);
+    Promise.all([
+      apiService.getTask(numId),
+      apiService.getTaskActivities(numId).catch(() => []),
+    ])
+      .then(([taskData, activitiesData]) => {
+        setTask(taskData);
+        setActivities(Array.isArray(activitiesData) ? activitiesData : []);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchData(); }, [id]);
+
+  const handleStatusUpdate = async () => {
+    if (!newStatus || !id) return;
+    setUpdating(true);
+    try {
+      await apiService.updateTask(Number(id), { status: newStatus, notes });
+      toast.success('تم تحديث الحالة بنجاح');
+      setNewStatus('');
+      setNotes('');
+      fetchData();
+    } catch {
+      toast.error('فشل تحديث الحالة');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center py-12">
+          <Spinner className="animate-spin" size={32} />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!task) {
+    return (
+      <Layout>
+        <div className="text-center py-12 text-muted-foreground">لم يتم العثور على المهمة</div>
+      </Layout>
+    );
+  }
+
+  const detail = (label: string, value: React.ReactNode) => (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="font-medium">{value || '-'}</span>
+    </div>
+  );
+
+  return (
+    <Layout>
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl flex items-center gap-3">
+              تفاصيل المهمة
+              <Badge className={statusColors[task.status] || 'bg-gray-100 text-gray-800'}>
+                {statusLabels[task.status] || task.status}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {detail('العنوان', task.title)}
+              {detail('المصدر', sourceLabels[task.source_type] || task.source_type || '-')}
+              {detail('الأولوية', (
+                <Badge className={priorityColors[task.priority] || 'bg-gray-100 text-gray-800'}>
+                  {priorityLabels[task.priority] || task.priority}
+                </Badge>
+              ))}
+              {detail('المنطقة', task.area_name || '-')}
+              {detail('تاريخ الاستحقاق', task.due_date ? format(new Date(task.due_date), 'yyyy/MM/dd') : '-')}
+              {detail('تاريخ الإنجاز', task.completed_at ? format(new Date(task.completed_at), 'yyyy/MM/dd HH:mm') : '-')}
+              {detail('تاريخ الإنشاء', task.created_at ? format(new Date(task.created_at), 'yyyy/MM/dd HH:mm') : '-')}
+              {detail('تاريخ التحديث', task.updated_at ? format(new Date(task.updated_at), 'yyyy/MM/dd HH:mm') : '-')}
+            </div>
+            {task.description && (
+              <>
+                <Separator className="my-4" />
+                <div>
+                  <span className="text-sm text-muted-foreground">الوصف</span>
+                  <p className="mt-1">{task.description}</p>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>تحديث الحالة</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Select value={newStatus} onValueChange={setNewStatus}>
+              <SelectTrigger className="w-full md:w-[250px]">
+                <SelectValue placeholder="اختر الحالة الجديدة" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(statusLabels).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Textarea
+              placeholder="ملاحظات..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <Button onClick={handleStatusUpdate} disabled={!newStatus || updating}>
+              {updating ? <Spinner className="animate-spin ml-2" size={16} /> : null}
+              تحديث الحالة
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClockCounterClockwise size={20} />
+              سجل النشاطات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activities.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">لا توجد نشاطات</p>
+            ) : (
+              <div className="space-y-4">
+                {activities.map((act: any, idx: number) => (
+                  <div key={act.id || idx} className="flex gap-4 border-r-2 border-primary pr-4 pb-4">
+                    <div className="flex-1">
+                      <p className="font-medium">{act.action || act.description || '-'}</p>
+                      {act.notes && <p className="text-sm text-muted-foreground mt-1">{act.notes}</p>}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {act.created_at ? format(new Date(act.created_at), 'yyyy/MM/dd HH:mm') : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </Layout>
+  );
 }

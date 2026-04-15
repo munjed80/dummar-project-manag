@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
@@ -26,7 +26,7 @@ class Building(Base):
     __tablename__ = "buildings"
 
     id = Column(Integer, primary_key=True, index=True)
-    area_id = Column(Integer, nullable=False, index=True)
+    area_id = Column(Integer, ForeignKey("areas.id"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     name_ar = Column(String(100), nullable=False)
     building_number = Column(String(20), nullable=True)

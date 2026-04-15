@@ -7,6 +7,7 @@ from app.models.task import Task, TaskActivity, TaskStatus
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
 from app.api.deps import get_current_user
+from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -106,6 +107,8 @@ def update_task(
         )
         db.add(activity)
         db.commit()
+    
+    write_audit_log(db, action="task_update", entity_type="task", entity_id=task.id, user_id=current_user.id, description=f"Task {task.id} updated")
     
     return task
 

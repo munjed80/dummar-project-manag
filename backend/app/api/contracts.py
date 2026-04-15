@@ -13,6 +13,8 @@ from app.schemas.contract import (
     ContractApprovalResponse,
 )
 from app.api.deps import get_current_user, get_current_contracts_manager
+from app.services.audit import write_audit_log
+from app.services.pdf_generator import generate_contract_pdf
 import qrcode
 import io
 import base64
@@ -69,6 +71,8 @@ def create_contract(
     )
     db.add(approval)
     db.commit()
+    
+    write_audit_log(db, action="contract_create", entity_type="contract", entity_id=db_contract.id, user_id=current_user.id, description=f"Contract {db_contract.contract_number} created")
     
     return db_contract
 
@@ -138,6 +142,8 @@ def update_contract(
     db.commit()
     db.refresh(contract)
     
+    write_audit_log(db, action="contract_update", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} updated")
+    
     return contract
 
 
@@ -177,7 +183,26 @@ def approve_contract(
     db.add(approval)
     db.commit()
     
+    write_audit_log(db, action=f"contract_{approval_request.action}", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} - action: {approval_request.action}")
+    
     return contract
+
+
+@router.post("/{contract_id}/generate-pdf")
+def generate_contract_pdf_endpoint(
+    contract_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    pdf_path = generate_contract_pdf(contract)
+    contract.pdf_file = pdf_path
+    db.commit()
+
+    return {"pdf_path": pdf_path}
 
 
 @router.get("/{contract_id}/approvals", response_model=List[ContractApprovalResponse])
@@ -208,6 +233,8 @@ def delete_contract(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only draft contracts can be deleted",
         )
+    
+    write_audit_log(db, action="contract_delete", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} deleted")
     
     db.delete(contract)
     db.commit()

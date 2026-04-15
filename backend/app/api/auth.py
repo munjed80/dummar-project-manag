@@ -5,6 +5,7 @@ from app.core.security import verify_password, create_access_token, get_password
 from app.models.user import User
 from app.schemas.user import LoginRequest, Token, UserResponse, UserCreate
 from app.api.deps import get_current_user
+from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,6 +27,8 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
         )
     
     access_token = create_access_token(data={"sub": user.username, "role": user.role.value})
+    
+    write_audit_log(db, action="login", entity_type="user", entity_id=user.id, user_id=user.id, description=f"User {user.username} logged in")
     
     return {"access_token": access_token, "token_type": "bearer"}
 
