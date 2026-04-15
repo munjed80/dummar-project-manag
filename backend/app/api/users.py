@@ -2,12 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
+from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.api.deps import get_current_user, get_current_active_director
 from app.services.audit import write_audit_log
+
+
+class PaginatedUsers(BaseModel):
+    total_count: int
+    items: List[UserResponse]
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -46,13 +52,13 @@ def create_user(
     return db_user
 
 
-@router.get("/")
+@router.get("/", response_model=PaginatedUsers)
 def list_users(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
     role_filter: Optional[UserRole] = None,
-    is_active: Optional[int] = None,
+    is_active: Optional[bool] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
