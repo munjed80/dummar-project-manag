@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads
+from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports
 from app.core.config import settings
 
 app = FastAPI(
@@ -27,6 +27,7 @@ app.include_router(locations.router)
 app.include_router(dashboard.router)
 app.include_router(users.router)
 app.include_router(uploads.router)
+app.include_router(reports.router)
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
