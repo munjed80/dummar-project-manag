@@ -37,7 +37,7 @@ def upgrade() -> None:
         sa.Column('name_ar', sa.String(length=100), nullable=False),
         sa.Column('code', sa.String(length=20), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('geometry', postgresql.dialects.postgresql.GEOMETRY('POLYGON', srid=4326), nullable=True),
+        sa.Column('geometry', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint('id'),
@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.Column('name', sa.String(length=100), nullable=False),
         sa.Column('name_ar', sa.String(length=100), nullable=False),
         sa.Column('code', sa.String(length=20), nullable=True),
-        sa.Column('geometry', postgresql.dialects.postgresql.GEOMETRY('LINESTRING', srid=4326), nullable=True),
+        sa.Column('geometry', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint('id')
@@ -66,9 +66,10 @@ def upgrade() -> None:
         sa.Column('name_ar', sa.String(length=100), nullable=False),
         sa.Column('building_number', sa.String(length=20), nullable=True),
         sa.Column('floors', sa.Integer(), nullable=True),
-        sa.Column('geometry', postgresql.dialects.postgresql.GEOMETRY('POINT', srid=4326), nullable=True),
+        sa.Column('geometry', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(['area_id'], ['areas.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_buildings_area_id'), 'buildings', ['area_id'], unique=False)
@@ -83,7 +84,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=False),
         sa.Column('location_text', sa.Text(), nullable=True),
         sa.Column('area_id', sa.Integer(), nullable=True),
-        sa.Column('geometry', postgresql.dialects.postgresql.GEOMETRY('POINT', srid=4326), nullable=True),
+        sa.Column('geometry', sa.Text(), nullable=True),
         sa.Column('latitude', sa.Float(), nullable=True),
         sa.Column('longitude', sa.Float(), nullable=True),
         sa.Column('status', sa.Enum('NEW', 'UNDER_REVIEW', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'REJECTED', name='complaintstatus'), nullable=False),

@@ -6,6 +6,7 @@ from app.core.security import get_password_hash
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.api.deps import get_current_user, get_current_active_director
+from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -38,6 +39,8 @@ def create_user(
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    
+    write_audit_log(db, action="user_create", entity_type="user", entity_id=db_user.id, user_id=current_user.id, description=f"User {db_user.username} created")
     
     return db_user
 
@@ -83,6 +86,8 @@ def update_user(
     db.commit()
     db.refresh(user)
     
+    write_audit_log(db, action="user_update", entity_type="user", entity_id=user.id, user_id=current_user.id, description=f"User {user.username} updated")
+    
     return user
 
 
@@ -98,5 +103,7 @@ def delete_user(
     
     user.is_active = 0
     db.commit()
+    
+    write_audit_log(db, action="user_deactivate", entity_type="user", entity_id=user.id, user_id=current_user.id, description=f"User {user.username} deactivated")
     
     return {"message": "User deactivated successfully"}
