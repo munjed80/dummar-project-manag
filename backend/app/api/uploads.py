@@ -8,6 +8,7 @@ from app.core.config import settings
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
+ALLOWED_CATEGORIES = {"general", "contracts", "complaints", "tasks", "profiles"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
@@ -21,16 +22,15 @@ async def upload_file(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"File type {ext} not allowed")
 
-    # Sanitize category to prevent path traversal
-    safe_category = "".join(c for c in category if c.isalnum() or c in "-_")
-    if not safe_category:
-        safe_category = "general"
+    # Only allow predefined categories to prevent path traversal
+    if category not in ALLOWED_CATEGORIES:
+        category = "general"
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-    upload_dir = os.path.join(settings.UPLOAD_DIR, safe_category)
+    upload_dir = os.path.join(settings.UPLOAD_DIR, category)
     os.makedirs(upload_dir, exist_ok=True)
 
     filename = f"{uuid.uuid4().hex}{ext}"
@@ -42,6 +42,6 @@ async def upload_file(
     return {
         "filename": filename,
         "original_name": file.filename,
-        "path": f"/uploads/{safe_category}/{filename}",
+        "path": f"/uploads/{category}/{filename}",
         "size": len(content),
     }
