@@ -15,6 +15,8 @@ import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash } fr
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+const API_BASE_URL = 'http://localhost:8000';
+
 const statusLabels: Record<string, string> = {
   draft: 'مسودة', under_review: 'قيد المراجعة', approved: 'مُعتمد',
   active: 'نشط', suspended: 'معلق', completed: 'مكتمل',
@@ -74,7 +76,7 @@ export default function ContractDetailsPage() {
       const result = await apiService.generateContractPdf(Number(id));
       toast.success('تم إنشاء ملف PDF بنجاح');
       if (result.pdf_path) {
-        window.open(`http://localhost:8000${result.pdf_path}`, '_blank');
+        window.open(`${API_BASE_URL}${result.pdf_path}`, '_blank');
       }
       fetchData();
     } catch {
@@ -157,7 +159,7 @@ export default function ContractDetailsPage() {
                 </Button>
                 {contract.pdf_file && (
                   <Button variant="outline" asChild>
-                    <a href={`http://localhost:8000${contract.pdf_file}`} target="_blank" rel="noopener noreferrer">
+                    <a href={`${API_BASE_URL}${contract.pdf_file}`} target="_blank" rel="noopener noreferrer">
                       <FilePdf className="ml-2" size={18} />
                       تحميل PDF
                     </a>
