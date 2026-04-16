@@ -119,28 +119,37 @@ export default function ContractDetailsPage() {
               {detail('رقم العقد', <span className="font-mono">{contract.contract_number}</span>)}
               {detail('العنوان', contract.title)}
               {detail('المقاول', contract.contractor_name)}
-              {detail('النوع', typeLabels[contract.type] || contract.type)}
-              {detail('القيمة', formatValue(contract.value))}
+              {detail('النوع', typeLabels[contract.contract_type] || contract.contract_type)}
+              {detail('القيمة', formatValue(contract.contract_value))}
               {detail('تاريخ البدء', contract.start_date ? format(new Date(contract.start_date), 'yyyy/MM/dd') : '-')}
               {detail('تاريخ الانتهاء', contract.end_date ? format(new Date(contract.end_date), 'yyyy/MM/dd') : '-')}
               {detail('تاريخ الإنشاء', contract.created_at ? format(new Date(contract.created_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ التحديث', contract.updated_at ? format(new Date(contract.updated_at), 'yyyy/MM/dd HH:mm') : '-')}
             </div>
-            {contract.description && (
+            {contract.scope_description && (
               <>
                 <Separator className="my-4" />
                 <div>
-                  <span className="text-sm text-muted-foreground">الوصف</span>
-                  <p className="mt-1">{contract.description}</p>
+                  <span className="text-sm text-muted-foreground">نطاق العمل</span>
+                  <p className="mt-1">{contract.scope_description}</p>
                 </div>
               </>
             )}
-            {contract.terms && (
+            {contract.related_areas && (
               <>
                 <Separator className="my-4" />
                 <div>
-                  <span className="text-sm text-muted-foreground">الشروط</span>
-                  <p className="mt-1">{contract.terms}</p>
+                  <span className="text-sm text-muted-foreground">المناطق المرتبطة</span>
+                  <p className="mt-1">{contract.related_areas}</p>
+                </div>
+              </>
+            )}
+            {contract.notes && (
+              <>
+                <Separator className="my-4" />
+                <div>
+                  <span className="text-sm text-muted-foreground">ملاحظات</span>
+                  <p className="mt-1">{contract.notes}</p>
                 </div>
               </>
             )}
@@ -164,7 +173,7 @@ export default function ContractDetailsPage() {
                     <div className="flex-1">
                       <p className="font-medium">{app.action || '-'}</p>
                       {app.comments && <p className="text-sm text-muted-foreground mt-1">{app.comments}</p>}
-                      {app.user_name && <p className="text-sm mt-1">بواسطة: {app.user_name}</p>}
+                      {app.user_id && <p className="text-sm mt-1">معرّف المستخدم: {app.user_id}</p>}
                       <p className="text-xs text-muted-foreground mt-1">
                         {app.created_at ? format(new Date(app.created_at), 'yyyy/MM/dd HH:mm') : ''}
                       </p>

@@ -130,7 +130,7 @@ export default function ComplaintDetailsPage() {
                   {priorityLabels[complaint.priority] || complaint.priority}
                 </Badge>
               ))}
-              {detail('الموقع', complaint.location_details)}
+              {detail('الموقع', complaint.location_text)}
               {detail('تاريخ الإنشاء', complaint.created_at ? format(new Date(complaint.created_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ التحديث', complaint.updated_at ? format(new Date(complaint.updated_at), 'yyyy/MM/dd HH:mm') : '-')}
             </div>

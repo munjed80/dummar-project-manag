@@ -58,7 +58,7 @@ export default function ContractsListPage() {
       c.title?.toLowerCase().includes(search.toLowerCase()) ||
       c.contractor_name?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    const matchesType = typeFilter === 'all' || c.type === typeFilter;
+    const matchesType = typeFilter === 'all' || c.contract_type === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
 
@@ -133,8 +133,8 @@ export default function ContractsListPage() {
                       <TableCell className="font-mono">{c.contract_number}</TableCell>
                       <TableCell>{c.title}</TableCell>
                       <TableCell>{c.contractor_name}</TableCell>
-                      <TableCell>{typeLabels[c.type] || c.type || '-'}</TableCell>
-                      <TableCell>{formatValue(c.value)}</TableCell>
+                      <TableCell>{typeLabels[c.contract_type] || c.contract_type || '-'}</TableCell>
+                      <TableCell>{formatValue(c.contract_value)}</TableCell>
                       <TableCell>
                         <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
                           {statusLabels[c.status] || c.status}

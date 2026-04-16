@@ -127,7 +127,7 @@ export default function TaskDetailsPage() {
                   {priorityLabels[task.priority] || task.priority}
                 </Badge>
               ))}
-              {detail('المنطقة', task.area_name || '-')}
+              {detail('الموقع', task.location_text || '-')}
               {detail('تاريخ الاستحقاق', task.due_date ? format(new Date(task.due_date), 'yyyy/MM/dd') : '-')}
               {detail('تاريخ الإنجاز', task.completed_at ? format(new Date(task.completed_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ الإنشاء', task.created_at ? format(new Date(task.created_at), 'yyyy/MM/dd HH:mm') : '-')}

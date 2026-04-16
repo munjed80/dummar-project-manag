@@ -297,6 +297,51 @@ class ApiService {
     return response.json();
   }
 
+  async getUser(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch user');
+    return response.json();
+  }
+
+  async createUser(data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/users/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create user');
+    return response.json();
+  }
+
+  async updateUser(id: number, data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update user');
+    return response.json();
+  }
+
+  async deleteUser(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete user');
+    return response.json();
+  }
+
+  async getReportsSummary(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/reports/summary`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch reports');
+    return response.json();
+  }
+
   async getComplaintActivities(id: number): Promise<any[]> {
     const response = await fetch(`${API_BASE_URL}/complaints/${id}/activities`, {
       headers: this.getAuthHeaders(),
