@@ -8,14 +8,14 @@ from app.models.task import Task, TaskStatus
 from app.models.contract import Contract, ContractStatus
 from app.models.user import User
 from app.schemas.dashboard import DashboardStats, RecentActivity
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_internal_user
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats", response_model=DashboardStats)
 def get_dashboard_stats(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     total_complaints = db.query(func.count(Complaint.id)).scalar()
@@ -55,7 +55,7 @@ def get_dashboard_stats(
 
 @router.get("/recent-activity", response_model=RecentActivity)
 def get_recent_activity(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     recent_complaints = db.query(Complaint).order_by(Complaint.created_at.desc()).limit(5).all()

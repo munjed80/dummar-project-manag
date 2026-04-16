@@ -31,6 +31,7 @@ def seed_users(db: Session):
         {"username": "area_sup", "password": "password123", "full_name": "خالد الأحمد", "role": UserRole.AREA_SUPERVISOR, "email": "area@dummar.gov.sy", "phone": "+963112345005"},
         {"username": "field_user", "password": "password123", "full_name": "يوسف العلي", "role": UserRole.FIELD_TEAM, "email": "field@dummar.gov.sy", "phone": "+963112345006"},
         {"username": "contractor", "password": "password123", "full_name": "شركة البناء الحديث", "role": UserRole.CONTRACTOR_USER, "email": "contractor@dummar.gov.sy", "phone": "+963112345007"},
+        {"username": "citizen1", "password": "password123", "full_name": "مواطن — سمير الحسن", "role": UserRole.CITIZEN, "email": "citizen1@dummar.gov.sy", "phone": "+963911234567"},
     ]
     
     for user_data in users_data:
@@ -141,6 +142,8 @@ def seed_complaints(db: Session):
             "area_id": areas[0].id if areas else None,
             "status": ComplaintStatus.NEW,
             "priority": ComplaintPriority.HIGH,
+            "latitude": 33.5372,
+            "longitude": 36.2198,
         },
         {
             "tracking_number": "CMP00000002",
@@ -153,6 +156,8 @@ def seed_complaints(db: Session):
             "status": ComplaintStatus.UNDER_REVIEW,
             "priority": ComplaintPriority.MEDIUM,
             "assigned_to_id": users[0].id if users else None,
+            "latitude": 33.5340,
+            "longitude": 36.2215,
         },
         {
             "tracking_number": "CMP00000003",
@@ -165,6 +170,8 @@ def seed_complaints(db: Session):
             "status": ComplaintStatus.ASSIGNED,
             "priority": ComplaintPriority.URGENT,
             "assigned_to_id": users[0].id if users else None,
+            "latitude": 33.5385,
+            "longitude": 36.2180,
         },
         {
             "tracking_number": "CMP00000004",
@@ -176,6 +183,8 @@ def seed_complaints(db: Session):
             "area_id": areas[0].id if areas else None,
             "status": ComplaintStatus.IN_PROGRESS,
             "priority": ComplaintPriority.HIGH,
+            "latitude": 33.5368,
+            "longitude": 36.2205,
         },
         {
             "tracking_number": "CMP00000005",
@@ -188,6 +197,8 @@ def seed_complaints(db: Session):
             "status": ComplaintStatus.RESOLVED,
             "priority": ComplaintPriority.MEDIUM,
             "resolved_at": datetime.utcnow() - timedelta(days=2),
+            "latitude": 33.5355,
+            "longitude": 36.2190,
         },
         {
             "tracking_number": "CMP00000006",
@@ -199,6 +210,8 @@ def seed_complaints(db: Session):
             "area_id": areas[3].id if len(areas) > 3 else None,
             "status": ComplaintStatus.NEW,
             "priority": ComplaintPriority.HIGH,
+            "latitude": 33.5348,
+            "longitude": 36.2225,
         },
         {
             "tracking_number": "CMP00000007",
@@ -210,6 +223,8 @@ def seed_complaints(db: Session):
             "area_id": areas[6].id if len(areas) > 6 else None,
             "status": ComplaintStatus.UNDER_REVIEW,
             "priority": ComplaintPriority.URGENT,
+            "latitude": 33.5395,
+            "longitude": 36.2170,
         },
     ]
     

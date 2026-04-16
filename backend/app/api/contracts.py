@@ -18,6 +18,7 @@ from app.schemas.report import PaginatedContracts
 from app.api.deps import get_current_user, get_current_contracts_manager, get_current_internal_user
 from app.services.audit import write_audit_log
 from app.services.pdf_generator import generate_contract_pdf
+from app.services.notification_service import notify_contract_status_change
 import qrcode
 import io
 import base64
@@ -208,6 +209,17 @@ def approve_contract(
     db.commit()
     
     write_audit_log(db, action=f"contract_{approval_request.action}", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} - action: {approval_request.action}")
+
+    # Send notifications for contract status changes
+    try:
+        notify_contract_status_change(
+            db=db,
+            contract_id=contract.id,
+            contract_number=contract.contract_number,
+            action=approval_request.action,
+        )
+    except Exception:
+        pass  # Don't block the action if notification fails
     
     return contract
 

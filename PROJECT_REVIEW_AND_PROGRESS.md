@@ -11,6 +11,45 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-16T22:23 — تعزيز الجاهزية النهائية وإكمال التكامل
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-16T22:23
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL
+  - باكند FastAPI مع PostgreSQL/PostGIS، واجهة React 19 + Vite 8 + Tailwind 4
+  - RBAC مُطبّق: citizen مُقيّد من endpoints تشغيلية، project_director يدير المستخدمين
+  - Notification model موجود ومُصدّر، migration 002 جاهز لكن لم يُختبر على PostgreSQL حقيقي
+  - إشعارات الشكاوى مربوطة، إشعارات المهام/العقود غير مربوطة بعد
+  - لا يوجد حساب مواطن تجريبي في seed data
+  - الشكاوى التجريبية لا تحتوي على إحداثيات (الخريطة فارغة)
+  - /dashboard مفتوح لأي مستخدم مُصادق بما فيهم citizen
+  - لا توجد اختبارات لمنع citizen من الوصول لـ endpoints المقيدة
+
+- **أهداف هذه الدفعة:**
+  1. اختبار Alembic migration على PostgreSQL حقيقي (Docker) وإصلاح أي مشاكل
+  2. إضافة اختبارات RBAC لمنع citizen من الوصول لـ endpoints المقيدة
+  3. تقييد /dashboard للموظفين الداخليين (القرار الأكثر أماناً)
+  4. ربط إشعارات المهام والعقود (الدوال جاهزة، تحتاج تفعيل)
+  5. إضافة حساب مواطن تجريبي + إحداثيات واقعية للشكاوى
+  6. تحسين الشعور المهني للنظام
+
+- **الملفات المخطط تعديلها:**
+  - `backend/app/api/dashboard.py` — تقييد بـ internal staff
+  - `backend/app/api/tasks.py` — ربط إشعارات المهام
+  - `backend/app/api/contracts.py` — ربط إشعارات العقود
+  - `backend/app/services/notification_service.py` — إضافة notify_contract_status_change
+  - `backend/app/scripts/seed_data.py` — مواطن تجريبي + إحداثيات
+  - `backend/tests/conftest.py` — fixture مواطن
+  - `backend/tests/test_api.py` — اختبارات citizen denial
+  - `src/App.tsx` — تقييد /dashboard بالدور
+
+- **المخاطر:**
+  - Docker PostgreSQL قد لا يكون متاحاً في بيئة CI
+  - تقييد /dashboard قد يؤثر على citizen login redirect
+
+---
+
 ### الدفعة: 2026-04-16T21:44 — 5 إصلاحات حرجة لتعزيز الثقة في MVP
 
 **قبل البدء:**

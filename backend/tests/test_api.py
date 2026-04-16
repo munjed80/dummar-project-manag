@@ -351,3 +351,70 @@ class TestPaginationMetadata:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_count"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# 8. Citizen role is denied access to internal/operational endpoints
+# ---------------------------------------------------------------------------
+
+class TestCitizenDenial:
+    """Citizen users must NOT access internal operational endpoints."""
+
+    def test_citizen_cannot_list_complaints(self, client, citizen_token):
+        resp = client.get("/complaints/", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_get_complaint_detail(self, client, citizen_token):
+        resp = client.get("/complaints/1", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_list_tasks(self, client, citizen_token):
+        resp = client.get("/tasks/", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_get_task_detail(self, client, citizen_token):
+        resp = client.get("/tasks/1", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_list_contracts(self, client, citizen_token):
+        resp = client.get("/contracts/", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_get_contract_detail(self, client, citizen_token):
+        resp = client.get("/contracts/1", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_access_reports(self, client, citizen_token):
+        resp = client.get("/reports/summary", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_list_users(self, client, citizen_token):
+        resp = client.get("/users/", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_access_dashboard_stats(self, client, citizen_token):
+        resp = client.get("/dashboard/stats", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_access_dashboard_activity(self, client, citizen_token):
+        resp = client.get("/dashboard/recent-activity", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_get_map_markers(self, client, citizen_token):
+        resp = client.get("/complaints/map/markers", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# 9. Citizen CAN access their own complaints
+# ---------------------------------------------------------------------------
+
+class TestCitizenAccess:
+    """Citizen users can access their own complaint endpoint."""
+
+    def test_citizen_can_access_my_complaints(self, client, db, citizen_token):
+        resp = client.get("/complaints/citizen/my-complaints", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_count" in data
+        assert "items" in data

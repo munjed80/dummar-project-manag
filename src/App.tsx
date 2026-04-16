@@ -51,6 +51,11 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
     return <>{children}</>;
   }
 
+  // Citizen users go to their own dashboard; others go to main dashboard
+  if (role === 'citizen') {
+    return <Navigate to="/citizen" replace />;
+  }
+
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -76,8 +81,8 @@ function App() {
           <Route path="/complaints/new" element={<ComplaintSubmitPage />} />
           <Route path="/complaints/track" element={<ComplaintTrackPage />} />
           
-          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
+          <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
           <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
           <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
           <Route path="/complaints/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />

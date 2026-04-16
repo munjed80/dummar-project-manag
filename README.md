@@ -93,6 +93,10 @@ python -m pytest tests/ -v
 | area_sup | password123 | area_supervisor | خالد الأحمد |
 | field_user | password123 | field_team | يوسف العلي |
 | contractor | password123 | contractor_user | شركة البناء الحديث |
+| citizen1 | password123 | citizen | مواطن — سمير الحسن |
+
+> **Note:** The citizen account shares phone `+963911234567` with complaint CMP00000001,
+> so it will show that complaint in the citizen dashboard.
 
 ## Project Structure
 

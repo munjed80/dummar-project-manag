@@ -173,6 +173,16 @@ def contractor_token(client, contractor_user):
 
 
 @pytest.fixture()
+def citizen_user(db):
+    return _create_user(db, "test_citizen", UserRole.CITIZEN, password="testpass123")
+
+
+@pytest.fixture()
+def citizen_token(client, citizen_user):
+    return _login(client, "test_citizen")
+
+
+@pytest.fixture()
 def sample_area(db):
     area = Area(name="ISL-A", name_ar="الجزيرة أ", code="ISL-A")
     db.add(area)

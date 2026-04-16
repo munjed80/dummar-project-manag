@@ -113,3 +113,50 @@ def notify_task_assigned(
         entity_type="task",
         entity_id=task_id,
     )
+
+
+def notify_contract_status_change(
+    db: Session,
+    contract_id: int,
+    contract_number: str,
+    action: str,
+):
+    """
+    Send notification when contract status changes (approved, activated, etc.).
+    Notifies contracts managers and project director.
+    """
+    action_labels = {
+        "approve": "تمت الموافقة",
+        "activate": "تم التفعيل",
+        "complete": "تم الإنجاز",
+        "suspend": "تم التعليق",
+        "cancel": "تم الإلغاء",
+    }
+    action_label = action_labels.get(action, action)
+
+    title = f"تحديث العقد {contract_number}"
+    message = f"العقد {contract_number}: {action_label}"
+
+    # Notify contracts managers and project director
+    managers = db.query(User.id).filter(
+        User.role.in_([UserRole.CONTRACTS_MANAGER, UserRole.PROJECT_DIRECTOR]),
+        User.is_active == 1,
+    ).all()
+
+    for (uid,) in managers:
+        create_notification(
+            db=db,
+            user_id=uid,
+            notification_type=NotificationType.CONTRACT_UPDATED,
+            title=title,
+            message=message,
+            entity_type="contract",
+            entity_id=contract_id,
+        )
+
+    logger.info(
+        "Sent %d notifications for contract %s action=%s",
+        len(managers),
+        contract_number,
+        action,
+    )

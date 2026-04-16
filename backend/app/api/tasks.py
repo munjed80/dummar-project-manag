@@ -10,6 +10,7 @@ from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityR
 from app.schemas.report import PaginatedTasks
 from app.api.deps import get_current_user, require_role, get_current_internal_user
 from app.services.audit import write_audit_log
+from app.services.notification_service import notify_task_assigned
 from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -43,6 +44,18 @@ def create_task(
     )
     db.add(activity)
     db.commit()
+
+    # Notify assigned user
+    if db_task.assigned_to_id:
+        try:
+            notify_task_assigned(
+                db=db,
+                task_id=db_task.id,
+                task_title=db_task.title,
+                assigned_to_id=db_task.assigned_to_id,
+            )
+        except Exception:
+            pass  # Don't block task creation if notification fails
     
     return db_task
 
@@ -139,6 +152,18 @@ def update_task(
         )
         db.add(activity)
         db.commit()
+
+    # Notify when task is (re-)assigned
+    if "assigned_to_id" in update_data and task.assigned_to_id and task.assigned_to_id != current_user.id:
+        try:
+            notify_task_assigned(
+                db=db,
+                task_id=task.id,
+                task_title=task.title,
+                assigned_to_id=task.assigned_to_id,
+            )
+        except Exception:
+            pass
     
     write_audit_log(db, action="task_update", entity_type="task", entity_id=task.id, user_id=current_user.id, description=f"Task {task.id} updated")
     
