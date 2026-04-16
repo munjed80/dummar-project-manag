@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import json
 from app.core.database import get_db
-from app.models.contract import Contract, ContractApproval, ContractStatus
+from app.models.contract import Contract, ContractApproval, ContractStatus, ContractType
 from app.models.user import User
 from app.schemas.contract import (
     ContractCreate,
@@ -78,11 +79,13 @@ def create_contract(
     return db_contract
 
 
-@router.get("/", response_model=List[ContractResponse])
+@router.get("/", response_model=dict)
 def list_contracts(
     skip: int = 0,
     limit: int = 100,
     status_filter: Optional[ContractStatus] = None,
+    contract_type: Optional[ContractType] = None,
+    search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -90,9 +93,23 @@ def list_contracts(
     
     if status_filter:
         query = query.filter(Contract.status == status_filter)
+
+    if contract_type:
+        query = query.filter(Contract.contract_type == contract_type)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Contract.contract_number.ilike(search_term),
+                Contract.title.ilike(search_term),
+                Contract.contractor_name.ilike(search_term),
+            )
+        )
     
+    total_count = query.count()
     contracts = query.order_by(Contract.created_at.desc()).offset(skip).limit(limit).all()
-    return contracts
+    return {"total_count": total_count, "items": contracts}
 
 
 @router.get("/expiring-soon", response_model=List[ContractResponse])

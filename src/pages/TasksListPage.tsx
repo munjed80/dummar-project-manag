@@ -44,6 +44,7 @@ const PAGE_SIZE = 15;
 export default function TasksListPage() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -54,22 +55,23 @@ export default function TasksListPage() {
   useEffect(() => {
     setLoading(true);
     setError('');
-    const params: any = {};
+    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
+    if (search) params.search = search;
     apiService.getTasks(params)
-      .then(setTasks)
+      .then((data) => {
+        let items = data.items;
+        if (priorityFilter !== 'all') {
+          items = items.filter((t: any) => t.priority === priorityFilter);
+        }
+        setTasks(items);
+        setTotalCount(data.total_count);
+      })
       .catch(() => setError('فشل تحميل المهام'))
       .finally(() => setLoading(false));
-  }, [statusFilter]);
+  }, [statusFilter, search, priorityFilter, page]);
 
-  const filtered = tasks.filter((t) => {
-    const matchesSearch = !search || t.title?.toLowerCase().includes(search.toLowerCase());
-    const matchesPriority = priorityFilter === 'all' || t.priority === priorityFilter;
-    return matchesSearch && matchesPriority;
-  });
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   return (
     <Layout>
@@ -133,14 +135,14 @@ export default function TasksListPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginated.length === 0 ? (
+                  {tasks.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                         لا توجد مهام
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginated.map((t) => (
+                    tasks.map((t) => (
                       <TableRow
                         key={t.id}
                         className="cursor-pointer hover:bg-muted/50"
@@ -169,7 +171,7 @@ export default function TasksListPage() {
                 <div className="flex items-center justify-center gap-2 pt-4">
                   <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>
                   <span className="text-sm text-muted-foreground">
-                    صفحة {page + 1} من {totalPages} ({filtered.length} مهمة)
+                    صفحة {page + 1} من {totalPages} ({totalCount} مهمة)
                   </span>
                   <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>التالي</Button>
                 </div>

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
@@ -45,13 +46,14 @@ def create_task(
     return db_task
 
 
-@router.get("/", response_model=List[TaskResponse])
+@router.get("/", response_model=dict)
 def list_tasks(
     skip: int = 0,
     limit: int = 100,
     status_filter: Optional[TaskStatus] = None,
     area_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
+    search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -65,9 +67,19 @@ def list_tasks(
     
     if assigned_to_id:
         query = query.filter(Task.assigned_to_id == assigned_to_id)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Task.title.ilike(search_term),
+                Task.description.ilike(search_term),
+            )
+        )
     
+    total_count = query.count()
     tasks = query.order_by(Task.created_at.desc()).offset(skip).limit(limit).all()
-    return tasks
+    return {"total_count": total_count, "items": tasks}
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Spinner, ChartBar, MagnifyingGlass } from '@phosphor-icons/react';
+import { Spinner, ChartBar, MagnifyingGlass, DownloadSimple } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 
 const complaintStatusLabels: Record<string, string> = {
@@ -82,7 +82,11 @@ export default function ReportsPage() {
   const [dateTo, setDateTo] = useState('');
   const [areaFilter, setAreaFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [complaintTypeFilter, setComplaintTypeFilter] = useState('all');
+  const [contractTypeFilter, setContractTypeFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
   const [areas, setAreas] = useState<any[]>([]);
+  const [csvLoading, setCsvLoading] = useState(false);
 
   // Detail tabs data
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -106,7 +110,23 @@ export default function ReportsPage() {
     if (dateTo) params.date_to = dateTo;
     if (areaFilter !== 'all') params.area_id = Number(areaFilter);
     if (statusFilter !== 'all') params.status = statusFilter;
+    if (complaintTypeFilter !== 'all') params.complaint_type = complaintTypeFilter;
+    if (contractTypeFilter !== 'all') params.contract_type = contractTypeFilter;
+    if (priorityFilter !== 'all') params.priority = priorityFilter;
     return params;
+  };
+
+  const handleCsvDownload = async (entity: 'complaints' | 'tasks' | 'contracts') => {
+    setCsvLoading(true);
+    try {
+      const params = buildFilterParams();
+      if (detailSearch) params.search = detailSearch;
+      await apiService.downloadReportCsv(entity, params);
+    } catch {
+      // Silently fail — user will notice no download
+    } finally {
+      setCsvLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -135,7 +155,7 @@ export default function ReportsPage() {
         .catch(() => setError('فشل تحميل بيانات العقود'))
         .finally(() => setLoading(false));
     }
-  }, [activeTab, dateFrom, dateTo, areaFilter, statusFilter, detailSearch, detailPage]);
+  }, [activeTab, dateFrom, dateTo, areaFilter, statusFilter, complaintTypeFilter, contractTypeFilter, priorityFilter, detailSearch, detailPage]);
 
   const renderPagination = (total: number) => {
     const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -178,6 +198,54 @@ export default function ReportsPage() {
                     <SelectItem value="all">جميع المناطق</SelectItem>
                     {areas.map((a: any) => (
                       <SelectItem key={a.id} value={String(a.id)}>{a.name_ar || a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">الحالة</label>
+                <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setDetailPage(0); }}>
+                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">جميع الحالات</SelectItem>
+                    {Object.entries(complaintStatusLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">نوع الشكوى</label>
+                <Select value={complaintTypeFilter} onValueChange={(v) => { setComplaintTypeFilter(v); setDetailPage(0); }}>
+                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">جميع الأنواع</SelectItem>
+                    {Object.entries(complaintTypeLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">نوع العقد</label>
+                <Select value={contractTypeFilter} onValueChange={(v) => { setContractTypeFilter(v); setDetailPage(0); }}>
+                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">جميع الأنواع</SelectItem>
+                    {Object.entries(contractTypeLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">الأولوية</label>
+                <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setDetailPage(0); }}>
+                  <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {Object.entries(priorityLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -248,14 +316,20 @@ export default function ReportsPage() {
                   {/* Complaints Tab */}
                   <TabsContent value="complaints">
                     <div className="space-y-4">
-                      <div className="relative max-w-sm">
-                        <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                        <Input
-                          placeholder="بحث في الشكاوى..."
-                          value={detailSearch}
-                          onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
-                          className="pr-10"
-                        />
+                      <div className="flex items-end gap-3">
+                        <div className="relative flex-1 max-w-sm">
+                          <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                          <Input
+                            placeholder="بحث في الشكاوى..."
+                            value={detailSearch}
+                            onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
+                            className="pr-10"
+                          />
+                        </div>
+                        <Button variant="outline" size="sm" disabled={csvLoading} onClick={() => handleCsvDownload('complaints')}>
+                          <DownloadSimple size={16} className="ml-1" />
+                          تصدير CSV
+                        </Button>
                       </div>
                       <Table>
                         <TableHeader>
@@ -290,14 +364,20 @@ export default function ReportsPage() {
                   {/* Tasks Tab */}
                   <TabsContent value="tasks">
                     <div className="space-y-4">
-                      <div className="relative max-w-sm">
-                        <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                        <Input
-                          placeholder="بحث في المهام..."
-                          value={detailSearch}
-                          onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
-                          className="pr-10"
-                        />
+                      <div className="flex items-end gap-3">
+                        <div className="relative flex-1 max-w-sm">
+                          <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                          <Input
+                            placeholder="بحث في المهام..."
+                            value={detailSearch}
+                            onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
+                            className="pr-10"
+                          />
+                        </div>
+                        <Button variant="outline" size="sm" disabled={csvLoading} onClick={() => handleCsvDownload('tasks')}>
+                          <DownloadSimple size={16} className="ml-1" />
+                          تصدير CSV
+                        </Button>
                       </div>
                       <Table>
                         <TableHeader>
@@ -332,14 +412,20 @@ export default function ReportsPage() {
                   {/* Contracts Tab */}
                   <TabsContent value="contracts">
                     <div className="space-y-4">
-                      <div className="relative max-w-sm">
-                        <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                        <Input
-                          placeholder="بحث في العقود..."
-                          value={detailSearch}
-                          onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
-                          className="pr-10"
-                        />
+                      <div className="flex items-end gap-3">
+                        <div className="relative flex-1 max-w-sm">
+                          <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                          <Input
+                            placeholder="بحث في العقود..."
+                            value={detailSearch}
+                            onChange={(e) => { setDetailSearch(e.target.value); setDetailPage(0); }}
+                            className="pr-10"
+                          />
+                        </div>
+                        <Button variant="outline" size="sm" disabled={csvLoading} onClick={() => handleCsvDownload('contracts')}>
+                          <DownloadSimple size={16} className="ml-1" />
+                          تصدير CSV
+                        </Button>
                       </div>
                       <Table>
                         <TableHeader>

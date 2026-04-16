@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import List, Optional
 from datetime import datetime
 import random
@@ -92,12 +92,13 @@ def track_complaint(track_data: ComplaintTrackRequest, request: Request, db: Ses
     return complaint
 
 
-@router.get("/", response_model=List[ComplaintResponse])
+@router.get("/", response_model=dict)
 def list_complaints(
     skip: int = 0,
     limit: int = 100,
     status_filter: Optional[ComplaintStatus] = None,
     area_id: Optional[int] = None,
+    search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -108,9 +109,20 @@ def list_complaints(
     
     if area_id:
         query = query.filter(Complaint.area_id == area_id)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Complaint.tracking_number.ilike(search_term),
+                Complaint.full_name.ilike(search_term),
+                Complaint.description.ilike(search_term),
+            )
+        )
     
+    total_count = query.count()
     complaints = query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit).all()
-    return complaints
+    return {"total_count": total_count, "items": complaints}
 
 
 @router.get("/{complaint_id}", response_model=ComplaintResponse)
