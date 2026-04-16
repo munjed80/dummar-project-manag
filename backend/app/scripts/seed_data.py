@@ -255,6 +255,8 @@ def seed_tasks(db: Session):
             "status": TaskStatus.ASSIGNED,
             "priority": TaskPriority.HIGH,
             "due_date": date.today() + timedelta(days=3),
+            "latitude": 33.5374,
+            "longitude": 36.2196,
         },
         {
             "title": "استبدال مصابيح الإنارة",
@@ -265,6 +267,8 @@ def seed_tasks(db: Session):
             "status": TaskStatus.IN_PROGRESS,
             "priority": TaskPriority.MEDIUM,
             "due_date": date.today() + timedelta(days=5),
+            "latitude": 33.5342,
+            "longitude": 36.2218,
         },
         {
             "title": "تنسيق جمع النفايات",
@@ -277,6 +281,8 @@ def seed_tasks(db: Session):
             "priority": TaskPriority.URGENT,
             "due_date": date.today() - timedelta(days=1),
             "completed_at": datetime.utcnow() - timedelta(hours=12),
+            "latitude": 33.5388,
+            "longitude": 36.2178,
         },
         {
             "title": "فحص منظومة ضخ المياه",
@@ -286,6 +292,8 @@ def seed_tasks(db: Session):
             "status": TaskStatus.PENDING,
             "priority": TaskPriority.HIGH,
             "due_date": date.today() + timedelta(days=2),
+            "latitude": 33.5370,
+            "longitude": 36.2203,
         },
         {
             "title": "صيانة الشبكة الكهربائية",
@@ -297,6 +305,8 @@ def seed_tasks(db: Session):
             "status": TaskStatus.ASSIGNED,
             "priority": TaskPriority.HIGH,
             "due_date": date.today() + timedelta(days=4),
+            "latitude": 33.5346,
+            "longitude": 36.2228,
         },
     ]
     

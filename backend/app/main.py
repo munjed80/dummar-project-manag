@@ -7,7 +7,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
-from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports, notifications
+from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports, notifications, gis
 from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -50,6 +50,7 @@ app.include_router(users.router)
 app.include_router(uploads.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
+app.include_router(gis.router)
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")

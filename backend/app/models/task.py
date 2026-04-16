@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum, ForeignKey, Date, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -38,6 +38,8 @@ class Task(Base):
     assigned_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     area_id = Column(Integer, ForeignKey("areas.id"), nullable=True)
     location_text = Column(Text, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     due_date = Column(Date, nullable=True)
     status = Column(SQLEnum(TaskStatus), nullable=False, default=TaskStatus.PENDING)
     priority = Column(SQLEnum(TaskPriority), nullable=False, default=TaskPriority.MEDIUM)

@@ -4,12 +4,87 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة الثانية - ميزات المستخدم  
+**المرحلة الحالية:** المرحلة الثالثة - تجهيز الإنتاج  
 **آخر تحديث:** 2026-04-16
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-16T22:59 — CI/CD, Production Guide, SMTP, GIS
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-16T22:59
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL، FastAPI backend + React 19 frontend
+  - 38 اختبار ناجح، بناء الواجهة ناجح
+  - RBAC مكتمل: citizen مقيد، 8 أدوار مستخدم
+  - نظام إشعارات داخلي يعمل (in-app)، SMTP جاهز في الإعدادات لكن غير مُفعّل
+  - خريطة شكاوى تعرض 7 شكاوى بإحداثيات — نقاط فقط بدون مناطق
+  - لا يوجد CI/CD أو دليل نشر إنتاجي
+  - لا يوجد إرسال بريد إلكتروني فعلي
+
+- **أهداف هذه الدفعة:**
+  1. إنشاء CI/CD pipeline (GitHub Actions) لاختبار الباكند وبناء الواجهة تلقائياً
+  2. إنشاء دليل نشر إنتاجي شامل (PRODUCTION_DEPLOYMENT_GUIDE.md)
+  3. تفعيل SMTP للإشعارات (شكاوى، مهام، عقود) بطريقة آمنة
+  4. تحسين GIS — إضافة مناطق (polygons)، مهام على الخريطة، خريطة عمليات موحدة
+
+- **الملفات المخطط تعديلها/إنشاؤها:**
+  - `.github/workflows/ci.yml` — جديد
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — جديد
+  - `backend/app/services/email_service.py` — جديد
+  - `backend/app/api/gis.py` — جديد
+  - `backend/alembic/versions/003_add_task_coordinates.py` — جديد
+  - `backend/app/services/notification_service.py` — ربط البريد الإلكتروني
+  - `backend/app/models/task.py` — إضافة lat/lng
+  - `backend/app/schemas/task.py` — إضافة lat/lng
+  - `backend/app/main.py` — تسجيل GIS router
+  - `backend/app/scripts/seed_data.py` — إحداثيات للمهام
+  - `backend/tests/test_api.py` — اختبارات GIS + email
+  - `src/components/MapView.tsx` — دعم polygons + multi-type markers
+  - `src/pages/ComplaintsMapPage.tsx` — خريطة عمليات موحدة
+  - `src/services/api.ts` — endpoints جديدة للـ GIS
+  - `README.md` — إضافة روابط للدليل و CI
+
+- **المخاطر:**
+  - SMTP قد لا يعمل بدون خادم SMTP حقيقي — مصمم للعمل بدون SMTP (fail-safe)
+  - تغيير MapView قد يؤثر على الصفحات الأخرى — تم اختبار التوافق الخلفي
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ CI/CD pipeline — `.github/workflows/ci.yml` يعمل مع backend tests + frontend build
+  2. ✅ دليل نشر إنتاجي — `PRODUCTION_DEPLOYMENT_GUIDE.md` شامل (14 قسم)
+  3. ✅ SMTP email service — `email_service.py` مع 3 أنواع إشعارات بريد إلكتروني
+  4. ✅ SMTP مربوط بـ notification_service — شكاوى، مهام، عقود
+  5. ✅ SMTP fail-safe — لا يؤثر على العمليات الأساسية عند الفشل
+  6. ✅ GIS API — `/gis/operations-map` و `/gis/area-boundaries` endpoints جديدة
+  7. ✅ Task coordinates — lat/lng مضاف لنموذج المهام + migration 003
+  8. ✅ خريطة عمليات موحدة — شكاوى + مهام مع تمييز بصري (دوائر vs مربعات)
+  9. ✅ مناطق على الخريطة — 8 polygons لمناطق دمّر مع ألوان وتسميات
+  10. ✅ 48 اختبار ناجح (38 سابق + 10 جديد)
+  11. ✅ بناء الواجهة ناجح (1.83s)
+  12. ✅ README محدّث مع روابط للدليل و CI
+
+- **القرارات الهندسية:**
+  - CI يستخدم SQLite in-memory (لا حاجة لـ PostgreSQL في CI) — أسرع وأبسط
+  - SMTP يعمل فقط عند `SMTP_ENABLED=true` — آمن بالافتراض
+  - email_service.py لا يستخدم مكتبات خارجية — smtplib مدمج في Python
+  - area boundaries تُخزّن كبيانات ثابتة في gis.py (ليست في DB) — كافية للمرحلة الحالية
+  - المهام تحتوي الآن على lat/lng — يمكن عرضها على الخريطة
+  - ComplaintsMapPage أصبح خريطة عمليات موحدة — يعرض شكاوى + مهام + مناطق
+  - Task markers تظهر كمربعات مائلة، complaint markers كدوائر — تمييز بصري واضح
+  - HTML emails تستخدم html.escape لمنع XSS
+
+- **الفجوات المتبقية:**
+  - SMTP لم يُختبر مع خادم SMTP حقيقي (مصمم للعمل بشكل آمن عند الفشل)
+  - area boundaries ثابتة في الكود — في المستقبل يمكن نقلها إلى PostGIS geometry
+  - لا يوجد اختبار integration لـ SMTP مع خادم حقيقي
+  - PWA/offline mode لم يُنفذ بعد
+  - mobile responsiveness يحتاج تحسين
+
+---
 
 ### الدفعة: 2026-04-16T22:23 — تعزيز الجاهزية النهائية وإكمال التكامل
 
