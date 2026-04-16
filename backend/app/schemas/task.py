@@ -14,6 +14,8 @@ class TaskBase(BaseModel):
     assigned_to_id: Optional[int] = None
     area_id: Optional[int] = None
     location_text: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     due_date: Optional[date] = None
     priority: TaskPriority = TaskPriority.MEDIUM
 

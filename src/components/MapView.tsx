@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -15,8 +14,12 @@ const defaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = defaultIcon;
 
-// Status-based marker colors
-const statusColors: Record<string, string> = {
+// ---------------------------------------------------------------------------
+// Marker styles by entity type and status
+// ---------------------------------------------------------------------------
+
+// Complaint status colors
+const complaintStatusColors: Record<string, string> = {
   new: '#EF4444',
   under_review: '#F59E0B',
   assigned: '#3B82F6',
@@ -25,7 +28,17 @@ const statusColors: Record<string, string> = {
   rejected: '#6B7280',
 };
 
-function createColorIcon(color: string) {
+// Task status colors
+const taskStatusColors: Record<string, string> = {
+  pending: '#F59E0B',
+  assigned: '#3B82F6',
+  in_progress: '#8B5CF6',
+  completed: '#10B981',
+  cancelled: '#6B7280',
+};
+
+// Entity-type shape markers
+function createComplaintIcon(color: string) {
   return L.divIcon({
     className: 'custom-marker',
     html: `<div style="
@@ -41,6 +54,37 @@ function createColorIcon(color: string) {
   });
 }
 
+function createTaskIcon(color: string) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      width: 22px; height: 22px;
+      background: ${color};
+      border: 3px solid white;
+      border-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      transform: rotate(45deg);
+    "></div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor: [0, -14],
+  });
+}
+
+function getMarkerIcon(marker: MapMarker) {
+  if (marker.entity_type === 'task') {
+    const color = taskStatusColors[marker.status || ''] || '#3B82F6';
+    return createTaskIcon(color);
+  }
+  // Default: complaint (circle)
+  const color = complaintStatusColors[marker.status || ''] || '#3B82F6';
+  return createComplaintIcon(color);
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 export interface MapMarker {
   id: number;
   latitude: number;
@@ -49,26 +93,67 @@ export interface MapMarker {
   description?: string;
   status?: string;
   tracking_number?: string;
+  entity_type?: string; // 'complaint' | 'task'
+  reference?: string;
+  priority?: string;
+}
+
+export interface AreaPolygon {
+  id: number;
+  name: string;
+  name_ar: string;
+  code: string;
+  description?: string;
+  boundary?: [number, number][];
+  color?: string;
 }
 
 interface MapViewProps {
   markers: MapMarker[];
+  polygons?: AreaPolygon[];
   center?: [number, number];
   zoom?: number;
   height?: string;
   onMarkerClick?: (marker: MapMarker) => void;
+  showPolygonLabels?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Status labels
+// ---------------------------------------------------------------------------
+
 const statusLabels: Record<string, string> = {
+  // Complaints
   new: 'جديدة',
   under_review: 'قيد المراجعة',
   assigned: 'تم التعيين',
   in_progress: 'قيد التنفيذ',
   resolved: 'تم الحل',
   rejected: 'مرفوضة',
+  // Tasks
+  pending: 'معلقة',
+  completed: 'مكتملة',
+  cancelled: 'ملغاة',
 };
 
-export function MapView({ markers, center, zoom = 14, height = '500px', onMarkerClick }: MapViewProps) {
+const entityTypeLabels: Record<string, string> = {
+  complaint: 'شكوى',
+  task: 'مهمة',
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function MapView({
+  markers,
+  polygons = [],
+  center,
+  zoom = 14,
+  height = '500px',
+  onMarkerClick,
+  showPolygonLabels = true,
+}: MapViewProps) {
   // Default center: Dummar, Damascus
   const mapCenter = center || [33.5365, 36.2204];
 
@@ -84,11 +169,41 @@ export function MapView({ markers, center, zoom = 14, height = '500px', onMarker
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
+        {/* Area polygons */}
+        {polygons.map((poly) =>
+          poly.boundary && poly.boundary.length > 0 ? (
+            <Polygon
+              key={`area-${poly.id}`}
+              positions={poly.boundary as [number, number][]}
+              pathOptions={{
+                color: poly.color || '#3B82F6',
+                weight: 2,
+                opacity: 0.7,
+                fillOpacity: 0.12,
+              }}
+            >
+              {showPolygonLabels && (
+                <Tooltip
+                  permanent
+                  direction="center"
+                  className="area-label-tooltip"
+                >
+                  <span style={{ fontSize: 11, fontWeight: 500 }}>
+                    {poly.name_ar}
+                  </span>
+                </Tooltip>
+              )}
+            </Polygon>
+          ) : null
+        )}
+
+        {/* Markers */}
         {markers.map((marker) => (
           <Marker
-            key={marker.id}
+            key={`${marker.entity_type || 'c'}-${marker.id}`}
             position={[marker.latitude, marker.longitude]}
-            icon={createColorIcon(statusColors[marker.status || ''] || '#3B82F6')}
+            icon={getMarkerIcon(marker)}
             eventHandlers={{
               click: () => onMarkerClick?.(marker),
             }}
@@ -96,13 +211,23 @@ export function MapView({ markers, center, zoom = 14, height = '500px', onMarker
             <Popup>
               <div className="text-right" dir="rtl" style={{ minWidth: 180 }}>
                 <p className="font-bold text-sm mb-1">
-                  {marker.tracking_number || `#${marker.id}`}
+                  {marker.reference || marker.tracking_number || `#${marker.id}`}
+                  {marker.entity_type && (
+                    <span className="text-xs text-gray-500 mr-2">
+                      ({entityTypeLabels[marker.entity_type] || marker.entity_type})
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs mb-1">{marker.title}</p>
                 {marker.status && (
                   <span
                     className="inline-block px-2 py-0.5 rounded text-xs text-white"
-                    style={{ background: statusColors[marker.status] || '#6B7280' }}
+                    style={{
+                      background:
+                        marker.entity_type === 'task'
+                          ? taskStatusColors[marker.status] || '#6B7280'
+                          : complaintStatusColors[marker.status] || '#6B7280',
+                    }}
                   >
                     {statusLabels[marker.status] || marker.status}
                   </span>

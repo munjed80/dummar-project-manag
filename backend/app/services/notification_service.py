@@ -1,7 +1,6 @@
 """
-Notification service — creates in-app notifications for important events.
-
-Future expansion: add email sending, push notifications, etc.
+Notification service — creates in-app notifications and sends email
+notifications for important events.
 """
 import logging
 from typing import Optional, List
@@ -9,6 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationType
 from app.models.user import User, UserRole
+from app.services.email_service import (
+    send_complaint_status_email,
+    send_task_assignment_email,
+    send_contract_status_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,20 @@ def notify_complaint_status_change(
             entity_id=complaint_id,
         )
 
+    # Send email notifications to users with email addresses
+    for uid in notify_user_ids:
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if user and user.email:
+                send_complaint_status_email(
+                    to_email=user.email,
+                    tracking_number=tracking_number,
+                    old_status=old_status,
+                    new_status=new_status,
+                )
+        except Exception:
+            logger.exception("Failed to send complaint email to user %d", uid)
+
     logger.info(
         "Sent %d notifications for complaint %s status change",
         len(notify_user_ids),
@@ -113,6 +131,18 @@ def notify_task_assigned(
         entity_type="task",
         entity_id=task_id,
     )
+
+    # Send email notification
+    try:
+        user = db.query(User).filter(User.id == assigned_to_id).first()
+        if user and user.email:
+            send_task_assignment_email(
+                to_email=user.email,
+                task_title=task_title,
+                assignee_name=user.full_name,
+            )
+    except Exception:
+        logger.exception("Failed to send task assignment email to user %d", assigned_to_id)
 
 
 def notify_contract_status_change(
@@ -153,6 +183,19 @@ def notify_contract_status_change(
             entity_type="contract",
             entity_id=contract_id,
         )
+
+    # Send email notifications to managers with email addresses
+    for (uid,) in managers:
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if user and user.email:
+                send_contract_status_email(
+                    to_email=user.email,
+                    contract_number=contract_number,
+                    action=action,
+                )
+        except Exception:
+            logger.exception("Failed to send contract email to user %d", uid)
 
     logger.info(
         "Sent %d notifications for contract %s action=%s",

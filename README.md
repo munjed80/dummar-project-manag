@@ -207,3 +207,20 @@ UPLOAD_DIR=/app/uploads
 ## License
 
 Proprietary - Damascus Dummar Project
+
+## Deployment
+
+See [PRODUCTION_DEPLOYMENT_GUIDE.md](./PRODUCTION_DEPLOYMENT_GUIDE.md) for complete production deployment instructions covering:
+- PostgreSQL/PostGIS setup
+- Backend & frontend deployment
+- SMTP email configuration
+- CORS, security, and file upload settings
+- CI/CD pipeline details
+- Rollback procedures
+
+## CI/CD
+
+The project includes a GitHub Actions CI pipeline (`.github/workflows/ci.yml`) that automatically:
+- Runs backend tests (pytest) on Python 3.12
+- Builds the frontend (npm build) on Node.js 18
+- Runs on every push and pull request to `main`

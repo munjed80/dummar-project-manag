@@ -446,6 +446,23 @@ class ApiService {
     return response.json();
   }
 
+  // ── GIS / Operations Map ──
+  async getOperationsMapMarkers(params?: { entity_type?: string; status_filter?: string; area_id?: number }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.entity_type) qp.append('entity_type', params.entity_type);
+    if (params?.status_filter) qp.append('status_filter', params.status_filter);
+    if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    const response = await fetch(`${API_BASE_URL}/gis/operations-map?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch operations map markers');
+    return response.json();
+  }
+
+  async getAreaBoundaries(): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/gis/area-boundaries`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch area boundaries');
+    return response.json();
+  }
+
   // ── Notifications ──
   async getNotifications(params?: { skip?: number; limit?: number; unread_only?: boolean }): Promise<{ total_count: number; unread_count: number; items: any[] }> {
     const qp = new URLSearchParams();

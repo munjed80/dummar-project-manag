@@ -418,3 +418,103 @@ class TestCitizenAccess:
         data = resp.json()
         assert "total_count" in data
         assert "items" in data
+
+
+# ---------------------------------------------------------------------------
+# 10. GIS endpoints
+# ---------------------------------------------------------------------------
+
+class TestGISEndpoints:
+    """Test GIS / operations map endpoints."""
+
+    def test_operations_map_returns_list(self, client, director_token):
+        resp = client.get("/gis/operations-map", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+    def test_operations_map_filter_by_entity_type(self, client, director_token):
+        resp = client.get(
+            "/gis/operations-map?entity_type=complaint",
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        # All returned items should be complaints
+        for item in data:
+            assert item["entity_type"] == "complaint"
+
+    def test_operations_map_filter_tasks(self, client, director_token):
+        resp = client.get(
+            "/gis/operations-map?entity_type=task",
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        for item in data:
+            assert item["entity_type"] == "task"
+
+    def test_area_boundaries_returns_list(self, client, director_token):
+        resp = client.get("/gis/area-boundaries", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+    def test_citizen_cannot_access_gis(self, client, citizen_token):
+        resp = client.get("/gis/operations-map", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+        resp = client.get("/gis/area-boundaries", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_operations_map_with_data(self, client, db, director_token, sample_area):
+        """Create a complaint with coords and verify it appears in operations map."""
+        from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+        complaint = Complaint(
+            tracking_number="CMP99990001",
+            full_name="GIS Test",
+            phone="0999999001",
+            complaint_type=ComplaintType.ROADS,
+            description="Test complaint for map",
+            status=ComplaintStatus.NEW,
+            area_id=sample_area.id,
+            latitude=33.5370,
+            longitude=36.2200,
+        )
+        db.add(complaint)
+        db.commit()
+
+        resp = client.get("/gis/operations-map", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 1
+        found = [m for m in data if m["reference"] == "CMP99990001"]
+        assert len(found) == 1
+        assert found[0]["entity_type"] == "complaint"
+        assert found[0]["latitude"] == 33.537
+
+
+# ---------------------------------------------------------------------------
+# 11. Email service (unit-level, SMTP disabled)
+# ---------------------------------------------------------------------------
+
+class TestEmailService:
+    """Test that email service functions don't raise when SMTP is disabled."""
+
+    def test_send_email_noop_when_disabled(self):
+        from app.services.email_service import send_email
+        # Should not raise
+        send_email("test@example.com", "Test Subject", "<p>Test</p>")
+
+    def test_complaint_status_email_noop(self):
+        from app.services.email_service import send_complaint_status_email
+        send_complaint_status_email("test@example.com", "CMP001", "new", "resolved")
+
+    def test_task_assignment_email_noop(self):
+        from app.services.email_service import send_task_assignment_email
+        send_task_assignment_email("test@example.com", "Test Task", "Test User")
+
+    def test_contract_status_email_noop(self):
+        from app.services.email_service import send_contract_status_email
+        send_contract_status_email("test@example.com", "CTR-001", "approve")
