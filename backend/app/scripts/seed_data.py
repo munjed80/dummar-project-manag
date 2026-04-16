@@ -46,7 +46,7 @@ def seed_users(db: Session):
     
     db.commit()
     print(f"✓ Created {len(users_data)} users")
-    print("⚠️  WARNING: All seed accounts use the default insecure password 'password123'.")
+    print("⚠️  WARNING: All seed accounts use the default insecure password.")
     print("⚠️  Change all passwords before deploying to production!")
 
 
@@ -56,8 +56,8 @@ def check_default_passwords(db: Session):
     insecure = [u.username for u in users if verify_password(_SEED_DEFAULT_PASSWORD, u.hashed_password)]
     if insecure:
         msg = (
-            f"⚠️  SECURITY WARNING: {len(insecure)} account(s) still use the default "
-            f"password '{_SEED_DEFAULT_PASSWORD}': {', '.join(insecure)}. "
+            f"⚠️  SECURITY WARNING: {len(insecure)} account(s) still use the insecure "
+            f"default seed password: {', '.join(insecure)}. "
             "Change these passwords before deploying to production!"
         )
         print(msg)
