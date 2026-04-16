@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
+import json
 from app.core.database import get_db
 from app.models.contract import Contract, ContractApproval, ContractStatus
 from app.models.user import User
@@ -136,6 +137,11 @@ def update_contract(
         raise HTTPException(status_code=404, detail="Contract not found")
     
     update_data = contract_update.model_dump(exclude_unset=True)
+
+    # Serialize file list fields to JSON for DB storage
+    if "attachments" in update_data and update_data["attachments"] is not None:
+        update_data["attachments"] = json.dumps(update_data["attachments"])
+
     for field, value in update_data.items():
         setattr(contract, field, value)
     
