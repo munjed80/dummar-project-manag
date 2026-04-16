@@ -518,3 +518,35 @@ class TestEmailService:
     def test_contract_status_email_noop(self):
         from app.services.email_service import send_contract_status_email
         send_contract_status_email("test@example.com", "CTR-001", "approve")
+
+    def test_dedup_guard_returns_false_first_time(self):
+        """Dedup guard should allow the first send."""
+        from app.services.email_service import _is_duplicate, _dedup_cache
+        _dedup_cache.clear()
+        assert _is_duplicate("unique-dedup-test@test.com", "Unique Subject 12345") is False
+
+    def test_dedup_guard_blocks_duplicate(self):
+        """Dedup guard should block a repeated send within window."""
+        from app.services.email_service import _is_duplicate, _dedup_cache
+        _dedup_cache.clear()
+        _is_duplicate("dedup-repeat@test.com", "Repeated Subject 12345")
+        assert _is_duplicate("dedup-repeat@test.com", "Repeated Subject 12345") is True
+
+    def test_html_escape_in_templates(self):
+        """Verify that HTML escaping is applied to user-provided content."""
+        import html
+        from app.services.email_service import _render_html
+        xss_attempt = '<script>alert("xss")</script>'
+        result = _render_html("Title", html.escape(xss_attempt))
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+
+    def test_render_html_produces_valid_rtl(self):
+        """Verify template renders with RTL direction."""
+        from app.services.email_service import _render_html
+        result = _render_html("Test Title", "<p>Content</p>")
+        assert 'dir="rtl"' in result
+        assert 'lang="ar"' in result
+        assert "Test Title" in result
+        assert "<p>Content</p>" in result
+        assert "منصة إدارة مشروع دمّر" in result

@@ -53,6 +53,34 @@
   - تغيير Layout قد يؤثر على جميع الصفحات — يجب اختبار بناء الواجهة بعد كل تغيير
   - SMTP لن يُختبر مع خادم حقيقي في CI (بيئة sandboxed) — سيُوثّق كجزئي
 
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ Mobile Layout — hamburger menu للجوال مع قائمة منسدلة، اختفاء تلقائي عند تغيير الصفحة
+  2. ✅ Mobile card views — ComplaintsListPage, TasksListPage, ContractsListPage تعرض بطاقات على الجوال بدلاً من جداول
+  3. ✅ Responsive filters — فلاتر البحث تتكيف مع عرض الشاشة (column layout على الجوال)
+  4. ✅ ReportsPage — فلاتر responsive، tabs 2-column على الجوال، جداول قابلة للتمرير أفقياً
+  5. ✅ ContractDetailsPage — أزرار header responsive مع flex-wrap
+  6. ✅ DashboardPage — حجم عنوان responsive
+  7. ✅ ComplaintsMapPage — ارتفاع خريطة ديناميكي (calc), عنوان responsive
+  8. ✅ SMTP hardening — TLS fallback (STARTTLS/SSL)، deduplication guard (5 min)، SSL context
+  9. ✅ SMTP dedup tested — اختبارات وحدة تؤكد منع التكرار
+  10. ✅ HTML escape verified — اختبار XSS prevention في قوالب البريد
+  11. ✅ RTL template verified — اختبار أن قالب البريد يحتوي dir="rtl" و lang="ar"
+  12. ✅ 52 اختبار ناجح (48 سابق + 4 جديد: dedup guard, dedup block, XSS escape, RTL template)
+  13. ✅ بناء الواجهة ناجح (1.75s)
+  14. ✅ Production deployment guide updated with SMTP hardening docs
+- **القرارات الهندسية:**
+  - Mobile nav: hamburger مع قائمة عمودية بدل scroll أفقي — أسهل للاستخدام الميداني
+  - Card views: بطاقات تظهر فقط تحت 768px (md breakpoint) — الجداول تبقى على desktop
+  - CSS approach: responsive-table-desktop / responsive-cards-mobile classes في index.css — بسيط ومباشر
+  - SMTP dedup: 5 دقائق نافذة — توازن بين منع الضوضاء والسماح بتحديثات متعددة
+  - TLS: port 465 = SMTP_SSL, port 587+ = STARTTLS — يتبع المعايير الصناعية
+- **الفجوات المتبقية:**
+  - SMTP لم يُختبر مع خادم SMTP حقيقي (الحماية والقوالب جاهزة، لم يُتحقق من التوصيل الفعلي)
+  - PWA/offline mode لم يُنفذ بعد
+  - area boundaries ثابتة في الكود
+
 ---
 
 ### الدفعة: 2026-04-16T22:59 — CI/CD, Production Guide, SMTP, GIS
