@@ -51,8 +51,25 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
     return <>{children}</>;
   }
 
+  // Citizen users go to their own dashboard; others go to main dashboard
+  if (role === 'citizen') {
+    return <Navigate to="/citizen" replace />;
+  }
+
   return <Navigate to="/dashboard" replace />;
 }
+
+// Internal staff roles (all roles except citizen)
+const INTERNAL_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager', 'engineer_supervisor',
+  'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
+];
+
+// Roles that can view reports
+const REPORT_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager', 'engineer_supervisor',
+  'complaints_officer', 'area_supervisor',
+];
 
 function App() {
   return (
@@ -64,19 +81,19 @@ function App() {
           <Route path="/complaints/new" element={<ComplaintSubmitPage />} />
           <Route path="/complaints/track" element={<ComplaintTrackPage />} />
           
-          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/citizen" element={<ProtectedRoute><CitizenDashboardPage /></ProtectedRoute>} />
-          <Route path="/complaints" element={<ProtectedRoute><ComplaintsListPage /></ProtectedRoute>} />
-          <Route path="/complaints/:id" element={<ProtectedRoute><ComplaintDetailsPage /></ProtectedRoute>} />
-          <Route path="/complaints-map" element={<ProtectedRoute><ComplaintsMapPage /></ProtectedRoute>} />
-          <Route path="/tasks" element={<ProtectedRoute><TasksListPage /></ProtectedRoute>} />
-          <Route path="/tasks/:id" element={<ProtectedRoute><TaskDetailsPage /></ProtectedRoute>} />
-          <Route path="/contracts" element={<ProtectedRoute><ContractsListPage /></ProtectedRoute>} />
-          <Route path="/contracts/:id" element={<ProtectedRoute><ContractDetailsPage /></ProtectedRoute>} />
-          <Route path="/locations" element={<ProtectedRoute><LocationsListPage /></ProtectedRoute>} />
+          <Route path="/" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
+          <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
+          <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
+          <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
+          <Route path="/complaints/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/complaints-map" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
+          <Route path="/tasks" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TasksListPage /></RoleProtectedRoute>} />
+          <Route path="/tasks/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/contracts" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
+          <Route path="/contracts/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/locations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
           <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+          <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         </Routes>
       </Suspense>

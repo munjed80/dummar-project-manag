@@ -79,3 +79,22 @@ def get_current_complaints_officer(
     ))
 ) -> User:
     return current_user
+
+
+# Internal staff who can view operational data (everyone except citizen)
+_internal_staff = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.CONTRACTS_MANAGER,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.COMPLAINTS_OFFICER,
+    UserRole.AREA_SUPERVISOR,
+    UserRole.FIELD_TEAM,
+    UserRole.CONTRACTOR_USER,
+)
+
+
+def get_current_internal_user(
+    current_user: User = Depends(_internal_staff),
+) -> User:
+    """Any authenticated internal staff member (excludes citizen role)."""
+    return current_user

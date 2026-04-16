@@ -4,11 +4,13 @@ import { apiService } from '@/services/api';
 import { Upload, X, FileText, Image, Spinner } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 
+import { config } from '@/config';
+
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
 const ALLOWED_DOC_TYPES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = config.API_BASE_URL;
 
 interface FileUploadProps {
   category: string;

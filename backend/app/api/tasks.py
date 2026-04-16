@@ -8,8 +8,9 @@ from app.models.task import Task, TaskActivity, TaskStatus, TaskPriority
 from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
 from app.schemas.report import PaginatedTasks
-from app.api.deps import get_current_user, require_role
+from app.api.deps import get_current_user, require_role, get_current_internal_user
 from app.services.audit import write_audit_log
+from app.services.notification_service import notify_task_assigned
 from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -43,6 +44,18 @@ def create_task(
     )
     db.add(activity)
     db.commit()
+
+    # Notify assigned user
+    if db_task.assigned_to_id:
+        try:
+            notify_task_assigned(
+                db=db,
+                task_id=db_task.id,
+                task_title=db_task.title,
+                assigned_to_id=db_task.assigned_to_id,
+            )
+        except Exception:
+            pass  # Don't block task creation if notification fails
     
     return db_task
 
@@ -56,7 +69,7 @@ def list_tasks(
     area_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Task)
@@ -90,7 +103,7 @@ def list_tasks(
 @router.get("/{task_id}", response_model=TaskResponse)
 def get_task(
     task_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -111,6 +124,7 @@ def update_task(
         raise HTTPException(status_code=404, detail="Task not found")
     
     old_status = task.status
+    old_assigned_to_id = task.assigned_to_id
     
     update_data = task_update.model_dump(exclude_unset=True)
 
@@ -139,6 +153,23 @@ def update_task(
         )
         db.add(activity)
         db.commit()
+
+    # Notify when task is assigned to a different user
+    if (
+        "assigned_to_id" in update_data
+        and task.assigned_to_id
+        and task.assigned_to_id != old_assigned_to_id
+        and task.assigned_to_id != current_user.id
+    ):
+        try:
+            notify_task_assigned(
+                db=db,
+                task_id=task.id,
+                task_title=task.title,
+                assigned_to_id=task.assigned_to_id,
+            )
+        except Exception:
+            pass
     
     write_audit_log(db, action="task_update", entity_type="task", entity_id=task.id, user_id=current_user.id, description=f"Task {task.id} updated")
     
@@ -164,7 +195,7 @@ def delete_task(
 @router.get("/{task_id}/activities", response_model=List[TaskActivityResponse])
 def get_task_activities(
     task_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     activities = db.query(TaskActivity).filter(

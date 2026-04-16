@@ -15,9 +15,10 @@ from app.schemas.contract import (
     ContractApprovalResponse,
 )
 from app.schemas.report import PaginatedContracts
-from app.api.deps import get_current_user, get_current_contracts_manager
+from app.api.deps import get_current_user, get_current_contracts_manager, get_current_internal_user
 from app.services.audit import write_audit_log
 from app.services.pdf_generator import generate_contract_pdf
+from app.services.notification_service import notify_contract_status_change
 import qrcode
 import io
 import base64
@@ -87,7 +88,7 @@ def list_contracts(
     status_filter: Optional[ContractStatus] = None,
     contract_type: Optional[ContractType] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Contract)
@@ -116,7 +117,7 @@ def list_contracts(
 @router.get("/expiring-soon", response_model=List[ContractResponse])
 def get_expiring_contracts(
     days: int = 30,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     from datetime import date
@@ -134,7 +135,7 @@ def get_expiring_contracts(
 @router.get("/{contract_id}", response_model=ContractResponse)
 def get_contract(
     contract_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
@@ -208,6 +209,17 @@ def approve_contract(
     db.commit()
     
     write_audit_log(db, action=f"contract_{approval_request.action}", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} - action: {approval_request.action}")
+
+    # Send notifications for contract status changes
+    try:
+        notify_contract_status_change(
+            db=db,
+            contract_id=contract.id,
+            contract_number=contract.contract_number,
+            action=approval_request.action,
+        )
+    except Exception:
+        pass  # Don't block the action if notification fails
     
     return contract
 
@@ -215,7 +227,7 @@ def approve_contract(
 @router.post("/{contract_id}/generate-pdf")
 def generate_contract_pdf_endpoint(
     contract_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
@@ -232,7 +244,7 @@ def generate_contract_pdf_endpoint(
 @router.get("/{contract_id}/approvals", response_model=List[ContractApprovalResponse])
 def get_contract_approvals(
     contract_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     approvals = db.query(ContractApproval).filter(

@@ -11,6 +11,135 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-16T22:23 — تعزيز الجاهزية النهائية وإكمال التكامل
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-16T22:23
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL
+  - باكند FastAPI مع PostgreSQL/PostGIS، واجهة React 19 + Vite 8 + Tailwind 4
+  - RBAC مُطبّق: citizen مُقيّد من endpoints تشغيلية، project_director يدير المستخدمين
+  - Notification model موجود ومُصدّر، migration 002 جاهز لكن لم يُختبر على PostgreSQL حقيقي
+  - إشعارات الشكاوى مربوطة، إشعارات المهام/العقود غير مربوطة بعد
+  - لا يوجد حساب مواطن تجريبي في seed data
+  - الشكاوى التجريبية لا تحتوي على إحداثيات (الخريطة فارغة)
+  - /dashboard مفتوح لأي مستخدم مُصادق بما فيهم citizen
+  - لا توجد اختبارات لمنع citizen من الوصول لـ endpoints المقيدة
+
+- **أهداف هذه الدفعة:**
+  1. اختبار Alembic migration على PostgreSQL حقيقي (Docker) وإصلاح أي مشاكل
+  2. إضافة اختبارات RBAC لمنع citizen من الوصول لـ endpoints المقيدة
+  3. تقييد /dashboard للموظفين الداخليين (القرار الأكثر أماناً)
+  4. ربط إشعارات المهام والعقود (الدوال جاهزة، تحتاج تفعيل)
+  5. إضافة حساب مواطن تجريبي + إحداثيات واقعية للشكاوى
+  6. تحسين الشعور المهني للنظام
+
+- **الملفات المخطط تعديلها:**
+  - `backend/app/api/dashboard.py` — تقييد بـ internal staff
+  - `backend/app/api/tasks.py` — ربط إشعارات المهام
+  - `backend/app/api/contracts.py` — ربط إشعارات العقود
+  - `backend/app/services/notification_service.py` — إضافة notify_contract_status_change
+  - `backend/app/scripts/seed_data.py` — مواطن تجريبي + إحداثيات
+  - `backend/tests/conftest.py` — fixture مواطن
+  - `backend/tests/test_api.py` — اختبارات citizen denial
+  - `src/App.tsx` — تقييد /dashboard بالدور
+
+- **المخاطر:**
+  - Docker PostgreSQL قد لا يكون متاحاً في بيئة CI
+  - تقييد /dashboard قد يؤثر على citizen login redirect
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ Alembic migration على PostgreSQL حقيقي — `alembic upgrade head` نجح (001 + 002)
+  2. ✅ جدول notifications مع FK + indexes على PostgreSQL — schema يطابق النموذج
+  3. ✅ Seed data يعمل على PostgreSQL — 8 مستخدمين، 8 مناطق، 12 مبنى، 7 شكاوى، 5 مهام، 5 عقود
+  4. ✅ اختبارات citizen denial — 11 اختبار يؤكد منع citizen من:
+     - `/complaints/` `/complaints/{id}` `/tasks/` `/tasks/{id}` `/contracts/` `/contracts/{id}`
+     - `/reports/summary` `/users/` `/dashboard/stats` `/dashboard/recent-activity` `/complaints/map/markers`
+  5. ✅ اختبار citizen CAN access — `/citizen/my-complaints` يعود 200
+  6. ✅ /dashboard مقيد بـ internal staff — باكند: `get_current_internal_user`، واجهة: `RoleProtectedRoute`
+  7. ✅ citizen يُحوّل لـ /citizen بدل /dashboard عند محاولة الوصول لصفحة مقيدة
+  8. ✅ إشعارات المهام مربوطة — create_task وupdate_task يرسلان إشعاراً عند الإسناد
+  9. ✅ إشعارات العقود مربوطة — approve_contract يرسل إشعاراً لمديري العقود والمدير
+  10. ✅ حساب مواطن تجريبي — citizen1 بهاتف +963911234567 (يطابق شكوى CMP00000001)
+  11. ✅ إحداثيات واقعية — جميع الشكاوى السبع تحتوي lat/lng في منطقة دمّر
+  12. ✅ 38 اختبار ناجح (26 سابق + 12 جديد)
+  13. ✅ بناء الواجهة — npm run build ناجح (1.85s)
+  14. ✅ README محدّث — حساب citizen1 موثق
+- **القرارات الهندسية:**
+  - /dashboard و /dashboard/stats و /dashboard/recent-activity مقيدة بـ internal staff (القرار الأكثر أماناً — citizen يحتوي على بيانات تشغيلية)
+  - /settings تبقى مفتوحة لأي مُصادق (سلوك مقصود — إعدادات شخصية)
+  - إشعارات العقود تُرسل لجميع مديري العقود والمدير (ليس فقط المُنشئ)
+  - notify_task_assigned لا يُرسل إشعاراً إذا assigned_to == current_user (لتجنب الضوضاء)
+- **الفجوات المتبقية:**
+  - إرسال بريد إلكتروني فعلي (SMTP) — الأساس جاهز لكن غير مُفعّل
+  - Alembic migration لم يُختبر تلقائياً في CI/CD (تم يدوياً في هذه الدفعة)
+  - لا توجد اختبارات وحدة لـ notification_service.py (الاختبارات الحالية تختبر الـ API)
+
+---
+
+### الدفعة: 2026-04-16T21:44 — 5 إصلاحات حرجة لتعزيز الثقة في MVP
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-16T21:44
+- **الهدف:** تنفيذ 5 إصلاحات حرجة لجعل MVP أكثر موثوقية للعرض والمراجعة
+- **المشاكل المستهدفة:**
+  1. إكمال قاعدة بيانات الإشعارات — Notification غير مُصدّر في `__init__.py`، لا يوجد migration مخصص
+  2. تقوية RBAC — بعض endpoints GET الحساسة متاحة لأي مستخدم مُصادق، مسارات الواجهة غير مقيدة بالدور
+  3. نقل API base URL إلى env config — لا يزال hardcoded `localhost:8000`
+  4. إزالة بقايا Spark — نصوص Spark في ErrorFallback، ملفات spark.meta.json
+  5. استقرار بيئة الاختبار — مشاكل توافق passlib/bcrypt
+- **الملفات المخطط تعديلها:**
+  - `backend/app/models/__init__.py`
+  - `backend/alembic/versions/002_add_notifications.py` (جديد)
+  - `backend/app/api/users.py`
+  - `backend/app/api/reports.py`
+  - `backend/app/api/contracts.py`
+  - `backend/app/api/tasks.py`
+  - `backend/app/api/complaints.py`
+  - `backend/app/api/locations.py`
+  - `backend/requirements.txt`
+  - `src/App.tsx`
+  - `src/services/api.ts`
+  - `src/components/FileUpload.tsx`
+  - `src/pages/ContractDetailsPage.tsx`
+  - `src/ErrorFallback.tsx`
+  - `.env.example` (frontend — جديد)
+  - `README.md`
+  - `spark.meta.json` (حذف)
+  - `.spark-initial-sha` (حذف)
+  - `runtime.config.json` (حذف)
+- **المخاطر:** تغيير RBAC قد يؤثر على اختبارات RBAC الحالية — يجب التأكد من بقاء الاختبارات ناجحة
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ إكمال قاعدة بيانات الإشعارات — `Notification` و `NotificationType` مُصدّران في `__init__.py`، migration `002_add_notifications.py` جاهز
+  2. ✅ تقوية RBAC على الباكند — `get_current_internal_user` dep جديد يستبعد citizen، مطبّق على:
+     - `GET /users/` و `/users/{id}` → project_director فقط
+     - `GET /complaints/` و `/complaints/{id}` و `/complaints/map/markers` و `/complaints/{id}/activities` → internal staff
+     - `GET /tasks/` و `/tasks/{id}` و `/tasks/{id}/activities` → internal staff
+     - `GET /contracts/` و `/contracts/{id}` و `/contracts/expiring-soon` و `/contracts/{id}/approvals` و `generate-pdf` → internal staff
+     - جميع نقاط التقارير → internal staff
+  3. ✅ تقوية RBAC على الواجهة — `App.tsx` يقيد المسارات بالدور:
+     - `/citizen` → citizen فقط
+     - `/complaints` `/tasks` `/contracts` `/locations` `/complaints-map` → internal staff
+     - `/users` → project_director
+     - `/reports` → أدوار إدارية (بدون citizen, field_team, contractor)
+  4. ✅ نقل API base URL — `src/config.ts` مع `VITE_API_BASE_URL`، مستخدم في `api.ts` و `FileUpload.tsx` و `ContractDetailsPage.tsx`
+  5. ✅ إزالة بقايا Spark — `ErrorFallback.tsx` بنصوص عربية، حذف `spark.meta.json` و `.spark-initial-sha` و `runtime.config.json`
+  6. ✅ استقرار الاختبارات — `bcrypt==3.2.2` مُثبّت في `requirements.txt`، 26 اختبار ناجح
+  7. ✅ بناء الواجهة — `npm run build` ناجح (1.69s)
+  8. ✅ `README.md` محدّث — تعليمات env، اختبارات، إزالة register endpoint
+  9. ✅ `.env.example` للواجهة — مع `VITE_API_BASE_URL`
+- **الفجوات المتبقية:**
+  - لم يُعدّل `locations.py` — المواقع بيانات مرجعية يمكن للجميع رؤيتها (سلوك مقصود)
+  - اختبار Alembic migration على PostgreSQL الحقيقي لم يتم (SQLite فقط) — يحتاج بيئة Docker
+  - لوحة المعلومات `/dashboard` و `/settings` لا تزال مفتوحة لأي مستخدم مُصادق (سلوك مقصود لسهولة الاستخدام)
+
+---
+
 ### الدفعة: 2026-04-16T21:10 — المرحلة الثانية: لوحة تحكم المواطن + إشعارات + خرائط GIS
 
 **قبل البدء:**

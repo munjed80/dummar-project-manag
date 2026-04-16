@@ -59,7 +59,7 @@ def list_users(
     search: Optional[str] = None,
     role_filter: Optional[UserRole] = None,
     is_active: Optional[bool] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_director),
     db: Session = Depends(get_db),
 ):
     query = db.query(User)
@@ -88,7 +88,7 @@ def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
     user_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_director),
     db: Session = Depends(get_db)
 ):
     user = db.query(User).filter(User.id == user_id).first()
