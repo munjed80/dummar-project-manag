@@ -5,11 +5,55 @@
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
 **المرحلة الحالية:** المرحلة الثالثة - تجهيز الإنتاج  
-**آخر تحديث:** 2026-04-16
+**آخر تحديث:** 2026-04-17
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-17T00:00 — Mobile Responsiveness + SMTP Hardening
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T00:00
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL، FastAPI backend + React 19 frontend
+  - 48 اختبار ناجح، بناء الواجهة ناجح
+  - RBAC مكتمل، نظام إشعارات (in-app + email templates) جاهز
+  - SMTP مُعطّل بالافتراض، لم يُختبر مع خادم حقيقي
+  - خريطة عمليات موحدة تعمل (شكاوى + مهام + مناطق)
+  - الواجهة تستخدم Tailwind 4 لكن لا تحتوي على تحسينات mobile-first كافية
+  - الجداول في صفحات القوائم (شكاوى/مهام/عقود) لا تتأقلم مع الشاشات الصغيرة
+  - شريط التنقل يعرض كل العناصر أفقياً — يتطلب scroll على الجوال
+
+- **أهداف هذه الدفعة:**
+  1. تحسين تجربة الجوال عبر جميع الشاشات التشغيلية الرئيسية
+  2. اختبار/تعزيز نظام SMTP مع خادم حقيقي
+  3. تقوية سلوك البريد الإلكتروني (قوالب، حماية، منع التكرار)
+  4. تحديث التوثيق
+
+- **الملفات المخطط تعديلها:**
+  - `src/components/Layout.tsx` — hamburger menu للجوال
+  - `src/index.css` — mobile responsive utilities
+  - `src/pages/ComplaintsListPage.tsx` — card view للجوال
+  - `src/pages/TasksListPage.tsx` — card view للجوال
+  - `src/pages/ContractsListPage.tsx` — card view للجوال
+  - `src/pages/ComplaintDetailsPage.tsx` — responsive details
+  - `src/pages/TaskDetailsPage.tsx` — responsive details
+  - `src/pages/ContractDetailsPage.tsx` — responsive details
+  - `src/pages/ReportsPage.tsx` — responsive filters + tables
+  - `src/pages/ComplaintsMapPage.tsx` — mobile map layout
+  - `src/pages/CitizenDashboardPage.tsx` — mobile adjustments
+  - `src/pages/DashboardPage.tsx` — mobile adjustments
+  - `backend/app/services/email_service.py` — SMTP hardening
+  - `backend/tests/test_api.py` — SMTP verification tests
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — status update
+
+- **المخاطر:**
+  - تغيير Layout قد يؤثر على جميع الصفحات — يجب اختبار بناء الواجهة بعد كل تغيير
+  - SMTP لن يُختبر مع خادم حقيقي في CI (بيئة sandboxed) — سيُوثّق كجزئي
+
+---
 
 ### الدفعة: 2026-04-16T22:59 — CI/CD, Production Guide, SMTP, GIS
 
