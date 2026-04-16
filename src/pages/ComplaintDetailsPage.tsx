@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Spinner, ClockCounterClockwise } from '@phosphor-icons/react';
+import { Spinner, ClockCounterClockwise, Image as ImageIcon, UploadSimple } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -140,6 +140,40 @@ export default function ComplaintDetailsPage() {
                 <div>
                   <span className="text-sm text-muted-foreground">الوصف</span>
                   <p className="mt-1">{complaint.description}</p>
+                </div>
+              </>
+            )}
+            {complaint.images && (
+              <>
+                <Separator className="my-4" />
+                <div>
+                  <span className="text-sm text-muted-foreground flex items-center gap-1 mb-2">
+                    <ImageIcon size={16} />
+                    الصور المرفقة
+                  </span>
+                  <div className="flex flex-wrap gap-3">
+                    {complaint.images.split(',').filter(Boolean).map((path: string, idx: number) => (
+                      <a
+                        key={idx}
+                        href={`http://localhost:8000${path.trim()}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block border rounded-lg overflow-hidden hover:ring-2 ring-primary transition-all"
+                      >
+                        {path.trim().match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                          <img
+                            src={`http://localhost:8000${path.trim()}`}
+                            alt={`مرفق ${idx + 1}`}
+                            className="w-32 h-32 object-cover"
+                          />
+                        ) : (
+                          <div className="w-32 h-32 flex items-center justify-center bg-muted text-sm text-muted-foreground">
+                            ملف {idx + 1}
+                          </div>
+                        )}
+                      </a>
+                    ))}
+                  </div>
                 </div>
               </>
             )}

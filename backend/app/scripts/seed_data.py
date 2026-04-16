@@ -43,14 +43,16 @@ def seed_users(db: Session):
 
 
 def seed_areas(db: Session):
-    print("Seeding areas (Dummar zones)...")
+    print("Seeding areas (Dummar operational structure - islands/blocks/towers)...")
     areas_data = [
-        {"name": "Zone 66", "name_ar": "المنطقة 66", "code": "Z-66", "description": "المنطقة السكنية الرئيسية - السكن الشبابي"},
-        {"name": "Zone 86", "name_ar": "المنطقة 86", "code": "Z-86", "description": "منطقة الخدمات والمرافق العامة"},
-        {"name": "Dummar Al-Sharqi", "name_ar": "دمّر الشرقي", "code": "DMR-E", "description": "الحي السكني الشرقي - أبراج سكنية حديثة"},
-        {"name": "Dummar Al-Gharbi", "name_ar": "دمّر الغربي", "code": "DMR-W", "description": "الحي السكني الغربي - فلل ومباني منخفضة"},
-        {"name": "Al-Hameh", "name_ar": "الهامة", "code": "HMH", "description": "منطقة الهامة المجاورة - مناطق خضراء وترفيهية"},
-        {"name": "Commercial Center", "name_ar": "المركز التجاري", "code": "COM", "description": "المنطقة التجارية المركزية - مجمعات تجارية"},
+        {"name": "Island A", "name_ar": "الجزيرة أ", "code": "ISL-A", "description": "الجزيرة أ - أبراج سكنية (البرج أ1 حتى أ6) - منطقة سكنية رئيسية"},
+        {"name": "Island B", "name_ar": "الجزيرة ب", "code": "ISL-B", "description": "الجزيرة ب - أبراج سكنية (البرج ب1 حتى ب4) - منطقة السكن الشبابي"},
+        {"name": "Island C", "name_ar": "الجزيرة ج", "code": "ISL-C", "description": "الجزيرة ج - أبراج سكنية ومرافق خدمية (البرج ج1 حتى ج5)"},
+        {"name": "Island D", "name_ar": "الجزيرة د", "code": "ISL-D", "description": "الجزيرة د - أبراج سكنية حديثة (البرج د1 حتى د3)"},
+        {"name": "Block 66", "name_ar": "البلوك 66", "code": "BLK-66", "description": "البلوك 66 - مباني السكن الشبابي - 14 طابقاً"},
+        {"name": "Block 86", "name_ar": "البلوك 86", "code": "BLK-86", "description": "البلوك 86 - مبانٍ سكنية ومرافق خدمية"},
+        {"name": "Commercial Strip", "name_ar": "الشريط التجاري", "code": "COM-S", "description": "الشريط التجاري المركزي - محلات تجارية ومكاتب"},
+        {"name": "Green Zone", "name_ar": "المنطقة الخضراء", "code": "GRN", "description": "الحدائق والمساحات الخضراء والمرافق الترفيهية"},
     ]
     
     for area_data in areas_data:
@@ -64,21 +66,34 @@ def seed_areas(db: Session):
 
 
 def seed_buildings(db: Session):
-    print("Seeding buildings...")
+    print("Seeding buildings (towers per island)...")
     areas = db.query(Area).all()
     if not areas:
         print("⚠ No areas found, skipping buildings")
         return
     
+    area_map = {a.code: a.id for a in areas}
+    
     buildings_data = [
-        {"area_id": areas[0].id, "name": "Tower A1", "name_ar": "البرج أ1", "building_number": "66-A1", "floors": 14},
-        {"area_id": areas[0].id, "name": "Tower A2", "name_ar": "البرج أ2", "building_number": "66-A2", "floors": 14},
-        {"area_id": areas[0].id, "name": "Tower B1", "name_ar": "البرج ب1", "building_number": "66-B1", "floors": 12},
-        {"area_id": areas[1].id, "name": "Services Building", "name_ar": "مبنى الخدمات", "building_number": "86-S1", "floors": 4},
-        {"area_id": areas[2].id, "name": "East Tower 1", "name_ar": "البرج الشرقي 1", "building_number": "E-T1", "floors": 18},
-        {"area_id": areas[2].id, "name": "East Tower 2", "name_ar": "البرج الشرقي 2", "building_number": "E-T2", "floors": 16},
-        {"area_id": areas[3].id, "name": "Villa Block 1", "name_ar": "مجمع الفلل 1", "building_number": "W-V1", "floors": 3},
+        {"area_id": area_map.get("ISL-A"), "name": "Tower A1", "name_ar": "البرج أ1", "building_number": "A1", "floors": 14},
+        {"area_id": area_map.get("ISL-A"), "name": "Tower A2", "name_ar": "البرج أ2", "building_number": "A2", "floors": 14},
+        {"area_id": area_map.get("ISL-A"), "name": "Tower A3", "name_ar": "البرج أ3", "building_number": "A3", "floors": 12},
+        {"area_id": area_map.get("ISL-A"), "name": "Tower A4", "name_ar": "البرج أ4", "building_number": "A4", "floors": 14},
+        {"area_id": area_map.get("ISL-B"), "name": "Tower B1", "name_ar": "البرج ب1", "building_number": "B1", "floors": 12},
+        {"area_id": area_map.get("ISL-B"), "name": "Tower B2", "name_ar": "البرج ب2", "building_number": "B2", "floors": 12},
+        {"area_id": area_map.get("ISL-B"), "name": "Tower B3", "name_ar": "البرج ب3", "building_number": "B3", "floors": 10},
+        {"area_id": area_map.get("ISL-C"), "name": "Tower C1", "name_ar": "البرج ج1", "building_number": "C1", "floors": 16},
+        {"area_id": area_map.get("ISL-C"), "name": "Tower C2", "name_ar": "البرج ج2", "building_number": "C2", "floors": 18},
+        {"area_id": area_map.get("ISL-D"), "name": "Tower D1", "name_ar": "البرج د1", "building_number": "D1", "floors": 20},
+        {"area_id": area_map.get("ISL-D"), "name": "Tower D2", "name_ar": "البرج د2", "building_number": "D2", "floors": 18},
+        {"area_id": area_map.get("BLK-66"), "name": "Block 66 Tower 1", "name_ar": "برج البلوك 66-1", "building_number": "66-T1", "floors": 14},
+        {"area_id": area_map.get("BLK-66"), "name": "Block 66 Tower 2", "name_ar": "برج البلوك 66-2", "building_number": "66-T2", "floors": 14},
+        {"area_id": area_map.get("BLK-86"), "name": "Block 86 Services", "name_ar": "مبنى خدمات البلوك 86", "building_number": "86-S1", "floors": 4},
+        {"area_id": area_map.get("COM-S"), "name": "Commercial Center 1", "name_ar": "المركز التجاري 1", "building_number": "COM-1", "floors": 3},
     ]
+    
+    # Filter out entries where area_id is None (area not found)
+    buildings_data = [b for b in buildings_data if b["area_id"] is not None]
     
     for building_data in buildings_data:
         building = Building(**building_data)
@@ -100,7 +115,7 @@ def seed_complaints(db: Session):
             "phone": "+963911234567",
             "complaint_type": ComplaintType.ROADS,
             "description": "حفرة كبيرة في الشارع الرئيسي بالقرب من البرج أ1 تسبب مشاكل مرورية وخطر على السيارات",
-            "location_text": "الشارع الرئيسي، بالقرب من البرج أ1، المنطقة 66",
+            "location_text": "الجزيرة أ، أمام البرج أ1، الشارع الرئيسي",
             "area_id": areas[0].id if areas else None,
             "status": ComplaintStatus.NEW,
             "priority": ComplaintPriority.HIGH,
@@ -110,8 +125,8 @@ def seed_complaints(db: Session):
             "full_name": "فاطمة المنصور",
             "phone": "+963912345678",
             "complaint_type": ComplaintType.LIGHTING,
-            "description": "إنارة الشوارع لا تعمل في المساء في منطقة الخدمات مما يسبب صعوبة في التنقل",
-            "location_text": "شارع الخدمات، المنطقة 86",
+            "description": "إنارة الشوارع لا تعمل في المساء بين البرج ب1 والبرج ب2 مما يسبب صعوبة في التنقل",
+            "location_text": "الجزيرة ب، بين البرج ب1 والبرج ب2",
             "area_id": areas[1].id if len(areas) > 1 else None,
             "status": ComplaintStatus.UNDER_REVIEW,
             "priority": ComplaintPriority.MEDIUM,
@@ -122,8 +137,8 @@ def seed_complaints(db: Session):
             "full_name": "محمد خليل",
             "phone": "+963913456789",
             "complaint_type": ComplaintType.CLEANING,
-            "description": "تأخر جمع النفايات لعدة أيام في منطقة دمّر الشرقي مما يسبب روائح كريهة",
-            "location_text": "البرج الشرقي 1، دمّر الشرقي",
+            "description": "تأخر جمع النفايات لعدة أيام في محيط البرج ج1 مما يسبب روائح كريهة",
+            "location_text": "الجزيرة ج، محيط البرج ج1",
             "area_id": areas[2].id if len(areas) > 2 else None,
             "status": ComplaintStatus.ASSIGNED,
             "priority": ComplaintPriority.URGENT,
@@ -135,7 +150,7 @@ def seed_complaints(db: Session):
             "phone": "+963914567890",
             "complaint_type": ComplaintType.WATER,
             "description": "ضغط المياه ضعيف جداً في الطوابق العليا من البرج أ2",
-            "location_text": "البرج أ2، الطابق 10، المنطقة 66",
+            "location_text": "الجزيرة أ، البرج أ2، الطابق 10",
             "area_id": areas[0].id if areas else None,
             "status": ComplaintStatus.IN_PROGRESS,
             "priority": ComplaintPriority.HIGH,
@@ -146,8 +161,8 @@ def seed_complaints(db: Session):
             "phone": "+963915678901",
             "complaint_type": ComplaintType.INFRASTRUCTURE,
             "description": "تشققات في الرصيف أمام المركز التجاري تشكل خطراً على المشاة",
-            "location_text": "أمام المركز التجاري الرئيسي",
-            "area_id": areas[5].id if len(areas) > 5 else None,
+            "location_text": "الشريط التجاري، أمام المركز التجاري 1",
+            "area_id": areas[6].id if len(areas) > 6 else None,
             "status": ComplaintStatus.RESOLVED,
             "priority": ComplaintPriority.MEDIUM,
             "resolved_at": datetime.utcnow() - timedelta(days=2),
@@ -157,8 +172,8 @@ def seed_complaints(db: Session):
             "full_name": "سارة الحلبي",
             "phone": "+963916789012",
             "complaint_type": ComplaintType.ELECTRICITY,
-            "description": "انقطاع متكرر في التيار الكهربائي في مجمع الفلل بدمّر الغربي",
-            "location_text": "مجمع الفلل 1، دمّر الغربي",
+            "description": "انقطاع متكرر في التيار الكهربائي في البرج د1 بالجزيرة د",
+            "location_text": "الجزيرة د، البرج د1",
             "area_id": areas[3].id if len(areas) > 3 else None,
             "status": ComplaintStatus.NEW,
             "priority": ComplaintPriority.HIGH,
@@ -168,8 +183,8 @@ def seed_complaints(db: Session):
             "full_name": "عبد الرحمن الشامي",
             "phone": "+963917890123",
             "complaint_type": ComplaintType.WATER,
-            "description": "تسرب مياه من الأنابيب الرئيسية في الشارع المؤدي للهامة",
-            "location_text": "الشارع الرئيسي، الهامة",
+            "description": "تسرب مياه من الأنابيب الرئيسية في الشارع المؤدي للبلوك 66",
+            "location_text": "البلوك 66، الشارع الرئيسي",
             "area_id": areas[4].id if len(areas) > 4 else None,
             "status": ComplaintStatus.UNDER_REVIEW,
             "priority": ComplaintPriority.URGENT,
@@ -195,32 +210,35 @@ def seed_tasks(db: Session):
     tasks_data = [
         {
             "title": "إصلاح الحفرة في الشارع الرئيسي",
-            "description": "ردم وإصلاح الحفرة الكبيرة المبلغ عنها من المواطن في المنطقة 66",
+            "description": "ردم وإصلاح الحفرة الكبيرة المبلغ عنها أمام البرج أ1 في الجزيرة أ",
             "source_type": TaskSourceType.COMPLAINT,
             "complaint_id": complaints[0].id if complaints else None,
             "assigned_to_id": users[0].id if users else None,
             "area_id": areas[0].id if areas else None,
+            "location_text": "الجزيرة أ، أمام البرج أ1",
             "status": TaskStatus.ASSIGNED,
             "priority": TaskPriority.HIGH,
             "due_date": date.today() + timedelta(days=3),
         },
         {
             "title": "استبدال مصابيح الإنارة",
-            "description": "استبدال مصابيح الإنارة المعطلة في شارع الخدمات بالمنطقة 86",
+            "description": "استبدال مصابيح الإنارة المعطلة بين البرج ب1 والبرج ب2 في الجزيرة ب",
             "source_type": TaskSourceType.INTERNAL,
             "assigned_to_id": users[0].id if users else None,
             "area_id": areas[1].id if len(areas) > 1 else None,
+            "location_text": "الجزيرة ب، بين البرج ب1 والبرج ب2",
             "status": TaskStatus.IN_PROGRESS,
             "priority": TaskPriority.MEDIUM,
             "due_date": date.today() + timedelta(days=5),
         },
         {
             "title": "تنسيق جمع النفايات",
-            "description": "ترتيب جمع فوري للنفايات في منطقة دمّر الشرقي",
+            "description": "ترتيب جمع فوري للنفايات حول البرج ج1 في الجزيرة ج",
             "source_type": TaskSourceType.COMPLAINT,
             "complaint_id": complaints[2].id if len(complaints) > 2 else None,
             "assigned_to_id": users[0].id if users else None,
             "area_id": areas[2].id if len(areas) > 2 else None,
+            "location_text": "الجزيرة ج، محيط البرج ج1",
             "status": TaskStatus.COMPLETED,
             "priority": TaskPriority.URGENT,
             "due_date": date.today() - timedelta(days=1),
@@ -228,20 +246,22 @@ def seed_tasks(db: Session):
         },
         {
             "title": "فحص منظومة ضخ المياه",
-            "description": "فحص نظام ضغط المياه في البرج أ2 بالمنطقة 66",
+            "description": "فحص نظام ضغط المياه في البرج أ2 بالجزيرة أ - الطوابق العليا",
             "source_type": TaskSourceType.INTERNAL,
             "area_id": areas[0].id if areas else None,
+            "location_text": "الجزيرة أ، البرج أ2",
             "status": TaskStatus.PENDING,
             "priority": TaskPriority.HIGH,
             "due_date": date.today() + timedelta(days=2),
         },
         {
             "title": "صيانة الشبكة الكهربائية",
-            "description": "فحص وصيانة الشبكة الكهربائية في مجمع الفلل بدمّر الغربي",
+            "description": "فحص وصيانة الشبكة الكهربائية في البرج د1 بالجزيرة د",
             "source_type": TaskSourceType.COMPLAINT,
             "complaint_id": complaints[5].id if len(complaints) > 5 else None,
             "assigned_to_id": users[0].id if users else None,
             "area_id": areas[3].id if len(areas) > 3 else None,
+            "location_text": "الجزيرة د، البرج د1",
             "status": TaskStatus.ASSIGNED,
             "priority": TaskPriority.HIGH,
             "due_date": date.today() + timedelta(days=4),
@@ -266,7 +286,7 @@ def seed_contracts(db: Session):
     contracts_data = [
         {
             "contract_number": "CNT-2024-001",
-            "title": "تطوير البنية التحتية للطرق - المرحلة الأولى",
+            "title": "تطوير البنية التحتية للطرق - الجزيرة أ والجزيرة ب",
             "contractor_name": "شركة دمشق للإنشاءات",
             "contractor_contact": "+963211234567",
             "contract_type": ContractType.CONSTRUCTION,
@@ -275,15 +295,15 @@ def seed_contracts(db: Session):
             "end_date": date(2024, 12, 31),
             "execution_duration_days": 350,
             "status": ContractStatus.ACTIVE,
-            "scope_description": "إنشاء وتعبيد الطرق الرئيسية الرابطة بين جميع مناطق مشروع دمّر",
-            "related_areas": "المنطقة 66، المنطقة 86، دمّر الشرقي",
+            "scope_description": "إنشاء وتعبيد الطرق الرئيسية الرابطة بين الجزيرة أ والجزيرة ب والشريط التجاري",
+            "related_areas": "الجزيرة أ، الجزيرة ب، الشريط التجاري",
             "created_by_id": users[0].id,
             "approved_by_id": users[0].id,
             "approved_at": datetime.utcnow() - timedelta(days=30),
         },
         {
             "contract_number": "CNT-2024-002",
-            "title": "صيانة الأنظمة الكهربائية",
+            "title": "صيانة الأنظمة الكهربائية - جميع الجزر",
             "contractor_name": "الشركة السورية للخدمات الكهربائية",
             "contractor_contact": "+963212345678",
             "contract_type": ContractType.MAINTENANCE,
@@ -292,8 +312,8 @@ def seed_contracts(db: Session):
             "end_date": date(2025, 2, 28),
             "execution_duration_days": 365,
             "status": ContractStatus.ACTIVE,
-            "scope_description": "الصيانة المستمرة لإنارة الشوارع والبنية التحتية الكهربائية في جميع المناطق",
-            "related_areas": "جميع المناطق",
+            "scope_description": "الصيانة المستمرة لإنارة الشوارع والبنية التحتية الكهربائية في جميع الجزر والبلوكات",
+            "related_areas": "الجزيرة أ، الجزيرة ب، الجزيرة ج، الجزيرة د، البلوك 66، البلوك 86",
             "created_by_id": users[0].id,
             "approved_by_id": users[0].id,
             "approved_at": datetime.utcnow() - timedelta(days=20),
@@ -309,15 +329,15 @@ def seed_contracts(db: Session):
             "end_date": date(2024, 10, 31),
             "execution_duration_days": 213,
             "status": ContractStatus.APPROVED,
-            "scope_description": "تطوير الحدائق والمساحات الخضراء في منطقة الهامة",
-            "related_areas": "الهامة",
+            "scope_description": "تطوير الحدائق والمساحات الخضراء في المنطقة الخضراء وبين الجزر",
+            "related_areas": "المنطقة الخضراء",
             "created_by_id": users[0].id,
             "approved_by_id": users[0].id,
             "approved_at": datetime.utcnow() - timedelta(days=5),
         },
         {
             "contract_number": "CNT-2024-004",
-            "title": "تحديث شبكة المياه",
+            "title": "تحديث شبكة المياه - الجزيرة ج والجزيرة د",
             "contractor_name": "شركة أكوا سيستمز سوريا",
             "contractor_contact": "+963214567890",
             "contract_type": ContractType.CONSTRUCTION,
@@ -326,13 +346,13 @@ def seed_contracts(db: Session):
             "end_date": date(2025, 5, 31),
             "execution_duration_days": 365,
             "status": ContractStatus.UNDER_REVIEW,
-            "scope_description": "تحديث وتوسيع شبكة توزيع المياه في جميع المناطق",
-            "related_areas": "جميع المناطق",
+            "scope_description": "تحديث وتوسيع شبكة توزيع المياه في الجزيرة ج والجزيرة د والبلوكات",
+            "related_areas": "الجزيرة ج، الجزيرة د، البلوك 66، البلوك 86",
             "created_by_id": users[0].id,
         },
         {
             "contract_number": "CNT-2024-005",
-            "title": "إنشاء المرافق التعليمية",
+            "title": "إنشاء المرافق التعليمية في الشريط التجاري",
             "contractor_name": "مجموعة البناؤون الوطنيون",
             "contractor_contact": "+963215678901",
             "contract_type": ContractType.CONSTRUCTION,
@@ -341,8 +361,8 @@ def seed_contracts(db: Session):
             "end_date": date(2025, 12, 31),
             "execution_duration_days": 548,
             "status": ContractStatus.DRAFT,
-            "scope_description": "إنشاء مدارس ومرافق تعليمية في المركز التجاري",
-            "related_areas": "المركز التجاري",
+            "scope_description": "إنشاء مدارس ومرافق تعليمية في الشريط التجاري",
+            "related_areas": "الشريط التجاري",
             "created_by_id": users[0].id,
         },
     ]

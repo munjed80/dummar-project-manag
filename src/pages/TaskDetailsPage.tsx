@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Spinner, ClockCounterClockwise } from '@phosphor-icons/react';
+import { Spinner, ClockCounterClockwise, Camera, UploadSimple } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -139,6 +139,63 @@ export default function TaskDetailsPage() {
                 <div>
                   <span className="text-sm text-muted-foreground">الوصف</span>
                   <p className="mt-1">{task.description}</p>
+                </div>
+              </>
+            )}
+            {(task.before_photos || task.after_photos) && (
+              <>
+                <Separator className="my-4" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {task.before_photos && (
+                    <div>
+                      <span className="text-sm text-muted-foreground flex items-center gap-1 mb-2">
+                        <Camera size={16} />
+                        صور قبل التنفيذ
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {task.before_photos.split(',').filter(Boolean).map((path: string, idx: number) => (
+                          <a
+                            key={idx}
+                            href={`http://localhost:8000${path.trim()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block border rounded-lg overflow-hidden hover:ring-2 ring-primary transition-all"
+                          >
+                            {path.trim().match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                              <img src={`http://localhost:8000${path.trim()}`} alt={`قبل ${idx + 1}`} className="w-28 h-28 object-cover" />
+                            ) : (
+                              <div className="w-28 h-28 flex items-center justify-center bg-muted text-xs text-muted-foreground">ملف {idx + 1}</div>
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {task.after_photos && (
+                    <div>
+                      <span className="text-sm text-muted-foreground flex items-center gap-1 mb-2">
+                        <Camera size={16} />
+                        صور بعد التنفيذ
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {task.after_photos.split(',').filter(Boolean).map((path: string, idx: number) => (
+                          <a
+                            key={idx}
+                            href={`http://localhost:8000${path.trim()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block border rounded-lg overflow-hidden hover:ring-2 ring-primary transition-all"
+                          >
+                            {path.trim().match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                              <img src={`http://localhost:8000${path.trim()}`} alt={`بعد ${idx + 1}`} className="w-28 h-28 object-cover" />
+                            ) : (
+                              <div className="w-28 h-28 flex items-center justify-center bg-muted text-xs text-muted-foreground">ملف {idx + 1}</div>
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}

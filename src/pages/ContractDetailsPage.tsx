@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Spinner, FilePdf, ClockCounterClockwise } from '@phosphor-icons/react';
+import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, FileDoc } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -150,6 +150,51 @@ export default function ContractDetailsPage() {
                 <div>
                   <span className="text-sm text-muted-foreground">ملاحظات</span>
                   <p className="mt-1">{contract.notes}</p>
+                </div>
+              </>
+            )}
+            {contract.attachments && (
+              <>
+                <Separator className="my-4" />
+                <div>
+                  <span className="text-sm text-muted-foreground flex items-center gap-1 mb-2">
+                    <Paperclip size={16} />
+                    المرفقات
+                  </span>
+                  <div className="flex flex-wrap gap-3">
+                    {contract.attachments.split(',').filter(Boolean).map((path: string, idx: number) => (
+                      <a
+                        key={idx}
+                        href={`http://localhost:8000${path.trim()}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 border rounded-lg px-3 py-2 hover:bg-muted transition-colors text-sm"
+                      >
+                        <FileDoc size={18} />
+                        مرفق {idx + 1}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            {contract.pdf_file && (
+              <>
+                <Separator className="my-4" />
+                <div>
+                  <span className="text-sm text-muted-foreground flex items-center gap-1 mb-2">
+                    <FilePdf size={16} />
+                    ملف PDF
+                  </span>
+                  <a
+                    href={`http://localhost:8000${contract.pdf_file}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 border rounded-lg px-3 py-2 hover:bg-muted transition-colors text-sm"
+                  >
+                    <FilePdf size={18} />
+                    تنزيل ملف العقد
+                  </a>
                 </div>
               </>
             )}
