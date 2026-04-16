@@ -44,6 +44,32 @@
   - `runtime.config.json` (حذف)
 - **المخاطر:** تغيير RBAC قد يؤثر على اختبارات RBAC الحالية — يجب التأكد من بقاء الاختبارات ناجحة
 
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ إكمال قاعدة بيانات الإشعارات — `Notification` و `NotificationType` مُصدّران في `__init__.py`، migration `002_add_notifications.py` جاهز
+  2. ✅ تقوية RBAC على الباكند — `get_current_internal_user` dep جديد يستبعد citizen، مطبّق على:
+     - `GET /users/` و `/users/{id}` → project_director فقط
+     - `GET /complaints/` و `/complaints/{id}` و `/complaints/map/markers` و `/complaints/{id}/activities` → internal staff
+     - `GET /tasks/` و `/tasks/{id}` و `/tasks/{id}/activities` → internal staff
+     - `GET /contracts/` و `/contracts/{id}` و `/contracts/expiring-soon` و `/contracts/{id}/approvals` و `generate-pdf` → internal staff
+     - جميع نقاط التقارير → internal staff
+  3. ✅ تقوية RBAC على الواجهة — `App.tsx` يقيد المسارات بالدور:
+     - `/citizen` → citizen فقط
+     - `/complaints` `/tasks` `/contracts` `/locations` `/complaints-map` → internal staff
+     - `/users` → project_director
+     - `/reports` → أدوار إدارية (بدون citizen, field_team, contractor)
+  4. ✅ نقل API base URL — `src/config.ts` مع `VITE_API_BASE_URL`، مستخدم في `api.ts` و `FileUpload.tsx` و `ContractDetailsPage.tsx`
+  5. ✅ إزالة بقايا Spark — `ErrorFallback.tsx` بنصوص عربية، حذف `spark.meta.json` و `.spark-initial-sha` و `runtime.config.json`
+  6. ✅ استقرار الاختبارات — `bcrypt==3.2.2` مُثبّت في `requirements.txt`، 26 اختبار ناجح
+  7. ✅ بناء الواجهة — `npm run build` ناجح (1.69s)
+  8. ✅ `README.md` محدّث — تعليمات env، اختبارات، إزالة register endpoint
+  9. ✅ `.env.example` للواجهة — مع `VITE_API_BASE_URL`
+- **الفجوات المتبقية:**
+  - لم يُعدّل `locations.py` — المواقع بيانات مرجعية يمكن للجميع رؤيتها (سلوك مقصود)
+  - اختبار Alembic migration على PostgreSQL الحقيقي لم يتم (SQLite فقط) — يحتاج بيئة Docker
+  - لوحة المعلومات `/dashboard` و `/settings` لا تزال مفتوحة لأي مستخدم مُصادق (سلوك مقصود لسهولة الاستخدام)
+
 ---
 
 ### الدفعة: 2026-04-16T21:10 — المرحلة الثانية: لوحة تحكم المواطن + إشعارات + خرائط GIS
