@@ -1,89 +1,85 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-15
+## آخر تحديث: 2026-04-16
 
 ---
 
-## الملفات المُعدّلة في هذه الدورة
+## الدفعة الحالية: 2026-04-16 — إصلاحات أمنية وتشغيلية حرجة
 
-### ملفات جديدة:
-| الملف | الوصف |
-|---|---|
-| `src/pages/UsersPage.tsx` | صفحة إدارة المستخدمين كاملة (CRUD, بحث, فلترة, ترقيم صفحات, شارات أدوار) |
-| `src/pages/ReportsPage.tsx` | صفحة التقارير مع ملخصات إحصائية وجداول مفصلة وفلاتر |
-| `src/pages/SettingsPage.tsx` | صفحة الإعدادات (معلومات المشروع، حدود الرفع، معلومات النظام) |
-| `src/components/FileUpload.tsx` | مكون رفع ملفات مع تحقق من النوع والحجم |
-| `backend/app/api/reports.py` | نقاط API للتقارير (ملخص، شكاوى، مهام، عقود مع فلاتر) |
-| `backend/app/schemas/report.py` | مخططات Pydantic للتقارير |
-| `PROJECT_REVIEW_AND_PROGRESS.md` | وثيقة مراجعة المشروع |
-| `HANDOFF_STATUS.md` | وثيقة حالة التسليم (هذا الملف) |
-
-### ملفات مُعدّلة:
+### الملفات المُعدّلة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `src/App.tsx` | إضافة مسارات /users, /reports, /settings |
-| `src/components/Layout.tsx` | إضافة روابط المستخدمون، التقارير، الإعدادات في التنقل |
-| `src/services/api.ts` | إضافة methods جديدة: getUsers (paginated), createUser, updateUser, deactivateUser, getReportSummary, getReportComplaints, getReportTasks, getReportContracts |
-| `src/pages/ComplaintsListPage.tsx` | ترقيم صفحات، حالات خطأ/فارغ |
-| `src/pages/ComplaintDetailsPage.tsx` | بيانات وصفية كاملة، رفع صور، تعيين مسؤول، حوار تأكيد |
-| `src/pages/TasksListPage.tsx` | ترقيم صفحات، حالات خطأ/فارغ |
-| `src/pages/TaskDetailsPage.tsx` | صور قبل/بعد، ربط شكوى/عقد، تعيين مسؤول، حوار تأكيد |
-| `src/pages/ContractsListPage.tsx` | ترقيم صفحات، حالات خطأ/فارغ |
-| `src/pages/ContractDetailsPage.tsx` | مرفقات، PDF تحميل/عرض، QR code، حذف مع تأكيد |
-| `backend/app/api/users.py` | بحث، فلتر بالدور، فلتر بالحالة، استجابة مُرقمة |
-| `backend/app/main.py` | تسجيل router التقارير |
-| `backend/app/scripts/seed_data.py` | بيانات مناطق ومباني واقعية لمشروع دمّر (جزر/قطاعات/بلوكات) |
+| `backend/app/api/auth.py` | إزالة `/auth/register` — التسجيل العام مغلق تماماً |
+| `backend/app/api/complaints.py` | RBAC (مدير/مسؤول شكاوى/مشرف) + تسلسل images كـ JSON |
+| `backend/app/api/tasks.py` | RBAC (مدير/مشرف هندسي/مشرف منطقة) + تسلسل before_photos/after_photos |
+| `backend/app/api/contracts.py` | تسلسل attachments كـ JSON عند التحديث |
+| `backend/app/api/uploads.py` | إضافة `/uploads/public` لرفع ملفات الشكاوى بدون مصادقة |
+| `backend/app/schemas/complaint.py` | `images` → `List[str]` + field_validator للتحليل من DB |
+| `backend/app/schemas/task.py` | `before_photos`/`after_photos` → `List[str]` + field_validator |
+| `backend/app/schemas/contract.py` | `attachments` → `List[str]` + field_validator |
+| `tailwind.config.js` | إزالة screens: coarse, fine, pwa (كانت تكسر البناء) |
+| `src/services/api.ts` | إضافة `uploadFilePublic()` للرفع بدون مصادقة |
+| `src/pages/ComplaintSubmitPage.tsx` | استخدام `uploadFilePublic` + إرسال images كمصفوفة |
+| `src/pages/ComplaintDetailsPage.tsx` | تحديث إرسال images كمصفوفة |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث صادق بالحالة الحقيقية |
+| `HANDOFF_STATUS.md` | تحديث صادق (هذا الملف) |
 
 ---
 
-## الميزات العاملة بالكامل
+## الحالة الحقيقية المُتحقق منها
 
-### صفحات جديدة:
-1. **`/users`** - قائمة مستخدمين حقيقية من الخادم مع:
-   - بحث بالاسم/البريد
-   - فلترة بالدور
-   - إنشاء مستخدم جديد (dialog)
-   - تعديل مستخدم (dialog)
-   - إلغاء تفعيل مستخدم (مع حوار تأكيد)
-   - شارات أدوار ملونة
-   - ترقيم صفحات
+### ✅ مكتمل ومُتحقق منه:
+1. **بناء الواجهة الأمامية** — `npm run build` ناجح (601 KB bundle)
+2. **تجميع الخادم** — جميع ملفات Python تُجمع بنجاح
+3. **أمان التسجيل** — `/auth/register` محذوفة، المستخدمون يُنشأون فقط بواسطة مدير المشروع عبر `/users/`
+4. **رفع الشكاوى العامة** — `/uploads/public` متاح بدون مصادقة، يقبل صور و PDF فقط
+5. **استمرار مرفقات الشكوى** — `ComplaintUpdate` يقبل `images: List[str]`
+6. **استمرار صور المهام** — `TaskUpdate` يقبل `before_photos`/`after_photos: List[str]`
+7. **استمرار مرفقات العقود** — `ContractUpdate` يقبل `attachments: List[str]`
+8. **RBAC — تحديث الشكاوى** — مقيد بالأدوار: project_director, complaints_officer, engineer_supervisor, area_supervisor
+9. **RBAC — إنشاء/تحديث/حذف المهام** — مقيد بالأدوار: project_director, engineer_supervisor, area_supervisor, complaints_officer
+10. **RBAC — العقود** — كان مُطبقاً (contracts_manager, project_director)
+11. **RBAC — المستخدمين** — كان مُطبقاً (project_director فقط)
+12. **شكل بيانات الملفات** — API تُرجع مصفوفات JSON، الواجهة تستقبل `string[]`
 
-2. **`/reports`** - تقارير حقيقية من الخادم مع:
-   - ملخص إحصائي (بطاقات إجمالية)
-   - تفصيلات حسب الحالة والنوع والمنطقة
-   - تبويبات: ملخص عام، شكاوى، مهام، عقود
-   - فلاتر: تاريخ من/إلى، منطقة
-   - بحث داخل كل تبويب
-   - ترقيم صفحات
+### ❌ غير مُنفذ (المرحلة الثانية):
+- تصدير CSV
+- إشعارات push/email
+- اختبارات وحدة/تكامل
+- RBAC على مستوى واجهة المستخدم (إخفاء أزرار/صفحات حسب الدور)
+- rate limiting على API
+- تكامل GIS/خرائط
+- PWA/offline mode
+- code splitting
 
-3. **`/settings`** - إعدادات مع:
-   - معلومات المشروع والمنظمة
-   - قائمة المناطق المسجلة
-   - معلومات الحساب الحالي
-   - حدود الرفع
-   - معلومات النظام
-
-### تحسينات على الصفحات الموجودة:
-- **كل صفحات القوائم**: ترقيم صفحات، حالات خطأ/فارغ/تحميل
-- **تفاصيل الشكوى**: رفع صور، تعيين مسؤول، منطقة مربوطة، حوار تأكيد
-- **تفاصيل المهمة**: صور قبل/بعد، ربط شكوى/عقد، تعيين مسؤول
-- **تفاصيل العقد**: مرفقات، تحميل PDF، QR code، حذف مع تأكيد
-
----
-
-## الثغرات المتبقية
-
-### مطلوبة للمرحلة الثانية:
-1. **تصدير CSV** - هيكل الجداول جاهز لكن لم يُنفذ زر التصدير
-2. **نظام الصلاحيات** - الأدوار موجودة لكن لا يوجد تقييد بالواجهة حسب الدور
-3. **إشعارات** - Toast فقط، لا يوجد push/email
-4. **خرائط GIS** - البيانات قابلة للتوسيع لكن لا تكامل خرائط بعد
-5. **اختبارات** - لا يوجد اختبارات وحدة أو تكامل
-6. **فلاتر URL** - الفلاتر لا تُحفظ في الرابط بعد
-
-### ملاحظات تقنية:
-- حجم الحزمة الأمامية: ~596KB (ينصح بـ code splitting)
-- كلمات المرور التجريبية: يجب تغييرها في الإنتاج
+### ⚠️ ملاحظات مهمة:
+- كلمات المرور التجريبية يجب تغييرها في الإنتاج
 - CORS مقيد لـ localhost فقط
-- لا يوجد rate limiting على الـ API
+- لا يوجد rate limiting على `/uploads/public` — ينبغي إضافته قبل الإنتاج
+- RBAC مُطبق على مستوى API فقط — الواجهة لا تخفي أزرار حسب الدور بعد
+- `field_team` و `contractor_user` لا يمكنهم تحديث الشكاوى أو المهام (سلوك مقصود)
+
+---
+
+## الدفعات السابقة
+
+### الدفعة: 2026-04-15 — إنشاء صفحات وتقارير
+**ملفات جديدة:**
+| الملف | الوصف |
+|---|---|
+| `src/pages/UsersPage.tsx` | صفحة إدارة المستخدمين كاملة |
+| `src/pages/ReportsPage.tsx` | صفحة التقارير |
+| `src/pages/SettingsPage.tsx` | صفحة الإعدادات |
+| `src/components/FileUpload.tsx` | مكون رفع ملفات |
+| `backend/app/api/reports.py` | نقاط API للتقارير |
+| `backend/app/schemas/report.py` | مخططات Pydantic للتقارير |
+
+---
+
+## الدفعة القادمة المُقترحة
+1. RBAC على مستوى واجهة المستخدم (إخفاء أقسام حسب الدور)
+2. Rate limiting على `/uploads/public`
+3. تصدير CSV من التقارير
+4. اختبارات وحدة أساسية للـ API
+5. تحسين حجم الحزمة (code splitting)
