@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-import json
 from app.core.database import get_db
 from app.models.task import Task, TaskActivity, TaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
 from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
+from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -19,13 +19,6 @@ _task_managers = require_role(
     UserRole.AREA_SUPERVISOR,
     UserRole.COMPLAINTS_OFFICER,
 )
-
-
-def _serialize_files(file_list: Optional[List[str]]) -> Optional[str]:
-    """Serialize a list of file paths to a JSON string for DB storage."""
-    if file_list is None:
-        return None
-    return json.dumps(file_list)
 
 
 @router.post("/", response_model=TaskResponse)
@@ -107,7 +100,7 @@ def update_task(
     # Serialize file list fields to JSON for DB storage
     for field_name in ("before_photos", "after_photos"):
         if field_name in update_data and update_data[field_name] is not None:
-            update_data[field_name] = _serialize_files(update_data[field_name])
+            update_data[field_name] = serialize_file_list(update_data[field_name])
 
     for field, value in update_data.items():
         setattr(task, field, value)

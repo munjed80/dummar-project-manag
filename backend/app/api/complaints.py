@@ -5,7 +5,6 @@ from typing import List, Optional
 from datetime import datetime
 import random
 import string
-import json
 from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus
 from app.models.user import User, UserRole
@@ -18,6 +17,7 @@ from app.schemas.complaint import (
 )
 from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
+from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 
@@ -28,13 +28,6 @@ _complaint_managers = require_role(
     UserRole.ENGINEER_SUPERVISOR,
     UserRole.AREA_SUPERVISOR,
 )
-
-
-def _serialize_files(file_list: Optional[List[str]]) -> Optional[str]:
-    """Serialize a list of file paths to a JSON string for DB storage."""
-    if file_list is None:
-        return None
-    return json.dumps(file_list)
 
 
 def generate_tracking_number(db: Session) -> str:
@@ -59,7 +52,7 @@ def create_complaint(complaint: ComplaintCreate, db: Session = Depends(get_db)):
         area_id=complaint.area_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
-        images=_serialize_files(complaint.images),
+        images=serialize_file_list(complaint.images),
         status=ComplaintStatus.NEW,
     )
     
@@ -144,7 +137,7 @@ def update_complaint(
 
     # Serialize file list fields to JSON for DB storage
     if "images" in update_data and update_data["images"] is not None:
-        update_data["images"] = _serialize_files(update_data["images"])
+        update_data["images"] = serialize_file_list(update_data["images"])
 
     for field, value in update_data.items():
         setattr(complaint, field, value)

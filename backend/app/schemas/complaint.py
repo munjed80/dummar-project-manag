@@ -1,28 +1,8 @@
-import json
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 from app.models.complaint import ComplaintType, ComplaintStatus, ComplaintPriority
-
-
-def _parse_file_list(v: object) -> Optional[List[str]]:
-    """Parse a DB text value (JSON array or comma-separated) into a list."""
-    if v is None:
-        return None
-    if isinstance(v, list):
-        return v
-    if isinstance(v, str):
-        v = v.strip()
-        if not v:
-            return None
-        try:
-            parsed = json.loads(v)
-            if isinstance(parsed, list):
-                return [str(x) for x in parsed]
-        except (json.JSONDecodeError, ValueError):
-            pass
-        return [x.strip() for x in v.split(",") if x.strip()]
-    return None
+from app.schemas.file_utils import parse_file_list
 
 
 class ComplaintBase(BaseModel):
@@ -63,7 +43,7 @@ class ComplaintResponse(ComplaintBase):
     @field_validator("images", mode="before")
     @classmethod
     def parse_images(cls, v: object) -> Optional[List[str]]:
-        return _parse_file_list(v)
+        return parse_file_list(v)
 
     class Config:
         from_attributes = True

@@ -1,28 +1,8 @@
-import json
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime, date
 from app.models.task import TaskStatus, TaskSourceType, TaskPriority
-
-
-def _parse_file_list(v: object) -> Optional[List[str]]:
-    """Parse a DB text value (JSON array or comma-separated) into a list."""
-    if v is None:
-        return None
-    if isinstance(v, list):
-        return v
-    if isinstance(v, str):
-        v = v.strip()
-        if not v:
-            return None
-        try:
-            parsed = json.loads(v)
-            if isinstance(parsed, list):
-                return [str(x) for x in parsed]
-        except (json.JSONDecodeError, ValueError):
-            pass
-        return [x.strip() for x in v.split(",") if x.strip()]
-    return None
+from app.schemas.file_utils import parse_file_list
 
 
 class TaskBase(BaseModel):
@@ -67,7 +47,7 @@ class TaskResponse(TaskBase):
     @field_validator("before_photos", "after_photos", mode="before")
     @classmethod
     def parse_photos(cls, v: object) -> Optional[List[str]]:
-        return _parse_file_list(v)
+        return parse_file_list(v)
 
     class Config:
         from_attributes = True
