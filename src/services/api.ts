@@ -423,6 +423,57 @@ class ApiService {
     URL.revokeObjectURL(url);
   }
 
+  // ── Citizen Dashboard ──
+  async getCitizenComplaints(params?: { status_filter?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+    const qp = new URLSearchParams();
+    if (params?.status_filter) qp.append('status_filter', params.status_filter);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/complaints/citizen/my-complaints?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch citizen complaints');
+    return response.json();
+  }
+
+  // ── Complaints Map ──
+  async getComplaintsMapMarkers(params?: { status_filter?: string; area_id?: number }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.status_filter) qp.append('status_filter', params.status_filter);
+    if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    const response = await fetch(`${API_BASE_URL}/complaints/map/markers?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch map markers');
+    return response.json();
+  }
+
+  // ── Notifications ──
+  async getNotifications(params?: { skip?: number; limit?: number; unread_only?: boolean }): Promise<{ total_count: number; unread_count: number; items: any[] }> {
+    const qp = new URLSearchParams();
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    if (params?.unread_only) qp.append('unread_only', 'true');
+    const response = await fetch(`${API_BASE_URL}/notifications?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch notifications');
+    return response.json();
+  }
+
+  async markNotificationsRead(ids: number[]): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/notifications/mark-read`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ notification_ids: ids }),
+    });
+    if (!response.ok) throw new Error('Failed to mark notifications read');
+    return response.json();
+  }
+
+  async markAllNotificationsRead(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/notifications/mark-all-read`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to mark all notifications read');
+    return response.json();
+  }
+
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');

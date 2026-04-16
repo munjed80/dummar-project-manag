@@ -20,6 +20,7 @@ from app.schemas.complaint import (
 from app.schemas.report import PaginatedComplaints
 from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
+from app.services.notification_service import notify_complaint_status_change
 from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
@@ -126,6 +127,53 @@ def list_complaints(
     return {"total_count": total_count, "items": complaints}
 
 
+@router.get("/map/markers", response_model=List[ComplaintResponse])
+def get_complaints_map_markers(
+    status_filter: Optional[ComplaintStatus] = None,
+    area_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return complaints that have coordinates, for map display."""
+    query = db.query(Complaint).filter(
+        Complaint.latitude.isnot(None),
+        Complaint.longitude.isnot(None),
+    )
+
+    if status_filter:
+        query = query.filter(Complaint.status == status_filter)
+
+    if area_id:
+        query = query.filter(Complaint.area_id == area_id)
+
+    return query.order_by(Complaint.created_at.desc()).limit(500).all()
+
+
+@router.get("/citizen/my-complaints", response_model=PaginatedComplaints)
+def get_citizen_complaints(
+    skip: int = 0,
+    limit: int = 50,
+    status_filter: Optional[ComplaintStatus] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return complaints submitted by the current citizen user.
+    Matches by phone number (same as the complaint submission flow).
+    """
+    if not current_user.phone:
+        return {"total_count": 0, "items": []}
+
+    query = db.query(Complaint).filter(Complaint.phone == current_user.phone)
+
+    if status_filter:
+        query = query.filter(Complaint.status == status_filter)
+
+    total_count = query.count()
+    complaints = query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit).all()
+    return {"total_count": total_count, "items": complaints}
+
+
 @router.get("/{complaint_id}", response_model=ComplaintResponse)
 def get_complaint(
     complaint_id: int,
@@ -177,6 +225,19 @@ def update_complaint(
         )
         db.add(activity)
         db.commit()
+
+        # Send notifications for status change
+        try:
+            notify_complaint_status_change(
+                db=db,
+                complaint_id=complaint.id,
+                tracking_number=complaint.tracking_number,
+                old_status=old_status.value,
+                new_status=complaint_update.status.value,
+                assigned_to_id=complaint.assigned_to_id,
+            )
+        except Exception:
+            pass  # Don't block the update if notification fails
     
     write_audit_log(db, action="complaint_update", entity_type="complaint", entity_id=complaint.id, user_id=current_user.id, description=f"Complaint {complaint.tracking_number} updated")
     

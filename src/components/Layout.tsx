@@ -1,8 +1,9 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { NotificationBell } from '@/components/NotificationBell';
 import type { UserRole } from '@/hooks/useAuth';
 
 interface LayoutProps {
@@ -29,13 +30,15 @@ export function Layout({ children }: LayoutProps) {
   };
 
   const allNavItems: NavItem[] = [
-    { path: '/dashboard', icon: House, label: 'لوحة التحكم' },
-    { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى' },
-    { path: '/tasks', icon: ListChecks, label: 'المهام' },
-    { path: '/contracts', icon: FileText, label: 'العقود' },
-    { path: '/locations', icon: MapPin, label: 'المواقع' },
+    { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
+    { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/complaints-map', icon: MapTrifold, label: 'خريطة الشكاوى' },
+    { path: '/tasks', icon: ListChecks, label: 'المهام', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/contracts', icon: FileText, label: 'العقود', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/locations', icon: MapPin, label: 'المواقع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
-    { path: '/reports', icon: ChartBar, label: 'التقارير' },
+    { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },
   ];
 
@@ -48,11 +51,14 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-md">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-bold">منصة إدارة مشروع دمر</h1>
-          <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary/90">
-            <SignOut className="ml-2" />
-            تسجيل الخروج
-          </Button>
+          <h1 className="text-xl md:text-2xl font-bold">منصة إدارة مشروع دمّر</h1>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary/90">
+              <SignOut className="ml-2" />
+              تسجيل الخروج
+            </Button>
+          </div>
         </div>
       </header>
 
