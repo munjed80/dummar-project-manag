@@ -14,14 +14,7 @@ import {
 import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-
-function parseJsonArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string' && value) {
-    try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch { /* not JSON */ }
-  }
-  return [];
-}
+import { parseJsonArray } from '@/utils/serialization';
 
 const API_BASE_URL = 'http://localhost:8000';
 

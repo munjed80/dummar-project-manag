@@ -18,14 +18,7 @@ import {
 import { Spinner, ClockCounterClockwise, Camera, Warning, MapPin, LinkSimple } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-
-function parseJsonArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string' && value) {
-    try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch { /* not JSON */ }
-  }
-  return [];
-}
+import { parseJsonArray } from '@/utils/serialization';
 
 const statusLabels: Record<string, string> = {
   pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
