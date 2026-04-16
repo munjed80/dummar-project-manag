@@ -8,10 +8,12 @@ import type { UserRole } from '@/hooks/useAuth';
 // Lazy-loaded page components
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+const CitizenDashboardPage = lazy(() => import('@/pages/CitizenDashboardPage'));
 const ComplaintsListPage = lazy(() => import('@/pages/ComplaintsListPage'));
 const ComplaintDetailsPage = lazy(() => import('@/pages/ComplaintDetailsPage'));
 const ComplaintSubmitPage = lazy(() => import('@/pages/ComplaintSubmitPage'));
 const ComplaintTrackPage = lazy(() => import('@/pages/ComplaintTrackPage'));
+const ComplaintsMapPage = lazy(() => import('@/pages/ComplaintsMapPage'));
 const TasksListPage = lazy(() => import('@/pages/TasksListPage'));
 const TaskDetailsPage = lazy(() => import('@/pages/TaskDetailsPage'));
 const ContractsListPage = lazy(() => import('@/pages/ContractsListPage'));
@@ -64,8 +66,10 @@ function App() {
           
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/citizen" element={<ProtectedRoute><CitizenDashboardPage /></ProtectedRoute>} />
           <Route path="/complaints" element={<ProtectedRoute><ComplaintsListPage /></ProtectedRoute>} />
           <Route path="/complaints/:id" element={<ProtectedRoute><ComplaintDetailsPage /></ProtectedRoute>} />
+          <Route path="/complaints-map" element={<ProtectedRoute><ComplaintsMapPage /></ProtectedRoute>} />
           <Route path="/tasks" element={<ProtectedRoute><TasksListPage /></ProtectedRoute>} />
           <Route path="/tasks/:id" element={<ProtectedRoute><TaskDetailsPage /></ProtectedRoute>} />
           <Route path="/contracts" element={<ProtectedRoute><ContractsListPage /></ProtectedRoute>} />
