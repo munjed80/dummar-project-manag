@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
-from app.models.task import Task, TaskActivity, TaskStatus
+from app.models.task import Task, TaskActivity, TaskStatus, TaskPriority
 from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
+from app.schemas.report import PaginatedTasks
 from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
 from app.schemas.file_utils import serialize_file_list
@@ -45,13 +47,15 @@ def create_task(
     return db_task
 
 
-@router.get("/", response_model=List[TaskResponse])
+@router.get("/", response_model=PaginatedTasks)
 def list_tasks(
     skip: int = 0,
     limit: int = 100,
     status_filter: Optional[TaskStatus] = None,
+    priority_filter: Optional[TaskPriority] = None,
     area_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
+    search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -60,14 +64,27 @@ def list_tasks(
     if status_filter:
         query = query.filter(Task.status == status_filter)
     
+    if priority_filter:
+        query = query.filter(Task.priority == priority_filter)
+    
     if area_id:
         query = query.filter(Task.area_id == area_id)
     
     if assigned_to_id:
         query = query.filter(Task.assigned_to_id == assigned_to_id)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Task.title.ilike(search_term),
+                Task.description.ilike(search_term),
+            )
+        )
     
+    total_count = query.count()
     tasks = query.order_by(Task.created_at.desc()).offset(skip).limit(limit).all()
-    return tasks
+    return {"total_count": total_count, "items": tasks}
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

@@ -45,6 +45,7 @@ const PAGE_SIZE = 15;
 export default function ComplaintsListPage() {
   const navigate = useNavigate();
   const [complaints, setComplaints] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [areas, setAreas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -54,30 +55,28 @@ export default function ComplaintsListPage() {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
+    apiService.getAreas().then(setAreas).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     setError('');
-    const params: any = {};
+    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
     if (areaFilter !== 'all') params.area_id = Number(areaFilter);
-    Promise.all([apiService.getComplaints(params), apiService.getAreas()])
-      .then(([complaintsData, areasData]) => {
-        setComplaints(complaintsData);
-        setAreas(areasData);
+    if (search) params.search = search;
+    apiService.getComplaints(params)
+      .then((data) => {
+        setComplaints(data.items);
+        setTotalCount(data.total_count);
       })
       .catch(() => setError('فشل تحميل الشكاوى'))
       .finally(() => setLoading(false));
-  }, [statusFilter, areaFilter]);
+  }, [statusFilter, areaFilter, search, page]);
 
   const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name_ar || a.name]));
 
-  const filtered = complaints.filter((c) => {
-    if (!search) return true;
-    return c.tracking_number?.toLowerCase().includes(search.toLowerCase()) ||
-      c.full_name?.toLowerCase().includes(search.toLowerCase());
-  });
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   return (
     <Layout>
@@ -142,14 +141,14 @@ export default function ComplaintsListPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginated.length === 0 ? (
+                  {complaints.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         لا توجد شكاوى
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginated.map((c) => (
+                    complaints.map((c) => (
                       <TableRow
                         key={c.id}
                         className="cursor-pointer hover:bg-muted/50"
@@ -179,7 +178,7 @@ export default function ComplaintsListPage() {
                 <div className="flex items-center justify-center gap-2 pt-4">
                   <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>
                   <span className="text-sm text-muted-foreground">
-                    صفحة {page + 1} من {totalPages} ({filtered.length} شكوى)
+                    صفحة {page + 1} من {totalPages} ({totalCount} شكوى)
                   </span>
                   <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>التالي</Button>
                 </div>

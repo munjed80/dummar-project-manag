@@ -43,6 +43,7 @@ const PAGE_SIZE = 15;
 export default function ContractsListPage() {
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -53,25 +54,20 @@ export default function ContractsListPage() {
   useEffect(() => {
     setLoading(true);
     setError('');
-    const params: any = {};
+    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
+    if (typeFilter !== 'all') params.contract_type = typeFilter;
+    if (search) params.search = search;
     apiService.getContracts(params)
-      .then(setContracts)
+      .then((data) => {
+        setContracts(data.items);
+        setTotalCount(data.total_count);
+      })
       .catch(() => setError('فشل تحميل العقود'))
       .finally(() => setLoading(false));
-  }, [statusFilter]);
+  }, [statusFilter, typeFilter, search, page]);
 
-  const filtered = contracts.filter((c) => {
-    const matchesSearch = !search ||
-      c.contract_number?.toLowerCase().includes(search.toLowerCase()) ||
-      c.title?.toLowerCase().includes(search.toLowerCase()) ||
-      c.contractor_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === 'all' || c.contract_type === typeFilter;
-    return matchesSearch && matchesType;
-  });
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   return (
     <Layout>
@@ -136,14 +132,14 @@ export default function ContractsListPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginated.length === 0 ? (
+                  {contracts.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         لا توجد عقود
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginated.map((c) => (
+                    contracts.map((c) => (
                       <TableRow
                         key={c.id}
                         className="cursor-pointer hover:bg-muted/50"
@@ -169,7 +165,7 @@ export default function ContractsListPage() {
                 <div className="flex items-center justify-center gap-2 pt-4">
                   <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>
                   <span className="text-sm text-muted-foreground">
-                    صفحة {page + 1} من {totalPages} ({filtered.length} عقد)
+                    صفحة {page + 1} من {totalPages} ({totalCount} عقد)
                   </span>
                   <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>التالي</Button>
                 </div>

@@ -71,10 +71,11 @@ class ApiService {
   }
 
   // ── Complaints ──
-  async getComplaints(params?: { status?: string; area_id?: number; skip?: number; limit?: number }): Promise<any[]> {
+  async getComplaints(params?: { status?: string; area_id?: number; search?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
     const qp = new URLSearchParams();
     if (params?.status) qp.append('status_filter', params.status);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    if (params?.search) qp.append('search', params.search);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetch(`${API_BASE_URL}/complaints?${qp}`, { headers: this.getAuthHeaders() });
@@ -125,10 +126,12 @@ class ApiService {
   }
 
   // ── Tasks ──
-  async getTasks(params?: { status?: string; area_id?: number; skip?: number; limit?: number }): Promise<any[]> {
+  async getTasks(params?: { status?: string; area_id?: number; search?: string; priority?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
     const qp = new URLSearchParams();
     if (params?.status) qp.append('status_filter', params.status);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    if (params?.search) qp.append('search', params.search);
+    if (params?.priority) qp.append('priority_filter', params.priority);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetch(`${API_BASE_URL}/tasks?${qp}`, { headers: this.getAuthHeaders() });
@@ -169,9 +172,11 @@ class ApiService {
   }
 
   // ── Contracts ──
-  async getContracts(params?: { status?: string; skip?: number; limit?: number }): Promise<any[]> {
+  async getContracts(params?: { status?: string; contract_type?: string; search?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
     const qp = new URLSearchParams();
     if (params?.status) qp.append('status_filter', params.status);
+    if (params?.contract_type) qp.append('contract_type', params.contract_type);
+    if (params?.search) qp.append('search', params.search);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetch(`${API_BASE_URL}/contracts?${qp}`, { headers: this.getAuthHeaders() });
@@ -347,12 +352,16 @@ class ApiService {
   }
 
   // ── Reports ──
-  async getReportSummary(params?: { date_from?: string; date_to?: string; area_id?: number; status?: string }): Promise<any> {
+  async getReportSummary(params?: { date_from?: string; date_to?: string; area_id?: number; status?: string; complaint_type?: string; contract_type?: string; priority?: string; assigned_to_id?: number }): Promise<any> {
     const qp = new URLSearchParams();
     if (params?.date_from) qp.append('date_from', params.date_from);
     if (params?.date_to) qp.append('date_to', params.date_to);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
     if (params?.status) qp.append('status', params.status);
+    if (params?.complaint_type) qp.append('complaint_type', params.complaint_type);
+    if (params?.contract_type) qp.append('contract_type', params.contract_type);
+    if (params?.priority) qp.append('priority', params.priority);
+    if (params?.assigned_to_id) qp.append('assigned_to_id', params.assigned_to_id.toString());
     const response = await fetch(`${API_BASE_URL}/reports/summary?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch report summary');
     return response.json();
@@ -392,6 +401,26 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/reports/contracts?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch contracts report');
     return response.json();
+  }
+
+  async downloadReportCsv(entity: 'complaints' | 'tasks' | 'contracts', params?: Record<string, any>): Promise<void> {
+    const qp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'all') qp.append(k, String(v));
+      });
+    }
+    const response = await fetch(`${API_BASE_URL}/reports/${entity}/csv?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to download CSV');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${entity}_report.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   logout() {

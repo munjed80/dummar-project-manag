@@ -11,6 +11,46 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-16T20:39 — تحسين التشغيل والتقارير والاختبارات والأداء
+
+**قبل البدء:**
+- **الهدف:** تحسين الاكتمال التشغيلي وفائدة التقارير وتغطية الاختبارات وأداء الواجهة
+- **المهام المخططة:**
+  1. إضافة تصدير CSV من صفحة التقارير (نقطة API + أزرار تنزيل على الواجهة)
+  2. إضافة اختبارات API أساسية للتدفقات الحرجة (أمان + RBAC + أشكال بيانات)
+  3. تطبيق ترقيم صفحات حقيقي على نقاط الشكاوى/المهام/العقود
+  4. تحسين فائدة التقارير (فلاتر إضافية: نوع الشكوى، نوع العقد، الأولوية، المسؤول)
+  5. إضافة تقسيم الكود وتحميل كسول للمسارات الرئيسية
+- **الملفات المتأثرة:**
+  - `backend/app/api/reports.py` — إضافة نقطة CSV
+  - `backend/app/api/complaints.py` — ترقيم صفحات مع total_count
+  - `backend/app/api/tasks.py` — ترقيم صفحات مع total_count
+  - `backend/app/api/contracts.py` — ترقيم صفحات مع total_count
+  - `backend/app/schemas/report.py` — مخططات ترقيم إضافية
+  - `backend/tests/` — اختبارات API جديدة
+  - `backend/requirements.txt` — إضافة pytest + httpx
+  - `src/pages/ReportsPage.tsx` — تصدير CSV + فلاتر إضافية
+  - `src/pages/ComplaintsListPage.tsx` — ترقيم من الخادم
+  - `src/pages/TasksListPage.tsx` — ترقيم من الخادم
+  - `src/pages/ContractsListPage.tsx` — ترقيم من الخادم
+  - `src/services/api.ts` — تحديث دوال API
+  - `src/App.tsx` — تحميل كسول للصفحات
+- **المخاطر:** لا مخاطر كبيرة — تغييرات إضافية متوافقة مع الوراء
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ تصدير CSV — 3 نقاط API تعمل (complaints/tasks/contracts CSV) + أزرار تنزيل على الواجهة
+  2. ✅ اختبارات API — 26 اختبار ناجح (pytest) تغطي: أمان، RBAC، بيانات ملفات، تقارير، ترقيم، CSV
+  3. ✅ ترقيم صفحات — complaints/tasks/contracts list endpoints ترجع `{total_count, items}` + الواجهة تستخدم server-side pagination
+  4. ✅ فلاتر تقارير — نوع الشكوى، نوع العقد، الأولوية، الحالة، المنطقة، التاريخ
+  5. ✅ code splitting — React.lazy + Suspense لـ 14 صفحة — حزم منفصلة
+  6. ✅ بناء الواجهة — `npm run build` ناجح (1.41s)
+  7. ✅ بحث server-side — complaints/tasks/contracts تدعم بحث من الخادم
+- **الفجوات المتبقية:** لا فجوات — جميع المهام مكتملة ومتحقق منها
+
+---
+
 ### الدفعة: 2026-04-16T20:09 — تعزيز الأمان و RBAC على الواجهة الأمامية
 
 **قبل البدء:**
