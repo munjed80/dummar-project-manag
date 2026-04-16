@@ -5,6 +5,7 @@ Uses Python's built-in smtplib and email.mime modules (no external deps).
 Controlled by SMTP_* environment variables via app.core.config.settings.
 All public functions are safe to call unconditionally — they never raise.
 """
+import html
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -124,6 +125,13 @@ def send_email(to_email: str, subject: str, body_html: str) -> None:
         return
 
     try:
+        if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+            logger.error(
+                "SMTP credentials are not fully configured — "
+                "check SMTP_HOST, SMTP_USER, and SMTP_PASSWORD"
+            )
+            return
+
         msg = MIMEMultipart("alternative")
         msg["From"] = settings.SMTP_FROM_EMAIL
         msg["To"] = to_email
@@ -161,15 +169,19 @@ def send_complaint_status_email(
         old_label = COMPLAINT_STATUS_LABELS.get(old_status, old_status)
         new_label = COMPLAINT_STATUS_LABELS.get(new_status, new_status)
 
+        safe_tracking = html.escape(tracking_number)
+        safe_old = html.escape(old_label)
+        safe_new = html.escape(new_label)
+
         content = (
             "<p>تم تحديث حالة الشكوى الخاصة بك.</p>"
             "<p>"
             f'<span class="label">رقم التتبع:</span> '
-            f'<span class="value">{tracking_number}</span><br>'
+            f'<span class="value">{safe_tracking}</span><br>'
             f'<span class="label">الحالة السابقة:</span> '
-            f'<span class="value">{old_label}</span><br>'
+            f'<span class="value">{safe_old}</span><br>'
             f'<span class="label">الحالة الجديدة:</span> '
-            f'<span class="value">{new_label}</span>'
+            f'<span class="value">{safe_new}</span>'
             "</p>"
         )
 
@@ -191,13 +203,16 @@ def send_task_assignment_email(
 ) -> None:
     """Notify a user that a task has been assigned to them."""
     try:
+        safe_title = html.escape(task_title)
+        safe_name = html.escape(assignee_name)
+
         content = (
             "<p>تم تعيين مهمة جديدة لك.</p>"
             "<p>"
             f'<span class="label">عنوان المهمة:</span> '
-            f'<span class="value">{task_title}</span><br>'
+            f'<span class="value">{safe_title}</span><br>'
             f'<span class="label">المكلّف:</span> '
-            f'<span class="value">{assignee_name}</span>'
+            f'<span class="value">{safe_name}</span>'
             "</p>"
         )
 
@@ -221,13 +236,16 @@ def send_contract_status_email(
     try:
         action_label = CONTRACT_ACTION_LABELS.get(action, action)
 
+        safe_contract = html.escape(contract_number)
+        safe_action = html.escape(action_label)
+
         content = (
             "<p>تم تحديث حالة العقد.</p>"
             "<p>"
             f'<span class="label">رقم العقد:</span> '
-            f'<span class="value">{contract_number}</span><br>'
+            f'<span class="value">{safe_contract}</span><br>'
             f'<span class="label">الإجراء:</span> '
-            f'<span class="value">{action_label}</span>'
+            f'<span class="value">{safe_action}</span>'
             "</p>"
         )
 
