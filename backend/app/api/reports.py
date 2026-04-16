@@ -63,7 +63,7 @@ def get_reports_summary(
     )
     overdue_tasks = (
         db.query(func.count(Task.id))
-        .filter(Task.due_date < today, Task.status != TaskStatus.COMPLETED, Task.status != TaskStatus.CANCELLED)
+        .filter(Task.due_date < today, Task.status.notin_([TaskStatus.COMPLETED, TaskStatus.CANCELLED]))
         .scalar()
         or 0
     )

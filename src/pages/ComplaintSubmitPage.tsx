@@ -25,6 +25,7 @@ export default function ComplaintSubmitPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     setImageFiles((prev) => [...prev, ...files]);
+    if (e.target) e.target.value = '';
   };
 
   const removeFile = (index: number) => {

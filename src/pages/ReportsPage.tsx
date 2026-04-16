@@ -108,7 +108,7 @@ export default function ReportsPage() {
           <StatCard title="إجمالي الشكاوى" value={complaints.total} icon={ClipboardText} color="bg-blue-100 text-blue-700" />
           <StatCard title="نسبة الحل" value={`${complaints.resolution_rate}%`} icon={CheckCircle} color="bg-green-100 text-green-700" />
           <StatCard title="المهام المتأخرة" value={tasks.overdue} icon={Warning} color="bg-red-100 text-red-700" />
-          <StatCard title="قيمة العقود الكلية" value={Number(contracts.total_value).toLocaleString('en-US')} icon={FileText} color="bg-purple-100 text-purple-700" />
+          <StatCard title="قيمة العقود الكلية (ل.س)" value={Number(contracts.total_value).toLocaleString('en-US')} icon={FileText} color="bg-purple-100 text-purple-700" />
         </div>
 
         {/* Complaints breakdown */}
