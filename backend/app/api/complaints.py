@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime
 import random
 import string
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus
 from app.models.user import User, UserRole
@@ -20,6 +22,7 @@ from app.services.audit import write_audit_log
 from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Roles allowed to manage complaints
 _complaint_managers = require_role(
@@ -39,7 +42,8 @@ def generate_tracking_number(db: Session) -> str:
 
 
 @router.post("/", response_model=ComplaintResponse)
-def create_complaint(complaint: ComplaintCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def create_complaint(complaint: ComplaintCreate, request: Request, db: Session = Depends(get_db)):
     tracking_number = generate_tracking_number(db)
     
     db_complaint = Complaint(
@@ -72,7 +76,8 @@ def create_complaint(complaint: ComplaintCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/track", response_model=ComplaintResponse)
-def track_complaint(track_data: ComplaintTrackRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def track_complaint(track_data: ComplaintTrackRequest, request: Request, db: Session = Depends(get_db)):
     complaint = db.query(Complaint).filter(
         Complaint.tracking_number == track_data.tracking_number,
         Complaint.phone == track_data.phone

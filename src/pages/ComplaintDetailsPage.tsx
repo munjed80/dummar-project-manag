@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { FileUpload } from '@/components/FileUpload';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ const typeLabels: Record<string, string> = {
 
 export default function ComplaintDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const { canManageComplaints } = useAuth();
   const [complaint, setComplaint] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
@@ -224,7 +226,8 @@ export default function ComplaintDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* Status Update */}
+        {/* Status Update – only for authorized roles */}
+        {canManageComplaints && (
         <Card>
           <CardHeader>
             <CardTitle>تحديث الشكوى</CardTitle>
@@ -274,6 +277,7 @@ export default function ComplaintDetailsPage() {
             </Button>
           </CardContent>
         </Card>
+        )}
 
         {/* Activity History */}
         <Card>

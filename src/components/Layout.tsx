@@ -2,30 +2,47 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
+import type { UserRole } from '@/hooks/useAuth';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
+interface NavItem {
+  path: string;
+  icon: React.ElementType;
+  label: string;
+  /** If set, only these roles see this item. Empty = everyone. */
+  roles?: UserRole[];
+}
+
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = useAuth();
 
   const handleLogout = () => {
     apiService.logout();
+    localStorage.removeItem('cached_user');
     navigate('/login');
   };
 
-  const navItems = [
+  const allNavItems: NavItem[] = [
     { path: '/dashboard', icon: House, label: 'لوحة التحكم' },
     { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى' },
     { path: '/tasks', icon: ListChecks, label: 'المهام' },
     { path: '/contracts', icon: FileText, label: 'العقود' },
     { path: '/locations', icon: MapPin, label: 'المواقع' },
-    { path: '/users', icon: UsersThree, label: 'المستخدمون' },
+    { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
     { path: '/reports', icon: ChartBar, label: 'التقارير' },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },
   ];
+
+  const navItems = allNavItems.filter((item) => {
+    if (!item.roles || item.roles.length === 0) return true;
+    return role ? item.roles.includes(role) : false;
+  });
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">

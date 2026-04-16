@@ -44,6 +44,21 @@ class ApiService {
     if (!response.ok) throw new Error('Login failed');
     const data: AuthToken = await response.json();
     localStorage.setItem('access_token', data.access_token);
+    // Pre-fetch and cache user info for RBAC
+    try {
+      const userResp = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.access_token}`,
+        },
+      });
+      if (userResp.ok) {
+        const user = await userResp.json();
+        localStorage.setItem('cached_user', JSON.stringify(user));
+      }
+    } catch {
+      // Non-critical – useAuth will fetch it anyway
+    }
     return data;
   }
 
@@ -381,6 +396,7 @@ class ApiService {
 
   logout() {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('cached_user');
   }
 
   isAuthenticated(): boolean {
