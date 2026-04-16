@@ -185,8 +185,8 @@ def send_complaint_status_email(
             "</p>"
         )
 
-        html = _render_html("تحديث حالة الشكوى", content)
-        send_email(to_email, "تحديث حالة الشكوى", html)
+        html_body = _render_html("تحديث حالة الشكوى", content)
+        send_email(to_email, "تحديث حالة الشكوى", html_body)
 
     except Exception:
         logger.exception(
@@ -216,8 +216,8 @@ def send_task_assignment_email(
             "</p>"
         )
 
-        html = _render_html("تعيين مهمة جديدة", content)
-        send_email(to_email, "تعيين مهمة جديدة", html)
+        html_body = _render_html("تعيين مهمة جديدة", content)
+        send_email(to_email, "تعيين مهمة جديدة", html_body)
 
     except Exception:
         logger.exception(
@@ -249,8 +249,8 @@ def send_contract_status_email(
             "</p>"
         )
 
-        html = _render_html("تحديث حالة العقد", content)
-        send_email(to_email, "تحديث حالة العقد", html)
+        html_body = _render_html("تحديث حالة العقد", content)
+        send_email(to_email, "تحديث حالة العقد", html_body)
 
     except Exception:
         logger.exception(
