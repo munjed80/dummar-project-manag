@@ -4,6 +4,7 @@ import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -11,7 +12,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MagnifyingGlass, Spinner } from '@phosphor-icons/react';
+import { MagnifyingGlass, Spinner, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 
 const statusLabels: Record<string, string> = {
@@ -38,28 +39,37 @@ const sourceLabels: Record<string, string> = {
   complaint: 'شكوى', internal: 'داخلي', contract: 'عقد',
 };
 
+const PAGE_SIZE = 15;
+
 export default function TasksListPage() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    apiService.getTasks()
+    setLoading(true);
+    setError('');
+    const params: any = {};
+    if (statusFilter !== 'all') params.status = statusFilter;
+    apiService.getTasks(params)
       .then(setTasks)
-      .catch(console.error)
+      .catch(() => setError('فشل تحميل المهام'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [statusFilter]);
 
   const filtered = tasks.filter((t) => {
-    const matchesSearch = !search ||
-      t.title?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+    const matchesSearch = !search || t.title?.toLowerCase().includes(search.toLowerCase());
     const matchesPriority = priorityFilter === 'all' || t.priority === priorityFilter;
-    return matchesSearch && matchesStatus && matchesPriority;
+    return matchesSearch && matchesPriority;
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <Layout>
@@ -74,11 +84,11 @@ export default function TasksListPage() {
               <Input
                 placeholder="بحث بالعنوان..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 className="pr-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الحالات</SelectItem>
@@ -87,7 +97,7 @@ export default function TasksListPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setPage(0); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="الأولوية" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الأولويات</SelectItem>
@@ -98,55 +108,73 @@ export default function TasksListPage() {
             </Select>
           </div>
 
+          {error && (
+            <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
+              <Warning size={32} />
+              <p>{error}</p>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-12">
               <Spinner className="animate-spin" size={32} />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">العنوان</TableHead>
-                  <TableHead className="text-right">المصدر</TableHead>
-                  <TableHead className="text-right">الحالة</TableHead>
-                  <TableHead className="text-right">الأولوية</TableHead>
-                  <TableHead className="text-right">تاريخ الاستحقاق</TableHead>
-                  <TableHead className="text-right">التاريخ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
+            <>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      لا توجد مهام
-                    </TableCell>
+                    <TableHead className="text-right">العنوان</TableHead>
+                    <TableHead className="text-right">المصدر</TableHead>
+                    <TableHead className="text-right">الحالة</TableHead>
+                    <TableHead className="text-right">الأولوية</TableHead>
+                    <TableHead className="text-right">تاريخ الاستحقاق</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
                   </TableRow>
-                ) : (
-                  filtered.map((t) => (
-                    <TableRow
-                      key={t.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/tasks/${t.id}`)}
-                    >
-                      <TableCell>{t.title}</TableCell>
-                      <TableCell>{sourceLabels[t.source_type] || t.source_type || '-'}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[t.status] || 'bg-gray-100 text-gray-800'}>
-                          {statusLabels[t.status] || t.status}
-                        </Badge>
+                </TableHeader>
+                <TableBody>
+                  {paginated.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        لا توجد مهام
                       </TableCell>
-                      <TableCell>
-                        <Badge className={priorityColors[t.priority] || 'bg-gray-100 text-gray-800'}>
-                          {priorityLabels[t.priority] || t.priority}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{t.due_date ? format(new Date(t.due_date), 'yyyy/MM/dd') : '-'}</TableCell>
-                      <TableCell>{t.created_at ? format(new Date(t.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paginated.map((t) => (
+                      <TableRow
+                        key={t.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/tasks/${t.id}`)}
+                      >
+                        <TableCell>{t.title}</TableCell>
+                        <TableCell>{sourceLabels[t.source_type] || t.source_type || '-'}</TableCell>
+                        <TableCell>
+                          <Badge className={statusColors[t.status] || 'bg-gray-100 text-gray-800'}>
+                            {statusLabels[t.status] || t.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={priorityColors[t.priority] || 'bg-gray-100 text-gray-800'}>
+                            {priorityLabels[t.priority] || t.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{t.due_date ? format(new Date(t.due_date), 'yyyy/MM/dd') : '-'}</TableCell>
+                        <TableCell>{t.created_at ? format(new Date(t.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4">
+                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>
+                  <span className="text-sm text-muted-foreground">
+                    صفحة {page + 1} من {totalPages} ({filtered.length} مهمة)
+                  </span>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>التالي</Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

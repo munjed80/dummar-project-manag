@@ -4,6 +4,7 @@ import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -11,7 +12,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MagnifyingGlass, Spinner } from '@phosphor-icons/react';
+import { MagnifyingGlass, Spinner, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 
 const statusLabels: Record<string, string> = {
@@ -39,35 +40,44 @@ const typeLabels: Record<string, string> = {
   water: 'المياه', roads: 'الطرق', lighting: 'الإنارة', other: 'أخرى',
 };
 
+const PAGE_SIZE = 15;
+
 export default function ComplaintsListPage() {
   const navigate = useNavigate();
   const [complaints, setComplaints] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [areaFilter, setAreaFilter] = useState('all');
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    Promise.all([apiService.getComplaints(), apiService.getAreas()])
+    setLoading(true);
+    setError('');
+    const params: any = {};
+    if (statusFilter !== 'all') params.status = statusFilter;
+    if (areaFilter !== 'all') params.area_id = Number(areaFilter);
+    Promise.all([apiService.getComplaints(params), apiService.getAreas()])
       .then(([complaintsData, areasData]) => {
         setComplaints(complaintsData);
         setAreas(areasData);
       })
-      .catch(console.error)
+      .catch(() => setError('فشل تحميل الشكاوى'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [statusFilter, areaFilter]);
 
-  const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name]));
+  const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name_ar || a.name]));
 
   const filtered = complaints.filter((c) => {
-    const matchesSearch = !search ||
-      c.tracking_number?.toLowerCase().includes(search.toLowerCase()) ||
+    if (!search) return true;
+    return c.tracking_number?.toLowerCase().includes(search.toLowerCase()) ||
       c.full_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-    const matchesArea = areaFilter === 'all' || String(c.area_id) === areaFilter;
-    return matchesSearch && matchesStatus && matchesArea;
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <Layout>
@@ -82,11 +92,11 @@ export default function ComplaintsListPage() {
               <Input
                 placeholder="بحث برقم التتبع أو الاسم..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 className="pr-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الحالات</SelectItem>
@@ -95,68 +105,86 @@ export default function ComplaintsListPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={areaFilter} onValueChange={setAreaFilter}>
+            <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPage(0); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="المنطقة" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع المناطق</SelectItem>
                 {areas.map((a: any) => (
-                  <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name_ar || a.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {error && (
+            <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
+              <Warning size={32} />
+              <p>{error}</p>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-12">
               <Spinner className="animate-spin" size={32} />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">رقم التتبع</TableHead>
-                  <TableHead className="text-right">مقدم الشكوى</TableHead>
-                  <TableHead className="text-right">النوع</TableHead>
-                  <TableHead className="text-right">الحالة</TableHead>
-                  <TableHead className="text-right">الأولوية</TableHead>
-                  <TableHead className="text-right">المنطقة</TableHead>
-                  <TableHead className="text-right">التاريخ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
+            <>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      لا توجد شكاوى
-                    </TableCell>
+                    <TableHead className="text-right">رقم التتبع</TableHead>
+                    <TableHead className="text-right">مقدم الشكوى</TableHead>
+                    <TableHead className="text-right">النوع</TableHead>
+                    <TableHead className="text-right">الحالة</TableHead>
+                    <TableHead className="text-right">الأولوية</TableHead>
+                    <TableHead className="text-right">المنطقة</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
                   </TableRow>
-                ) : (
-                  filtered.map((c) => (
-                    <TableRow
-                      key={c.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/complaints/${c.id}`)}
-                    >
-                      <TableCell className="font-mono">{c.tracking_number}</TableCell>
-                      <TableCell>{c.full_name}</TableCell>
-                      <TableCell>{typeLabels[c.complaint_type] || c.complaint_type}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
-                          {statusLabels[c.status] || c.status}
-                        </Badge>
+                </TableHeader>
+                <TableBody>
+                  {paginated.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        لا توجد شكاوى
                       </TableCell>
-                      <TableCell>
-                        <Badge className={priorityColors[c.priority] || 'bg-gray-100 text-gray-800'}>
-                          {priorityLabels[c.priority] || c.priority}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
-                      <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paginated.map((c) => (
+                      <TableRow
+                        key={c.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/complaints/${c.id}`)}
+                      >
+                        <TableCell className="font-mono">{c.tracking_number}</TableCell>
+                        <TableCell>{c.full_name}</TableCell>
+                        <TableCell>{typeLabels[c.complaint_type] || c.complaint_type}</TableCell>
+                        <TableCell>
+                          <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
+                            {statusLabels[c.status] || c.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={priorityColors[c.priority] || 'bg-gray-100 text-gray-800'}>
+                            {priorityLabels[c.priority] || c.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
+                        <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4">
+                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>
+                  <span className="text-sm text-muted-foreground">
+                    صفحة {page + 1} من {totalPages} ({filtered.length} شكوى)
+                  </span>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>التالي</Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
