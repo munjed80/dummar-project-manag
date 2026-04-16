@@ -4,7 +4,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
-from app.models.task import Task, TaskActivity, TaskStatus
+from app.models.task import Task, TaskActivity, TaskStatus, TaskPriority
 from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
 from app.schemas.report import PaginatedTasks
@@ -52,6 +52,7 @@ def list_tasks(
     skip: int = 0,
     limit: int = 100,
     status_filter: Optional[TaskStatus] = None,
+    priority_filter: Optional[TaskPriority] = None,
     area_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
     search: Optional[str] = None,
@@ -62,6 +63,9 @@ def list_tasks(
     
     if status_filter:
         query = query.filter(Task.status == status_filter)
+    
+    if priority_filter:
+        query = query.filter(Task.priority == priority_filter)
     
     if area_id:
         query = query.filter(Task.area_id == area_id)

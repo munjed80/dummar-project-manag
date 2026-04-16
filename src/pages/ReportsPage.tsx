@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Spinner, ChartBar, MagnifyingGlass, DownloadSimple } from '@phosphor-icons/react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const complaintStatusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -123,7 +124,7 @@ export default function ReportsPage() {
       if (detailSearch) params.search = detailSearch;
       await apiService.downloadReportCsv(entity, params);
     } catch {
-      // Silently fail — user will notice no download
+      toast.error('فشل تنزيل ملف CSV. يرجى المحاولة مرة أخرى.');
     } finally {
       setCsvLoading(false);
     }

@@ -126,11 +126,12 @@ class ApiService {
   }
 
   // ── Tasks ──
-  async getTasks(params?: { status?: string; area_id?: number; search?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+  async getTasks(params?: { status?: string; area_id?: number; search?: string; priority?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
     const qp = new URLSearchParams();
     if (params?.status) qp.append('status_filter', params.status);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
     if (params?.search) qp.append('search', params.search);
+    if (params?.priority) qp.append('priority_filter', params.priority);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetch(`${API_BASE_URL}/tasks?${qp}`, { headers: this.getAuthHeaders() });

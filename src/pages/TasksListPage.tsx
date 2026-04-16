@@ -57,14 +57,11 @@ export default function TasksListPage() {
     setError('');
     const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
+    if (priorityFilter !== 'all') params.priority = priorityFilter;
     if (search) params.search = search;
     apiService.getTasks(params)
       .then((data) => {
-        let items = data.items;
-        if (priorityFilter !== 'all') {
-          items = items.filter((t: any) => t.priority === priorityFilter);
-        }
-        setTasks(items);
+        setTasks(data.items);
         setTotalCount(data.total_count);
       })
       .catch(() => setError('فشل تحميل المهام'))
