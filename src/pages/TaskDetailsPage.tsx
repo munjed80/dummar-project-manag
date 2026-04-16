@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { FileUpload } from '@/components/FileUpload';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,7 @@ const sourceLabels: Record<string, string> = {
 
 export default function TaskDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const { canManageTasks } = useAuth();
   const [task, setTask] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
@@ -276,7 +278,8 @@ export default function TaskDetailsPage() {
           </Card>
         </div>
 
-        {/* Update Status */}
+        {/* Update Status – only for authorized roles */}
+        {canManageTasks && (
         <Card>
           <CardHeader>
             <CardTitle>تحديث المهمة</CardTitle>
@@ -326,6 +329,7 @@ export default function TaskDetailsPage() {
             </Button>
           </CardContent>
         </Card>
+        )}
 
         {/* Activity History */}
         <Card>

@@ -1,9 +1,21 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports
 from app.core.config import settings
+
+logger = logging.getLogger("uvicorn.error")
+
+# ---------------------------------------------------------------------------
+# Rate limiter (shared instance used by endpoint modules)
+# ---------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
 
 app = FastAPI(
     title="Dummar Project Management API",
@@ -11,9 +23,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ---------------------------------------------------------------------------
+# CORS – origins read from CORS_ORIGINS env var (comma-separated)
+# ---------------------------------------------------------------------------
+cors_origins = settings.get_cors_origins()
+logger.info("CORS allowed origins: %s", cors_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,3 +67,21 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+# ---------------------------------------------------------------------------
+# Startup: warn about insecure default passwords
+# ---------------------------------------------------------------------------
+@app.on_event("startup")
+def _startup_security_checks():
+    try:
+        from app.core.database import SessionLocal
+        from app.scripts.seed_data import check_default_passwords
+        db = SessionLocal()
+        try:
+            check_default_passwords(db)
+        finally:
+            db.close()
+    except Exception:
+        # Don't block startup if DB is not ready yet (e.g. during CI)
+        logger.debug("Skipped startup password check (DB may not be available)")

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { FileUpload } from '@/components/FileUpload';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ function formatValue(value: number | string | null | undefined): string {
 
 export default function ContractDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const { canManageContracts } = useAuth();
   const [contract, setContract] = useState<any>(null);
   const [approvals, setApprovals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,10 +155,12 @@ export default function ContractDetailsPage() {
                 </Badge>
               </div>
               <div className="flex gap-2">
+                {canManageContracts && (
                 <Button onClick={handleGeneratePdf} disabled={generatingPdf} variant="outline">
                   {generatingPdf ? <Spinner className="animate-spin ml-2" size={16} /> : <FilePdf className="ml-2" size={18} />}
                   إنشاء PDF
                 </Button>
+                )}
                 {contract.pdf_file && (
                   <Button variant="outline" asChild>
                     <a href={`${API_BASE_URL}${contract.pdf_file}`} target="_blank" rel="noopener noreferrer">
@@ -165,7 +169,7 @@ export default function ContractDetailsPage() {
                     </a>
                   </Button>
                 )}
-                {contract.status === 'draft' && (
+                {canManageContracts && contract.status === 'draft' && (
                   <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
                     <Trash className="ml-2" size={16} />
                     حذف

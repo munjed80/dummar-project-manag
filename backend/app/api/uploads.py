@@ -1,11 +1,15 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.core.config import settings
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
+
+limiter = Limiter(key_func=get_remote_address)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
 ALLOWED_CATEGORIES = {"general", "contracts", "complaints", "tasks", "profiles"}
@@ -16,7 +20,9 @@ _PUBLIC_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf"}
 
 
 @router.post("/public")
+@limiter.limit("10/minute")
 async def upload_public_file(
+    request: Request,
     file: UploadFile = File(...),
 ):
     """Public upload endpoint for complaint attachments (no auth required)."""

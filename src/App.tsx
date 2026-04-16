@@ -15,12 +15,30 @@ import UsersPage from '@/pages/UsersPage';
 import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
+import type { UserRole } from '@/hooks/useAuth';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!apiService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
+}
+
+function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; roles: UserRole[] }) {
+  const { role, loading } = useAuth();
+
+  if (!apiService.isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (loading) return null;
+
+  if (role && roles.includes(role)) {
+    return <>{children}</>;
+  }
+
+  return <Navigate to="/dashboard" replace />;
 }
 
 function App() {
@@ -41,7 +59,7 @@ function App() {
         <Route path="/contracts" element={<ProtectedRoute><ContractsListPage /></ProtectedRoute>} />
         <Route path="/contracts/:id" element={<ProtectedRoute><ContractDetailsPage /></ProtectedRoute>} />
         <Route path="/locations" element={<ProtectedRoute><LocationsListPage /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+        <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       </Routes>

@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from sqlalchemy.orm import Session
@@ -7,12 +8,17 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 
 from app.core.database import SessionLocal
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
 from app.models.user import User, UserRole
 from app.models.location import Area, Building
 from app.models.complaint import Complaint, ComplaintType, ComplaintStatus, ComplaintPriority
 from app.models.task import Task, TaskStatus, TaskSourceType, TaskPriority
 from app.models.contract import Contract, ContractType, ContractStatus
+
+logger = logging.getLogger(__name__)
+
+# Default insecure passwords used in seed data
+_SEED_DEFAULT_PASSWORD = "password123"
 
 
 def seed_users(db: Session):
@@ -40,6 +46,23 @@ def seed_users(db: Session):
     
     db.commit()
     print(f"✓ Created {len(users_data)} users")
+    print("⚠️  WARNING: All seed accounts use the default insecure password 'password123'.")
+    print("⚠️  Change all passwords before deploying to production!")
+
+
+def check_default_passwords(db: Session):
+    """Check if any accounts still use the insecure seed password."""
+    users = db.query(User).all()
+    insecure = [u.username for u in users if verify_password(_SEED_DEFAULT_PASSWORD, u.hashed_password)]
+    if insecure:
+        msg = (
+            f"⚠️  SECURITY WARNING: {len(insecure)} account(s) still use the default "
+            f"password '{_SEED_DEFAULT_PASSWORD}': {', '.join(insecure)}. "
+            "Change these passwords before deploying to production!"
+        )
+        print(msg)
+        logger.warning(msg)
+    return insecure
 
 
 def seed_areas(db: Session):
@@ -382,6 +405,9 @@ def main():
         seed_complaints(db)
         seed_tasks(db)
         seed_contracts(db)
+
+        # Check for insecure default passwords
+        check_default_passwords(db)
         
         print("\n✅ Seed data completed successfully!")
     except Exception as e:
