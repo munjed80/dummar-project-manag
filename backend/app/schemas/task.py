@@ -29,6 +29,8 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
     notes: Optional[str] = None
+    before_photos: Optional[str] = None
+    after_photos: Optional[str] = None
 
 
 class TaskResponse(TaskBase):

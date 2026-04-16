@@ -13,9 +13,9 @@ export const ErrorFallback = ({ error, resetErrorBoundary }) => {
       <div className="w-full max-w-md">
         <Alert variant="destructive" className="mb-6">
           <AlertTriangleIcon />
-          <AlertTitle>This spark has encountered a runtime error</AlertTitle>
+          <AlertTitle>حدث خطأ أثناء التشغيل</AlertTitle>
           <AlertDescription>
-            Something unexpected happened while running the application. The error details are shown below. Contact the spark author and let them know about this issue.
+            حدث خطأ غير متوقع أثناء تشغيل التطبيق. تفاصيل الخطأ موضحة أدناه. يرجى التواصل مع فريق الدعم الفني.
           </AlertDescription>
         </Alert>
         
@@ -32,7 +32,7 @@ export const ErrorFallback = ({ error, resetErrorBoundary }) => {
           variant="outline"
         >
           <RefreshCwIcon />
-          Try Again
+          إعادة المحاولة
         </Button>
       </div>
     </div>

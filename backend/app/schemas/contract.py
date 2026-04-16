@@ -29,6 +29,7 @@ class ContractUpdate(BaseModel):
     end_date: Optional[date] = None
     status: Optional[ContractStatus] = None
     notes: Optional[str] = None
+    attachments: Optional[str] = None
 
 
 class ContractResponse(ContractBase):

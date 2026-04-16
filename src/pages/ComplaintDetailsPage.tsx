@@ -19,6 +19,14 @@ import { Spinner, ClockCounterClockwise, MapPin, Image, Warning } from '@phospho
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+function parseJsonArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value) {
+    try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch { /* not JSON */ }
+  }
+  return [];
+}
+
 const statusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
   in_progress: 'قيد التنفيذ', resolved: 'تم الحل', rejected: 'مرفوضة',
@@ -106,7 +114,7 @@ export default function ComplaintDetailsPage() {
   const handleImagesUpdate = async (images: string[]) => {
     if (!id) return;
     try {
-      await apiService.updateComplaint(Number(id), { images });
+      await apiService.updateComplaint(Number(id), { images: JSON.stringify(images) });
       toast.success('تم تحديث الصور');
       fetchData();
     } catch {
@@ -217,7 +225,7 @@ export default function ComplaintDetailsPage() {
             <FileUpload
               category="complaints"
               accept="images"
-              existingFiles={complaint.images || []}
+              existingFiles={parseJsonArray(complaint.images)}
               onUploadComplete={handleImagesUpdate}
               label="صور الشكوى"
             />

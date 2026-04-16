@@ -19,6 +19,14 @@ import { Spinner, ClockCounterClockwise, Camera, Warning, MapPin, LinkSimple } f
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+function parseJsonArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value) {
+    try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch { /* not JSON */ }
+  }
+  return [];
+}
+
 const statusLabels: Record<string, string> = {
   pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
   completed: 'مكتملة', cancelled: 'ملغاة',
@@ -105,7 +113,7 @@ export default function TaskDetailsPage() {
   const handleBeforePhotos = async (photos: string[]) => {
     if (!id) return;
     try {
-      await apiService.updateTask(Number(id), { before_photos: photos });
+      await apiService.updateTask(Number(id), { before_photos: JSON.stringify(photos) });
       toast.success('تم تحديث صور قبل');
       fetchData();
     } catch {
@@ -116,7 +124,7 @@ export default function TaskDetailsPage() {
   const handleAfterPhotos = async (photos: string[]) => {
     if (!id) return;
     try {
-      await apiService.updateTask(Number(id), { after_photos: photos });
+      await apiService.updateTask(Number(id), { after_photos: JSON.stringify(photos) });
       toast.success('تم تحديث صور بعد');
       fetchData();
     } catch {
@@ -253,7 +261,7 @@ export default function TaskDetailsPage() {
               <FileUpload
                 category="tasks"
                 accept="images"
-                existingFiles={task.before_photos || []}
+                existingFiles={parseJsonArray(task.before_photos)}
                 onUploadComplete={handleBeforePhotos}
               />
             </CardContent>
@@ -269,7 +277,7 @@ export default function TaskDetailsPage() {
               <FileUpload
                 category="tasks"
                 accept="images"
-                existingFiles={task.after_photos || []}
+                existingFiles={parseJsonArray(task.after_photos)}
                 onUploadComplete={handleAfterPhotos}
               />
             </CardContent>

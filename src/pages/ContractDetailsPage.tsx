@@ -15,6 +15,14 @@ import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash } fr
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+function parseJsonArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value) {
+    try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch { /* not JSON */ }
+  }
+  return [];
+}
+
 const API_BASE_URL = 'http://localhost:8000';
 
 const statusLabels: Record<string, string> = {
@@ -89,7 +97,7 @@ export default function ContractDetailsPage() {
   const handleAttachmentsUpdate = async (attachments: string[]) => {
     if (!id) return;
     try {
-      await apiService.updateContract(Number(id), { attachments });
+      await apiService.updateContract(Number(id), { attachments: JSON.stringify(attachments) });
       toast.success('تم تحديث المرفقات');
       fetchData();
     } catch {
@@ -238,7 +246,7 @@ export default function ContractDetailsPage() {
             <FileUpload
               category="contracts"
               accept="all"
-              existingFiles={contract.attachments || []}
+              existingFiles={parseJsonArray(contract.attachments)}
               onUploadComplete={handleAttachmentsUpdate}
               label="ملفات العقد"
             />

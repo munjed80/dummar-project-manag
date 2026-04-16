@@ -24,6 +24,7 @@ class ComplaintUpdate(BaseModel):
     priority: Optional[ComplaintPriority] = None
     assigned_to_id: Optional[int] = None
     notes: Optional[str] = None
+    images: Optional[str] = None
 
 
 class ComplaintResponse(ComplaintBase):
