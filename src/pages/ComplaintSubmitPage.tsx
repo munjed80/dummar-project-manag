@@ -36,16 +36,14 @@ export default function ComplaintSubmitPage() {
     e.preventDefault();
 
     try {
-      let imagePaths = '';
+      let imagePaths: string[] = [];
       if (imageFiles.length > 0) {
         setUploading(true);
-        const paths: string[] = [];
         for (const file of imageFiles) {
-          const res = await apiService.uploadFile(file, 'complaints');
-          paths.push(res.path);
+          const res = await apiService.uploadFilePublic(file);
+          imagePaths.push(res.path);
         }
-        imagePaths = paths.join(',');
-        setUploadedPaths(paths);
+        setUploadedPaths(imagePaths);
         setUploading(false);
       }
 
@@ -55,7 +53,7 @@ export default function ComplaintSubmitPage() {
         complaint_type: complaintType,
         description,
         location_text: locationText,
-        ...(imagePaths ? { images: imagePaths } : {}),
+        ...(imagePaths.length > 0 ? { images: imagePaths } : {}),
       });
 
       setTrackingNumber(result.tracking_number);

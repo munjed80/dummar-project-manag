@@ -7,7 +7,7 @@ import random
 import string
 from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.complaint import (
     ComplaintCreate,
     ComplaintUpdate,
@@ -15,10 +15,19 @@ from app.schemas.complaint import (
     ComplaintTrackRequest,
     ComplaintActivityResponse,
 )
-from app.api.deps import get_current_user, get_current_complaints_officer
+from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
+from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
+
+# Roles allowed to manage complaints
+_complaint_managers = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.COMPLAINTS_OFFICER,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.AREA_SUPERVISOR,
+)
 
 
 def generate_tracking_number(db: Session) -> str:
@@ -43,7 +52,7 @@ def create_complaint(complaint: ComplaintCreate, db: Session = Depends(get_db)):
         area_id=complaint.area_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
-        images=complaint.images,
+        images=serialize_file_list(complaint.images),
         status=ComplaintStatus.NEW,
     )
     
@@ -115,7 +124,7 @@ def get_complaint(
 def update_complaint(
     complaint_id: int,
     complaint_update: ComplaintUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_complaint_managers),
     db: Session = Depends(get_db)
 ):
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
@@ -125,6 +134,11 @@ def update_complaint(
     old_status = complaint.status
     
     update_data = complaint_update.model_dump(exclude_unset=True)
+
+    # Serialize file list fields to JSON for DB storage
+    if "images" in update_data and update_data["images"] is not None:
+        update_data["images"] = serialize_file_list(update_data["images"])
+
     for field, value in update_data.items():
         setattr(complaint, field, value)
     

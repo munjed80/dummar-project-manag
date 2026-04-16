@@ -320,6 +320,17 @@ class ApiService {
     return response.json();
   }
 
+  async uploadFilePublic(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/uploads/public`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to upload file');
+    return response.json();
+  }
+
   // ── Reports ──
   async getReportSummary(params?: { date_from?: string; date_to?: string; area_id?: number; status?: string }): Promise<any> {
     const qp = new URLSearchParams();

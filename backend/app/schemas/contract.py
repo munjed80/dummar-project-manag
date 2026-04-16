@@ -1,8 +1,9 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, field_validator
+from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal
 from app.models.contract import ContractType, ContractStatus
+from app.schemas.file_utils import parse_file_list
 
 
 class ContractBase(BaseModel):
@@ -29,13 +30,14 @@ class ContractUpdate(BaseModel):
     end_date: Optional[date] = None
     status: Optional[ContractStatus] = None
     notes: Optional[str] = None
+    attachments: Optional[List[str]] = None
 
 
 class ContractResponse(ContractBase):
     id: int
     status: ContractStatus
     pdf_file: Optional[str]
-    attachments: Optional[str]
+    attachments: Optional[List[str]] = None
     notes: Optional[str]
     qr_code: Optional[str]
     created_by_id: int
@@ -45,7 +47,12 @@ class ContractResponse(ContractBase):
     updated_at: Optional[datetime]
     reviewed_at: Optional[datetime]
     approved_at: Optional[datetime]
-    
+
+    @field_validator("attachments", mode="before")
+    @classmethod
+    def parse_attachments(cls, v: object) -> Optional[List[str]]:
+        return parse_file_list(v)
+
     class Config:
         from_attributes = True
 

@@ -106,7 +106,7 @@ export default function ComplaintDetailsPage() {
   const handleImagesUpdate = async (images: string[]) => {
     if (!id) return;
     try {
-      await apiService.updateComplaint(Number(id), { images });
+      await apiService.updateComplaint(Number(id), { images: images });
       toast.success('تم تحديث الصور');
       fetchData();
     } catch {

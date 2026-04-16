@@ -4,18 +4,27 @@ from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
 from app.models.task import Task, TaskActivity, TaskStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
+from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+# Roles allowed to manage tasks
+_task_managers = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.AREA_SUPERVISOR,
+    UserRole.COMPLAINTS_OFFICER,
+)
 
 
 @router.post("/", response_model=TaskResponse)
 def create_task(
     task: TaskCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
     db_task = Task(**task.model_dump())
@@ -77,7 +86,7 @@ def get_task(
 def update_task(
     task_id: int,
     task_update: TaskUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -87,6 +96,12 @@ def update_task(
     old_status = task.status
     
     update_data = task_update.model_dump(exclude_unset=True)
+
+    # Serialize file list fields to JSON for DB storage
+    for field_name in ("before_photos", "after_photos"):
+        if field_name in update_data and update_data[field_name] is not None:
+            update_data[field_name] = serialize_file_list(update_data[field_name])
+
     for field, value in update_data.items():
         setattr(task, field, value)
     
@@ -116,7 +131,7 @@ def update_task(
 @router.delete("/{task_id}")
 def delete_task(
     task_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
