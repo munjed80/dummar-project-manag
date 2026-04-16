@@ -17,6 +17,7 @@ from app.schemas.complaint import (
     ComplaintTrackRequest,
     ComplaintActivityResponse,
 )
+from app.schemas.report import PaginatedComplaints
 from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
 from app.schemas.file_utils import serialize_file_list
@@ -92,7 +93,7 @@ def track_complaint(track_data: ComplaintTrackRequest, request: Request, db: Ses
     return complaint
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=PaginatedComplaints)
 def list_complaints(
     skip: int = 0,
     limit: int = 100,

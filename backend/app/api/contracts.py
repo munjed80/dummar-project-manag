@@ -14,6 +14,7 @@ from app.schemas.contract import (
     ContractApprovalRequest,
     ContractApprovalResponse,
 )
+from app.schemas.report import PaginatedContracts
 from app.api.deps import get_current_user, get_current_contracts_manager
 from app.services.audit import write_audit_log
 from app.services.pdf_generator import generate_contract_pdf
@@ -79,7 +80,7 @@ def create_contract(
     return db_contract
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=PaginatedContracts)
 def list_contracts(
     skip: int = 0,
     limit: int = 100,

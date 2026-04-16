@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.models.task import Task, TaskActivity, TaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
+from app.schemas.report import PaginatedTasks
 from app.api.deps import get_current_user, require_role
 from app.services.audit import write_audit_log
 from app.schemas.file_utils import serialize_file_list
@@ -46,7 +47,7 @@ def create_task(
     return db_task
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=PaginatedTasks)
 def list_tasks(
     skip: int = 0,
     limit: int = 100,
