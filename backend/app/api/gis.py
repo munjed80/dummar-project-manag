@@ -7,7 +7,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -59,7 +59,7 @@ class AreaBoundary(BaseModel):
 # In production, these would come from PostGIS geometry columns.
 # ---------------------------------------------------------------------------
 
-AREA_BOUNDARIES: dict[str, dict] = {
+AREA_BOUNDARIES: Dict[str, Dict] = {
     "ISL-1": {
         "boundary": [
             [33.5380, 36.2185], [33.5380, 36.2210],
