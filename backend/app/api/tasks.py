@@ -124,6 +124,7 @@ def update_task(
         raise HTTPException(status_code=404, detail="Task not found")
     
     old_status = task.status
+    old_assigned_to_id = task.assigned_to_id
     
     update_data = task_update.model_dump(exclude_unset=True)
 
@@ -153,8 +154,13 @@ def update_task(
         db.add(activity)
         db.commit()
 
-    # Notify when task is (re-)assigned
-    if "assigned_to_id" in update_data and task.assigned_to_id and task.assigned_to_id != current_user.id:
+    # Notify when task is assigned to a different user
+    if (
+        "assigned_to_id" in update_data
+        and task.assigned_to_id
+        and task.assigned_to_id != old_assigned_to_id
+        and task.assigned_to_id != current_user.id
+    ):
         try:
             notify_task_assigned(
                 db=db,

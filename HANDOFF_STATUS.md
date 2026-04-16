@@ -1,87 +1,80 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-16T21:44
+## آخر تحديث: 2026-04-16T22:23
 
 ---
 
-## الدفعة الحالية: 2026-04-16T21:44 — 5 إصلاحات حرجة لتعزيز الثقة في MVP
+## الدفعة الحالية: 2026-04-16T22:23 — تعزيز الجاهزية النهائية وإكمال التكامل
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `backend/app/models/__init__.py` | إضافة `Notification` و `NotificationType` للتصدير |
-| `backend/alembic/versions/002_add_notifications.py` | **جديد** — Alembic migration لجدول notifications |
-| `backend/app/api/deps.py` | إضافة `get_current_internal_user` — يستبعد citizen |
-| `backend/app/api/users.py` | تقييد `GET /users/` و `/users/{id}` بـ project_director |
-| `backend/app/api/complaints.py` | تقييد GET endpoints بـ internal staff (citizen يستخدم `/citizen/my-complaints`) |
-| `backend/app/api/tasks.py` | تقييد GET endpoints بـ internal staff |
-| `backend/app/api/contracts.py` | تقييد GET endpoints بـ internal staff |
-| `backend/app/api/reports.py` | تقييد جميع نقاط التقارير بـ internal staff |
-| `backend/requirements.txt` | تثبيت `bcrypt==3.2.2` لتوافق passlib |
-| `src/config.ts` | **جديد** — تكوين API base URL من متغير بيئة |
-| `src/services/api.ts` | استخدام `config.API_BASE_URL` بدل hardcoded URL |
-| `src/components/FileUpload.tsx` | استخدام `config.API_BASE_URL` |
-| `src/pages/ContractDetailsPage.tsx` | استخدام `config.API_BASE_URL` |
-| `src/App.tsx` | تقوية route guards — تقييد المسارات حسب الدور |
-| `src/ErrorFallback.tsx` | إزالة نصوص Spark، استبدال بنصوص عربية |
-| `src/styles/theme.css` | إزالة ذكر Spark من التعليق |
-| `.env.example` | **جديد** — متغيرات بيئة الواجهة |
-| `README.md` | تحديث — تعليمات env، اختبارات، إزالة register endpoint |
-| `spark.meta.json` | **محذوف** |
-| `.spark-initial-sha` | **محذوف** |
-| `runtime.config.json` | **محذوف** |
+| `backend/app/api/dashboard.py` | تقييد `/dashboard/stats` و `/recent-activity` بـ `get_current_internal_user` |
+| `backend/app/api/tasks.py` | ربط `notify_task_assigned` عند إنشاء/تحديث المهام |
+| `backend/app/api/contracts.py` | ربط `notify_contract_status_change` عند تغيير حالة العقد |
+| `backend/app/services/notification_service.py` | إضافة `notify_contract_status_change` |
+| `backend/app/scripts/seed_data.py` | حساب citizen1 + إحداثيات GPS لجميع الشكاوى |
+| `backend/tests/conftest.py` | إضافة `citizen_user` و `citizen_token` fixtures |
+| `backend/tests/test_api.py` | 12 اختبار جديد: citizen denial + citizen access |
+| `src/App.tsx` | تقييد `/dashboard` بـ `INTERNAL_ROLES`، citizen يُحوّل لـ `/citizen` |
+| `README.md` | توثيق حساب citizen1 |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعة |
 
 ---
 
 ## الحالة الحقيقية المُتحقق منها
 
 ### ✅ مكتمل ومُتحقق منه:
-1. **إكمال قاعدة بيانات الإشعارات** — `Notification` مُصدّر في `__init__.py`، migration `002` جاهز، env.py يكتشف النموذج
-2. **تقوية RBAC على الباكند** — citizens لا يستطيعون الوصول لـ `/complaints/` `/tasks/` `/contracts/` `/reports/` `/users/`
-3. **تقوية RBAC على الواجهة** — route guards في App.tsx تقيد المسارات حسب الدور
-4. **نقل API base URL** — `VITE_API_BASE_URL` في `src/config.ts` يُستخدم في جميع الملفات
-5. **إزالة بقايا Spark** — `ErrorFallback.tsx` بنصوص عربية، ملفات Spark محذوفة
-6. **استقرار بيئة الاختبار** — `bcrypt==3.2.2` مُثبّت، 26 اختبار ناجح
-7. **بناء الواجهة** — `npm run build` ناجح (1.69s)
-8. **README محدّث** — تعليمات بيئة، اختبارات، توثيق bcrypt pin
+1. **Alembic migration على PostgreSQL** — 001 + 002 نجحا على postgis/postgis:15-3.3 عبر Docker
+2. **Schema notifications** — FK + indexes تعمل على PostgreSQL حقيقي
+3. **Seed data على PostgreSQL** — 8 مستخدمين + 8 مناطق + 12 مبنى + 7 شكاوى + 5 مهام + 5 عقود
+4. **اختبارات citizen denial** — 11 اختبار يؤكد منع citizen من endpoints تشغيلية
+5. **اختبار citizen access** — citizen يمكنه الوصول لـ `/citizen/my-complaints`
+6. **تقييد /dashboard** — باكند + واجهة مقيدان بـ internal staff
+7. **إشعارات المهام** — create_task + update_task يرسلان إشعاراً عند الإسناد
+8. **إشعارات العقود** — approve_contract يرسل إشعاراً لمديري العقود والمدير
+9. **حساب مواطن تجريبي** — citizen1 بهاتف يطابق شكوى CMP00000001
+10. **إحداثيات واقعية** — 7 شكاوى بإحداثيات Dummar (33.534–33.540, 36.217–36.223)
+11. **38 اختبار ناجح** — 26 سابق + 12 جديد
+12. **بناء الواجهة** — npm run build ناجح (1.85s)
 
 ### ⚠️ جزئي:
-- **اختبار migration على PostgreSQL** — migration جاهز لكن لم يُختبر على PostgreSQL حقيقي (SQLite في الاختبارات)
 - **إشعارات البريد الإلكتروني** — إعدادات SMTP جاهزة في config لكن غير مُفعّلة
-- **إشعارات المهام/العقود** — دالة `notify_task_assigned` جاهزة لكن لم تُربط بـ tasks.py بعد
+- **CI/CD migration** — تم اختبار migration يدوياً (Docker)، لم يُدمج في CI
+- **اختبارات notification_service** — لا توجد اختبارات وحدة مباشرة
 
 ### ❌ غير مُنفذ (المرحلة التالية):
 - PWA/offline mode
 - تكامل GIS متقدم — جزر/مباني/مناطق على الخريطة
-- حساب مواطن تجريبي في seed data
-- بيانات إحداثيات تجريبية للشكاوى
+- بريد إلكتروني فعلي عبر SMTP
+- CI/CD pipeline تلقائي
 
 ### ⚠️ ملاحظات مهمة:
 - كلمات المرور التجريبية يجب تغييرها في الإنتاج — الخادم يحذر عند البدء
 - CORS يُقرأ من `CORS_ORIGINS` env var — يجب تحديثه عند النشر
 - `field_team` و `contractor_user` لا يمكنهم تحديث الشكاوى أو المهام (سلوك مقصود)
-- `citizen` لا يمكنه الوصول لصفحات إدارية — يُحوّل تلقائياً إلى `/dashboard`
-- لاستخدام لوحة تحكم المواطن، يجب إنشاء حساب مواطن عبر `/users/` بواسطة المدير
-- خريطة الشكاوى تعرض فقط الشكاوى التي تحتوي على إحداثيات (latitude/longitude)
+- `citizen` لا يمكنه الوصول لـ `/dashboard` أو أي صفحة إدارية — يُحوّل تلقائياً إلى `/citizen`
+- citizen1 يرى شكوى CMP00000001 في لوحة تحكمه (الهاتف متطابق)
+- خريطة الشكاوى تعرض الآن 7 شكاوى بإحداثيات واقعية في منطقة دمّر
 - `bcrypt==3.2.2` مُثبّت لتوافق `passlib==1.7.4` — لا تحدّث بدون اختبار
+- `/settings` تبقى مفتوحة لأي مُصادق (إعدادات شخصية)
+- إشعارات العقود تُرسل لجميع مديري العقود والمدير — ليس فقط المُنشئ
 
 ---
 
 ## الدفعات السابقة
 
-### الدفعة: 2026-04-16T21:10 — المرحلة الثانية: لوحة تحكم المواطن + إشعارات + خرائط GIS
-**الملفات المعدلة:** `backend/app/models/notification.py`, `backend/app/schemas/notification.py`, `backend/app/services/notification_service.py`, `backend/app/api/notifications.py`, `backend/app/api/complaints.py`, `backend/app/core/config.py`, `backend/app/main.py`, `backend/.env.example`, `src/pages/CitizenDashboardPage.tsx`, `src/pages/ComplaintsMapPage.tsx`, `src/components/MapView.tsx`, `src/components/NotificationBell.tsx`, `src/components/Layout.tsx`, `src/services/api.ts`, `src/App.tsx`, `package.json`
+### الدفعة: 2026-04-16T21:44 — 5 إصلاحات حرجة لتعزيز الثقة في MVP
+**الملفات المعدلة:** `backend/app/models/__init__.py`, `backend/alembic/versions/002_add_notifications.py`, `backend/app/api/deps.py`, `backend/app/api/users.py`, `backend/app/api/complaints.py`, `backend/app/api/tasks.py`, `backend/app/api/contracts.py`, `backend/app/api/reports.py`, `backend/requirements.txt`, `src/config.ts`, `src/services/api.ts`, `src/components/FileUpload.tsx`, `src/pages/ContractDetailsPage.tsx`, `src/App.tsx`, `src/ErrorFallback.tsx`, `src/styles/theme.css`, `.env.example`, `README.md`
 
 ---
 
 ## الدفعة القادمة المُقترحة
-1. اختبار Alembic migration على PostgreSQL حقيقي (Docker)
-2. إضافة اختبارات RBAC جديدة — citizen لا يستطيع الوصول لـ endpoints المقيدة
-3. إرسال بريد إلكتروني فعلي عبر SMTP (تفعيل أساس الإشعارات الموجود)
-4. ربط إشعارات المهام والعقود (دوال جاهزة في notification_service.py)
-5. حساب مواطن تجريبي + بيانات إحداثيات تجريبية
-6. تكامل GIS متقدم — عرض جزر/مباني/مناطق على الخريطة
-7. PWA/offline mode
-8. تحسين تجربة الجوال (mobile responsiveness)
-9. نشر على خادم إنتاج
+1. تفعيل إرسال بريد إلكتروني فعلي عبر SMTP (الأساس جاهز في notification_service.py)
+2. إضافة CI/CD pipeline — اختبار migration + pytest + frontend build
+3. اختبارات وحدة لـ notification_service.py
+4. تكامل GIS متقدم — عرض جزر/مباني/مناطق على الخريطة
+5. PWA/offline mode — Service Worker + manifest
+6. تحسين تجربة الجوال (mobile responsiveness)
+7. نشر على خادم إنتاج

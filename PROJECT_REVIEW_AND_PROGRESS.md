@@ -48,6 +48,35 @@
   - Docker PostgreSQL قد لا يكون متاحاً في بيئة CI
   - تقييد /dashboard قد يؤثر على citizen login redirect
 
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ Alembic migration على PostgreSQL حقيقي — `alembic upgrade head` نجح (001 + 002)
+  2. ✅ جدول notifications مع FK + indexes على PostgreSQL — schema يطابق النموذج
+  3. ✅ Seed data يعمل على PostgreSQL — 8 مستخدمين، 8 مناطق، 12 مبنى، 7 شكاوى، 5 مهام، 5 عقود
+  4. ✅ اختبارات citizen denial — 11 اختبار يؤكد منع citizen من:
+     - `/complaints/` `/complaints/{id}` `/tasks/` `/tasks/{id}` `/contracts/` `/contracts/{id}`
+     - `/reports/summary` `/users/` `/dashboard/stats` `/dashboard/recent-activity` `/complaints/map/markers`
+  5. ✅ اختبار citizen CAN access — `/citizen/my-complaints` يعود 200
+  6. ✅ /dashboard مقيد بـ internal staff — باكند: `get_current_internal_user`، واجهة: `RoleProtectedRoute`
+  7. ✅ citizen يُحوّل لـ /citizen بدل /dashboard عند محاولة الوصول لصفحة مقيدة
+  8. ✅ إشعارات المهام مربوطة — create_task وupdate_task يرسلان إشعاراً عند الإسناد
+  9. ✅ إشعارات العقود مربوطة — approve_contract يرسل إشعاراً لمديري العقود والمدير
+  10. ✅ حساب مواطن تجريبي — citizen1 بهاتف +963911234567 (يطابق شكوى CMP00000001)
+  11. ✅ إحداثيات واقعية — جميع الشكاوى السبع تحتوي lat/lng في منطقة دمّر
+  12. ✅ 38 اختبار ناجح (26 سابق + 12 جديد)
+  13. ✅ بناء الواجهة — npm run build ناجح (1.85s)
+  14. ✅ README محدّث — حساب citizen1 موثق
+- **القرارات الهندسية:**
+  - /dashboard و /dashboard/stats و /dashboard/recent-activity مقيدة بـ internal staff (القرار الأكثر أماناً — citizen يحتوي على بيانات تشغيلية)
+  - /settings تبقى مفتوحة لأي مُصادق (سلوك مقصود — إعدادات شخصية)
+  - إشعارات العقود تُرسل لجميع مديري العقود والمدير (ليس فقط المُنشئ)
+  - notify_task_assigned لا يُرسل إشعاراً إذا assigned_to == current_user (لتجنب الضوضاء)
+- **الفجوات المتبقية:**
+  - إرسال بريد إلكتروني فعلي (SMTP) — الأساس جاهز لكن غير مُفعّل
+  - Alembic migration لم يُختبر تلقائياً في CI/CD (تم يدوياً في هذه الدفعة)
+  - لا توجد اختبارات وحدة لـ notification_service.py (الاختبارات الحالية تختبر الـ API)
+
 ---
 
 ### الدفعة: 2026-04-16T21:44 — 5 إصلاحات حرجة لتعزيز الثقة في MVP
