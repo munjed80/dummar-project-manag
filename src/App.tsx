@@ -11,7 +11,7 @@ import TaskDetailsPage from '@/pages/TaskDetailsPage';
 import ContractsListPage from '@/pages/ContractsListPage';
 import ContractDetailsPage from '@/pages/ContractDetailsPage';
 import LocationsListPage from '@/pages/LocationsListPage';
-import UsersListPage from '@/pages/UsersListPage';
+import UsersPage from '@/pages/UsersPage';
 import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import { apiService } from '@/services/api';
@@ -41,7 +41,7 @@ function App() {
         <Route path="/contracts" element={<ProtectedRoute><ContractsListPage /></ProtectedRoute>} />
         <Route path="/contracts/:id" element={<ProtectedRoute><ContractDetailsPage /></ProtectedRoute>} />
         <Route path="/locations" element={<ProtectedRoute><LocationsListPage /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><UsersListPage /></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       </Routes>

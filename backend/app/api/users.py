@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import or_
+from typing import List, Optional
+from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.api.deps import get_current_user, get_current_active_director
 from app.services.audit import write_audit_log
+
+
+class PaginatedUsers(BaseModel):
+    total_count: int
+    items: List[UserResponse]
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -45,15 +52,37 @@ def create_user(
     return db_user
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/", response_model=PaginatedUsers)
 def list_users(
     skip: int = 0,
     limit: int = 100,
+    search: Optional[str] = None,
+    role_filter: Optional[UserRole] = None,
+    is_active: Optional[bool] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users
+    query = db.query(User)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                User.username.ilike(search_term),
+                User.full_name.ilike(search_term),
+                User.email.ilike(search_term),
+            )
+        )
+
+    if role_filter:
+        query = query.filter(User.role == role_filter)
+
+    if is_active is not None:
+        query = query.filter(User.is_active == is_active)
+
+    total_count = query.count()
+    users = query.offset(skip).limit(limit).all()
+    return {"total_count": total_count, "items": users}
 
 
 @router.get("/{user_id}", response_model=UserResponse)

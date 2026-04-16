@@ -1,87 +1,82 @@
-# Project Review and Progress
+# مراجعة المشروع وتقدم العمل
+# PROJECT_REVIEW_AND_PROGRESS.md
 
-## Dummar Project Management Platform (منصة إدارة مشروع دمّر)
-
-**Last Updated:** 2026-04-16
+## نظرة عامة على المشروع
+**الاسم:** منصة إدارة مشروع دمّر  
+**الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
+**المرحلة الحالية:** المرحلة الأولى - MVP قابل للعرض  
+**آخر تحديث:** 2026-04-15
 
 ---
 
-## Overview
+## الميزات المنجزة بالكامل ✅
 
-A full-stack project management platform for the Dummar residential development in Damascus, Syria. Arabic-first RTL interface with English codebase. Built with React/TypeScript frontend and FastAPI/SQLAlchemy backend.
+### الواجهة الخلفية (Backend - FastAPI)
+- [x] نظام مصادقة JWT كامل مع أدوار مستخدمين (7 أدوار)
+- [x] CRUD كامل للشكاوى مع رقم تتبع تلقائي
+- [x] CRUD كامل للمهام مع ربط بالشكاوى/العقود
+- [x] CRUD كامل للعقود مع نظام موافقات
+- [x] إدارة المناطق والمباني (8 مناطق، 12 مبنى)
+- [x] لوحة تحكم إحصائية مع نشاطات حديثة
+- [x] نظام رفع الملفات مع تصنيف
+- [x] إنشاء PDF للعقود مع QR code
+- [x] سجل تدقيق لجميع العمليات
+- [x] نقاط API للتقارير مع فلاتر شاملة (تاريخ، منطقة، حالة، نوع)
+- [x] بحث وفلترة متقدمة على المستخدمين
+- [x] بيانات تجريبية واقعية بأسماء مناطق دمّر الحقيقية (جزر، قطاعات، بلوكات)
 
-## Architecture
+### الواجهة الأمامية (Frontend - React 19 + Vite)
+- [x] واجهة RTL عربية كاملة (خط Cairo)
+- [x] صفحة تسجيل الدخول
+- [x] لوحة تحكم بإحصائيات حية من الخادم
+- [x] قائمة الشكاوى مع بحث وفلترة وترقيم صفحات
+- [x] تفاصيل الشكوى مع البيانات الوصفية الكاملة، المنطقة، المسؤول، المرفقات، سجل النشاطات
+- [x] تقديم شكوى عامة (بدون تسجيل دخول)
+- [x] تتبع الشكوى بالرقم والهاتف
+- [x] قائمة المهام مع بحث وفلترة وترقيم صفحات
+- [x] تفاصيل المهمة مع صور قبل/بعد، ربط بالشكاوى/العقود
+- [x] قائمة العقود مع بحث وفلترة وترقيم صفحات
+- [x] تفاصيل العقد مع المرفقات، سجل الموافقات، PDF
+- [x] صفحة المواقع (مناطق ومباني)
+- [x] **صفحة إدارة المستخدمين** - إنشاء/تعديل/إلغاء تفعيل، شارات الأدوار، بحث
+- [x] **صفحة التقارير** - ملخصات إحصائية، جداول مفصلة مع فلاتر
+- [x] **صفحة الإعدادات** - معلومات المشروع، حدود الرفع، معلومات النظام
+- [x] مكون رفع ملفات مع تحقق من النوع والحجم
+- [x] حالات تحميل/فارغ/خطأ على جميع الصفحات
+- [x] إشعارات toast لكل العمليات
+- [x] حوارات تأكيد للعمليات المدمرة
+- [x] شريط تنقل يشمل جميع الأقسام
 
-- **Frontend:** React 19 + TypeScript + Vite 7 + Tailwind CSS 4 + shadcn/ui
-- **Backend:** FastAPI + SQLAlchemy + SQLite (dev) / PostgreSQL (prod)
-- **Auth:** JWT bearer token authentication
-- **File Uploads:** Local filesystem with categories (complaints, tasks, contracts)
+---
 
-## Completed Features
+## حالة الخادم والبناء
+- الخادم الخلفي: `uvicorn app.main:app --reload --port 8000`
+- الواجهة الأمامية: `npm run build` ← ناجح
+- Docker Compose: `docker compose up` للتشغيل الكامل
 
-### Backend (FastAPI)
-- [x] User authentication (login, register, JWT)
-- [x] Users CRUD (create, list, get, update, delete/deactivate)
-- [x] Complaints CRUD + tracking by number + activities log
-- [x] Tasks CRUD + activities log + status workflow
-- [x] Contracts CRUD + approval workflow + QR code generation
-- [x] PDF generation for contracts
-- [x] Locations API (areas, buildings, streets)
-- [x] Dashboard stats and recent activity
-- [x] Reports summary endpoint (complaints/tasks/contracts analytics)
-- [x] File upload endpoint with category support
-- [x] Audit logging for all major operations
-- [x] Role-based access control
+---
 
-### Frontend (React)
-- [x] Login page with authentication
-- [x] Dashboard with live stats (complaints, tasks, contracts KPIs)
-- [x] Complaints list with filtering + detail page with status update
-- [x] Complaint submission form (public) with image upload
-- [x] Complaint tracking by number (public)
-- [x] Tasks list with filtering + detail page with status update
-- [x] Contracts list with filtering + detail page with approval trail
-- [x] Locations list (areas and buildings hierarchy)
-- [x] Users list page (real backend data)
-- [x] Reports page (analytics from backend summary)
-- [x] Settings page (current user profile + system info)
-- [x] File upload in complaint submission
-- [x] Image/attachment display in complaint, task, and contract detail pages
-- [x] Loading, empty, and error states on all pages
-- [x] Arabic RTL interface with Cairo font
+## بيانات تجريبية
+### حسابات الدخول:
+| المستخدم | كلمة المرور | الدور |
+|---|---|---|
+| director | password123 | مدير المشروع |
+| contracts_mgr | password123 | مدير العقود |
+| engineer | password123 | مشرف هندسي |
+| complaints_off | password123 | مسؤول الشكاوى |
+| area_sup | password123 | مشرف المنطقة |
+| field_user | password123 | فريق ميداني |
+| contractor | password123 | مستخدم مقاول |
 
-### Integration
-- [x] All frontend field names match backend schema exactly
-- [x] Contract pages use contract_type, contract_value, scope_description
-- [x] Complaint pages use location_text (not location_details)
-- [x] Task pages use location_text (not area_name)
-- [x] Contract approvals show user_id (backend does not return user_name)
-- [x] File upload wired through /uploads/ endpoint
-- [x] All API service methods match backend endpoints
+---
 
-## Known Gaps and Remaining Work
-
-### Not Yet Implemented
-- [ ] Password change functionality in settings
-- [ ] User creation/editing form in the UI (backend API exists)
-- [ ] Real-time notifications (WebSocket or polling)
-- [ ] Map-based location selection using latitude/longitude
-- [ ] Street/building selection in complaint form (backend API exists)
-- [ ] File upload for task before/after photos (display works, upload form not yet wired)
-- [ ] File upload for contract attachments (display works, upload form not yet wired)
-- [ ] Contract approval action buttons in the UI (backend API exists)
-- [ ] Pagination for large data sets
-- [ ] Advanced filtering/sorting across all list pages
-- [ ] Export functionality (PDF/Excel reports)
-- [ ] Dark mode toggle
-
-### Build Warnings
-- 3 CSS warnings from Tailwind CSS v4 internals (container media queries) — cannot fix from project code
-- Chunk size warning (>500KB) — would require code-splitting with dynamic imports
-
-### Data
-- Seed data uses realistic Dummar structure (islands A-D, blocks 66/86, towers)
-- 7 seed users with distinct roles
-- 7 seed complaints across different areas and types
-- 5 seed tasks with varied statuses
-- 5 seed contracts at different lifecycle stages
+## الثغرات المتبقية (المرحلة الثانية)
+- [ ] تصدير CSV من صفحة التقارير
+- [ ] إشعارات push/email
+- [ ] لوحة تحكم المواطن (حسابات مواطنين)
+- [ ] تكامل GIS مع خرائط
+- [ ] نظام صلاحيات دقيق (RBAC) على مستوى الصفحات
+- [ ] وضع عدم الاتصال (PWA/offline mode)
+- [ ] اختبارات وحدة وتكامل
+- [ ] تحسين الأداء (code splitting, lazy loading)
+- [ ] نشر على خادم إنتاج

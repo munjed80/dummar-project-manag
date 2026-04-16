@@ -1,104 +1,89 @@
-# Handoff Status
+# حالة التسليم
+# HANDOFF_STATUS.md
 
-## Dummar Project Management Platform
-
-**Date:** 2026-04-16  
-**Status:** Integration gaps fixed, core platform functional
+## آخر تحديث: 2026-04-15
 
 ---
 
-## What Was Done in This Session
+## الملفات المُعدّلة في هذه الدورة
 
-### 1. Fixed Frontend/Backend Field Mismatches
-| Page | Before (Wrong) | After (Correct) |
-|------|---------------|-----------------|
-| ContractDetailsPage | `contract.type` | `contract.contract_type` |
-| ContractDetailsPage | `contract.value` | `contract.contract_value` |
-| ContractDetailsPage | `contract.description` | `contract.scope_description` |
-| ContractDetailsPage | `contract.terms` | Removed (not in backend) |
-| ContractsListPage | `c.type`, `c.value` | `c.contract_type`, `c.contract_value` |
-| ComplaintDetailsPage | `complaint.location_details` | `complaint.location_text` |
-| TaskDetailsPage | `task.area_name` | `task.location_text` |
-| ContractDetailsPage approvals | `app.user_name` | `app.user_id` |
+### ملفات جديدة:
+| الملف | الوصف |
+|---|---|
+| `src/pages/UsersPage.tsx` | صفحة إدارة المستخدمين كاملة (CRUD, بحث, فلترة, ترقيم صفحات, شارات أدوار) |
+| `src/pages/ReportsPage.tsx` | صفحة التقارير مع ملخصات إحصائية وجداول مفصلة وفلاتر |
+| `src/pages/SettingsPage.tsx` | صفحة الإعدادات (معلومات المشروع، حدود الرفع، معلومات النظام) |
+| `src/components/FileUpload.tsx` | مكون رفع ملفات مع تحقق من النوع والحجم |
+| `backend/app/api/reports.py` | نقاط API للتقارير (ملخص، شكاوى، مهام، عقود مع فلاتر) |
+| `backend/app/schemas/report.py` | مخططات Pydantic للتقارير |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | وثيقة مراجعة المشروع |
+| `HANDOFF_STATUS.md` | وثيقة حالة التسليم (هذا الملف) |
 
-### 2. Implemented Missing Frontend Pages
-- **`/users`** — UsersListPage showing all users from `GET /users` with search, role badges, active status
-- **`/reports`** — ReportsPage with KPI cards, complaint/task/contract breakdowns from new `GET /reports/summary` endpoint
-- **`/settings`** — SettingsPage showing current user profile from `GET /auth/me` and system info
-
-### 3. New Backend Endpoint
-- **`GET /reports/summary`** — Returns aggregated analytics: complaints by type/status, tasks completion rate, overdue count, contracts total value
-
-### 4. Wired File Upload UI
-- ComplaintSubmitPage: multi-file picker, uploads via `POST /uploads/?category=complaints`, attaches paths to complaint
-- ComplaintDetailsPage: displays uploaded images with clickable links
-- TaskDetailsPage: displays before_photos and after_photos with image previews
-- ContractDetailsPage: displays attachments and PDF file with download links
-
-### 5. Fixed Build Warnings
-- Fixed malformed Google Fonts preconnect `<link>` in `index.html` (was `href="https="fonts.gstatic.com"`, now `href="https://fonts.gstatic.com"`)
-- CSS warnings are from Tailwind CSS v4 internals (container media queries) — not fixable from project code
-
-### 6. Improved Data Realism
-- Seed data updated from generic zones to Dummar's operational structure:
-  - **Areas:** Island A-D (جزيرة أ-د), Block 66/86 (بلوك), Commercial Strip (الشريط التجاري), Green Zone (المنطقة الخضراء)
-  - **Buildings:** Towers per island (البرج أ1، ب2، etc.), block towers, service buildings
-  - **Complaints/Tasks/Contracts:** Location references updated to island/tower format
-
-### 7. Navigation Updated
-- Layout nav bar now includes: Dashboard, Complaints, Tasks, Contracts, Locations, Users, Reports, Settings
+### ملفات مُعدّلة:
+| الملف | التغيير |
+|---|---|
+| `src/App.tsx` | إضافة مسارات /users, /reports, /settings |
+| `src/components/Layout.tsx` | إضافة روابط المستخدمون، التقارير، الإعدادات في التنقل |
+| `src/services/api.ts` | إضافة methods جديدة: getUsers (paginated), createUser, updateUser, deactivateUser, getReportSummary, getReportComplaints, getReportTasks, getReportContracts |
+| `src/pages/ComplaintsListPage.tsx` | ترقيم صفحات، حالات خطأ/فارغ |
+| `src/pages/ComplaintDetailsPage.tsx` | بيانات وصفية كاملة، رفع صور، تعيين مسؤول، حوار تأكيد |
+| `src/pages/TasksListPage.tsx` | ترقيم صفحات، حالات خطأ/فارغ |
+| `src/pages/TaskDetailsPage.tsx` | صور قبل/بعد، ربط شكوى/عقد، تعيين مسؤول، حوار تأكيد |
+| `src/pages/ContractsListPage.tsx` | ترقيم صفحات، حالات خطأ/فارغ |
+| `src/pages/ContractDetailsPage.tsx` | مرفقات، PDF تحميل/عرض، QR code، حذف مع تأكيد |
+| `backend/app/api/users.py` | بحث، فلتر بالدور، فلتر بالحالة، استجابة مُرقمة |
+| `backend/app/main.py` | تسجيل router التقارير |
+| `backend/app/scripts/seed_data.py` | بيانات مناطق ومباني واقعية لمشروع دمّر (جزر/قطاعات/بلوكات) |
 
 ---
 
-## Changed Files
+## الميزات العاملة بالكامل
 
-### Frontend
-| File | Change |
-|------|--------|
-| `index.html` | Fixed malformed preconnect link |
-| `src/App.tsx` | Added routes for /users, /reports, /settings |
-| `src/components/Layout.tsx` | Added nav items for Users, Reports, Settings |
-| `src/services/api.ts` | Added getUser, createUser, updateUser, deleteUser, getReportsSummary methods |
-| `src/pages/ContractDetailsPage.tsx` | Fixed field names, added attachments/PDF display |
-| `src/pages/ContractsListPage.tsx` | Fixed contract_type and contract_value field names |
-| `src/pages/ComplaintDetailsPage.tsx` | Fixed location_text, added images display |
-| `src/pages/ComplaintSubmitPage.tsx` | Added file upload UI |
-| `src/pages/TaskDetailsPage.tsx` | Fixed location_text, added before/after photos display |
-| `src/pages/UsersListPage.tsx` | **NEW** — Users management page |
-| `src/pages/ReportsPage.tsx` | **NEW** — Reports and analytics page |
-| `src/pages/SettingsPage.tsx` | **NEW** — Settings and profile page |
+### صفحات جديدة:
+1. **`/users`** - قائمة مستخدمين حقيقية من الخادم مع:
+   - بحث بالاسم/البريد
+   - فلترة بالدور
+   - إنشاء مستخدم جديد (dialog)
+   - تعديل مستخدم (dialog)
+   - إلغاء تفعيل مستخدم (مع حوار تأكيد)
+   - شارات أدوار ملونة
+   - ترقيم صفحات
 
-### Backend
-| File | Change |
-|------|--------|
-| `backend/app/main.py` | Registered reports router |
-| `backend/app/api/reports.py` | **NEW** — Reports summary endpoint |
-| `backend/app/scripts/seed_data.py` | Updated to islands/blocks/towers structure |
+2. **`/reports`** - تقارير حقيقية من الخادم مع:
+   - ملخص إحصائي (بطاقات إجمالية)
+   - تفصيلات حسب الحالة والنوع والمنطقة
+   - تبويبات: ملخص عام، شكاوى، مهام، عقود
+   - فلاتر: تاريخ من/إلى، منطقة
+   - بحث داخل كل تبويب
+   - ترقيم صفحات
+
+3. **`/settings`** - إعدادات مع:
+   - معلومات المشروع والمنظمة
+   - قائمة المناطق المسجلة
+   - معلومات الحساب الحالي
+   - حدود الرفع
+   - معلومات النظام
+
+### تحسينات على الصفحات الموجودة:
+- **كل صفحات القوائم**: ترقيم صفحات، حالات خطأ/فارغ/تحميل
+- **تفاصيل الشكوى**: رفع صور، تعيين مسؤول، منطقة مربوطة، حوار تأكيد
+- **تفاصيل المهمة**: صور قبل/بعد، ربط شكوى/عقد، تعيين مسؤول
+- **تفاصيل العقد**: مرفقات، تحميل PDF، QR code، حذف مع تأكيد
 
 ---
 
-## Remaining Gaps (Honest Assessment)
+## الثغرات المتبقية
 
-### Functional Gaps
-1. **No user CRUD form in UI** — Backend API supports full CRUD, but UI only lists users (no create/edit/delete buttons)
-2. **No contract approval buttons** — Backend has `POST /contracts/{id}/approve`, but UI only displays existing approvals
-3. **No task/contract file upload forms** — Display of existing photos/attachments works, but no upload UI for tasks (before/after) or contracts (attachments)
-4. **No password change** — Settings page shows profile but can't edit it
-5. **No map integration** — Location fields are text-only; latitude/longitude not used in UI
-6. **No pagination** — All list pages load all records; will be an issue with large datasets
+### مطلوبة للمرحلة الثانية:
+1. **تصدير CSV** - هيكل الجداول جاهز لكن لم يُنفذ زر التصدير
+2. **نظام الصلاحيات** - الأدوار موجودة لكن لا يوجد تقييد بالواجهة حسب الدور
+3. **إشعارات** - Toast فقط، لا يوجد push/email
+4. **خرائط GIS** - البيانات قابلة للتوسيع لكن لا تكامل خرائط بعد
+5. **اختبارات** - لا يوجد اختبارات وحدة أو تكامل
+6. **فلاتر URL** - الفلاتر لا تُحفظ في الرابط بعد
 
-### Technical Debt
-1. **CSS warnings** — 3 Tailwind v4 container query warnings cannot be resolved at project level
-2. **Bundle size** — JS bundle is 549KB; should be code-split with lazy loading
-3. **No tests** — No unit or integration tests exist
-4. **Hardcoded API URL** — `http://localhost:8000` hardcoded in api.ts; should use env variable
-5. **Contract approval user_id** — Shows raw ID instead of user name; would need backend join or separate user lookup
-
-### Production Readiness
-- [ ] Environment variable configuration for API URL
-- [ ] Production database (PostgreSQL) setup
-- [ ] HTTPS/SSL configuration
-- [ ] Rate limiting on public endpoints
-- [ ] Input validation and sanitization (partial)
-- [ ] Error logging and monitoring
-- [ ] Backup strategy
+### ملاحظات تقنية:
+- حجم الحزمة الأمامية: ~596KB (ينصح بـ code splitting)
+- كلمات المرور التجريبية: يجب تغييرها في الإنتاج
+- CORS مقيد لـ localhost فقط
+- لا يوجد rate limiting على الـ API

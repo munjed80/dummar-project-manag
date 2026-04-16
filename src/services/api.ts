@@ -21,6 +21,11 @@ export interface User {
   created_at: string;
 }
 
+export interface PaginatedResponse<T> {
+  total_count: number;
+  items: T[];
+}
+
 class ApiService {
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('access_token');
@@ -36,11 +41,7 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
     });
-
-    if (!response.ok) {
-      throw new Error('Login failed');
-    }
-
+    if (!response.ok) throw new Error('Login failed');
     const data: AuthToken = await response.json();
     localStorage.setItem('access_token', data.access_token);
     return data;
@@ -50,39 +51,25 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       headers: this.getAuthHeaders(),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user');
-    }
-
+    if (!response.ok) throw new Error('Failed to fetch user');
     return response.json();
   }
 
-  async getComplaints(params?: { status?: string; area_id?: number }): Promise<any[]> {
-    const queryParams = new URLSearchParams();
-    if (params?.status) queryParams.append('status_filter', params.status);
-    if (params?.area_id) queryParams.append('area_id', params.area_id.toString());
-
-    const response = await fetch(`${API_BASE_URL}/complaints?${queryParams}`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch complaints');
-    }
-
+  // ── Complaints ──
+  async getComplaints(params?: { status?: string; area_id?: number; skip?: number; limit?: number }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status_filter', params.status);
+    if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/complaints?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch complaints');
     return response.json();
   }
 
   async getComplaint(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/complaints/${id}`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch complaint');
-    }
-
+    const response = await fetch(`${API_BASE_URL}/complaints/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch complaint');
     return response.json();
   }
 
@@ -92,11 +79,7 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to create complaint');
-    }
-
+    if (!response.ok) throw new Error('Failed to create complaint');
     return response.json();
   }
 
@@ -106,11 +89,7 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tracking_number, phone }),
     });
-
-    if (!response.ok) {
-      throw new Error('Complaint not found');
-    }
-
+    if (!response.ok) throw new Error('Complaint not found');
     return response.json();
   }
 
@@ -120,39 +99,31 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to update complaint');
-    }
-
+    if (!response.ok) throw new Error('Failed to update complaint');
     return response.json();
   }
 
-  async getTasks(params?: { status?: string; area_id?: number }): Promise<any[]> {
-    const queryParams = new URLSearchParams();
-    if (params?.status) queryParams.append('status_filter', params.status);
-    if (params?.area_id) queryParams.append('area_id', params.area_id.toString());
+  async getComplaintActivities(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/complaints/${id}/activities`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch activities');
+    return response.json();
+  }
 
-    const response = await fetch(`${API_BASE_URL}/tasks?${queryParams}`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch tasks');
-    }
-
+  // ── Tasks ──
+  async getTasks(params?: { status?: string; area_id?: number; skip?: number; limit?: number }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status_filter', params.status);
+    if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/tasks?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch tasks');
     return response.json();
   }
 
   async getTask(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch task');
-    }
-
+    const response = await fetch(`${API_BASE_URL}/tasks/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch task');
     return response.json();
   }
 
@@ -162,11 +133,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to create task');
-    }
-
+    if (!response.ok) throw new Error('Failed to create task');
     return response.json();
   }
 
@@ -176,38 +143,30 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to update task');
-    }
-
+    if (!response.ok) throw new Error('Failed to update task');
     return response.json();
   }
 
-  async getContracts(params?: { status?: string }): Promise<any[]> {
-    const queryParams = new URLSearchParams();
-    if (params?.status) queryParams.append('status_filter', params.status);
+  async getTaskActivities(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/tasks/${id}/activities`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch activities');
+    return response.json();
+  }
 
-    const response = await fetch(`${API_BASE_URL}/contracts?${queryParams}`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch contracts');
-    }
-
+  // ── Contracts ──
+  async getContracts(params?: { status?: string; skip?: number; limit?: number }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status_filter', params.status);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/contracts?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch contracts');
     return response.json();
   }
 
   async getContract(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch contract');
-    }
-
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch contract');
     return response.json();
   }
 
@@ -217,11 +176,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to create contract');
-    }
-
+    if (!response.ok) throw new Error('Failed to create contract');
     return response.json();
   }
 
@@ -231,11 +186,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to update contract');
-    }
-
+    if (!response.ok) throw new Error('Failed to update contract');
     return response.json();
   }
 
@@ -245,124 +196,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ action, comments }),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to approve contract');
-    }
-
-    return response.json();
-  }
-
-  async getDashboardStats(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/dashboard/stats`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch dashboard stats');
-    }
-
-    return response.json();
-  }
-
-  async getRecentActivity(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/dashboard/recent-activity`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch recent activity');
-    }
-
-    return response.json();
-  }
-
-  async getAreas(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/locations/areas`, {
-      headers: this.getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch areas');
-    }
-
-    return response.json();
-  }
-
-  async getUsers(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/users`, {
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to fetch users');
-    return response.json();
-  }
-
-  async getUser(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to fetch user');
-    return response.json();
-  }
-
-  async createUser(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/users/`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to create user');
-    return response.json();
-  }
-
-  async updateUser(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error('Failed to update user');
-    return response.json();
-  }
-
-  async deleteUser(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to delete user');
-    return response.json();
-  }
-
-  async getReportsSummary(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/reports/summary`, {
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to fetch reports');
-    return response.json();
-  }
-
-  async getComplaintActivities(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/complaints/${id}/activities`, {
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to fetch activities');
-    return response.json();
-  }
-
-  async getTaskActivities(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/tasks/${id}/activities`, {
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to fetch activities');
-    return response.json();
-  }
-
-  async getContractApprovals(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}/approvals`, {
-      headers: this.getAuthHeaders(),
-    });
-    if (!response.ok) throw new Error('Failed to fetch approvals');
+    if (!response.ok) throw new Error('Failed to approve contract');
     return response.json();
   }
 
@@ -384,29 +218,153 @@ class ApiService {
     return response.json();
   }
 
+  async getContractApprovals(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}/approvals`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch approvals');
+    return response.json();
+  }
+
+  // ── Dashboard ──
+  async getDashboardStats(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/dashboard/stats`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch dashboard stats');
+    return response.json();
+  }
+
+  async getRecentActivity(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/dashboard/recent-activity`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch recent activity');
+    return response.json();
+  }
+
+  // ── Locations ──
+  async getAreas(): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/locations/areas`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch areas');
+    return response.json();
+  }
+
   async getBuildings(areaId?: number): Promise<any[]> {
-    const queryParams = new URLSearchParams();
-    if (areaId) queryParams.append('area_id', areaId.toString());
-    const response = await fetch(`${API_BASE_URL}/locations/buildings?${queryParams}`, {
-      headers: this.getAuthHeaders(),
-    });
+    const qp = new URLSearchParams();
+    if (areaId) qp.append('area_id', areaId.toString());
+    const response = await fetch(`${API_BASE_URL}/locations/buildings?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch buildings');
     return response.json();
   }
 
+  // ── Users ──
+  async getUsers(params?: { search?: string; role_filter?: string; is_active?: boolean; skip?: number; limit?: number }): Promise<PaginatedResponse<User>> {
+    const qp = new URLSearchParams();
+    if (params?.search) qp.append('search', params.search);
+    if (params?.role_filter) qp.append('role_filter', params.role_filter);
+    if (params?.is_active !== undefined) qp.append('is_active', params.is_active.toString());
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/users?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch users');
+    return response.json();
+  }
+
+  async getUser(id: number): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch user');
+    return response.json();
+  }
+
+  async createUser(data: any): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/users/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to create user');
+    }
+    return response.json();
+  }
+
+  async updateUser(id: number, data: any): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to update user');
+    }
+    return response.json();
+  }
+
+  async deactivateUser(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to deactivate user');
+    return response.json();
+  }
+
+  // ── File Upload ──
   async uploadFile(file: File, category: string): Promise<any> {
     const token = localStorage.getItem('access_token');
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('category', category);
-    const response = await fetch(`${API_BASE_URL}/uploads/?category=${category}`, {
+    const response = await fetch(`${API_BASE_URL}/uploads/?category=${encodeURIComponent(category)}`, {
       method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
     });
     if (!response.ok) throw new Error('Failed to upload file');
+    return response.json();
+  }
+
+  // ── Reports ──
+  async getReportSummary(params?: { date_from?: string; date_to?: string; area_id?: number; status?: string }): Promise<any> {
+    const qp = new URLSearchParams();
+    if (params?.date_from) qp.append('date_from', params.date_from);
+    if (params?.date_to) qp.append('date_to', params.date_to);
+    if (params?.area_id) qp.append('area_id', params.area_id.toString());
+    if (params?.status) qp.append('status', params.status);
+    const response = await fetch(`${API_BASE_URL}/reports/summary?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch report summary');
+    return response.json();
+  }
+
+  async getReportComplaints(params?: Record<string, any>): Promise<any> {
+    const qp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
+      });
+    }
+    const response = await fetch(`${API_BASE_URL}/reports/complaints?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch complaints report');
+    return response.json();
+  }
+
+  async getReportTasks(params?: Record<string, any>): Promise<any> {
+    const qp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
+      });
+    }
+    const response = await fetch(`${API_BASE_URL}/reports/tasks?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch tasks report');
+    return response.json();
+  }
+
+  async getReportContracts(params?: Record<string, any>): Promise<any> {
+    const qp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
+      });
+    }
+    const response = await fetch(`${API_BASE_URL}/reports/contracts?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch contracts report');
     return response.json();
   }
 

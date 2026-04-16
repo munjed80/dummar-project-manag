@@ -1,6 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, MapPin, UsersThree, ChartBar, Gear, SignOut } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 
 interface LayoutProps {
@@ -24,7 +24,7 @@ export function Layout({ children }: LayoutProps) {
     { path: '/locations', icon: MapPin, label: 'المواقع' },
     { path: '/users', icon: UsersThree, label: 'المستخدمون' },
     { path: '/reports', icon: ChartBar, label: 'التقارير' },
-    { path: '/settings', icon: Gear, label: 'الإعدادات' },
+    { path: '/settings', icon: GearSix, label: 'الإعدادات' },
   ];
 
   return (

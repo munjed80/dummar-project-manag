@@ -4,6 +4,7 @@ import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -11,7 +12,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MagnifyingGlass, Spinner } from '@phosphor-icons/react';
+import { MagnifyingGlass, Spinner, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 
 const statusLabels: Record<string, string> = {
@@ -37,30 +38,40 @@ function formatValue(value: number | string | null | undefined): string {
   return Number(value).toLocaleString('en-US');
 }
 
+const PAGE_SIZE = 15;
+
 export default function ContractsListPage() {
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    apiService.getContracts()
+    setLoading(true);
+    setError('');
+    const params: any = {};
+    if (statusFilter !== 'all') params.status = statusFilter;
+    apiService.getContracts(params)
       .then(setContracts)
-      .catch(console.error)
+      .catch(() => setError('فشل تحميل العقود'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [statusFilter]);
 
   const filtered = contracts.filter((c) => {
     const matchesSearch = !search ||
       c.contract_number?.toLowerCase().includes(search.toLowerCase()) ||
       c.title?.toLowerCase().includes(search.toLowerCase()) ||
       c.contractor_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
     const matchesType = typeFilter === 'all' || c.contract_type === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesType;
   });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <Layout>
@@ -75,11 +86,11 @@ export default function ContractsListPage() {
               <Input
                 placeholder="بحث برقم العقد أو العنوان أو المقاول..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 className="pr-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الحالات</SelectItem>
@@ -88,7 +99,7 @@ export default function ContractsListPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(0); }}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="النوع" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الأنواع</SelectItem>
@@ -99,53 +110,71 @@ export default function ContractsListPage() {
             </Select>
           </div>
 
+          {error && (
+            <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
+              <Warning size={32} />
+              <p>{error}</p>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-12">
               <Spinner className="animate-spin" size={32} />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">رقم العقد</TableHead>
-                  <TableHead className="text-right">العنوان</TableHead>
-                  <TableHead className="text-right">المقاول</TableHead>
-                  <TableHead className="text-right">النوع</TableHead>
-                  <TableHead className="text-right">القيمة</TableHead>
-                  <TableHead className="text-right">الحالة</TableHead>
-                  <TableHead className="text-right">تاريخ الانتهاء</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
+            <>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      لا توجد عقود
-                    </TableCell>
+                    <TableHead className="text-right">رقم العقد</TableHead>
+                    <TableHead className="text-right">العنوان</TableHead>
+                    <TableHead className="text-right">المقاول</TableHead>
+                    <TableHead className="text-right">النوع</TableHead>
+                    <TableHead className="text-right">القيمة</TableHead>
+                    <TableHead className="text-right">الحالة</TableHead>
+                    <TableHead className="text-right">تاريخ الانتهاء</TableHead>
                   </TableRow>
-                ) : (
-                  filtered.map((c) => (
-                    <TableRow
-                      key={c.id}
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/contracts/${c.id}`)}
-                    >
-                      <TableCell className="font-mono">{c.contract_number}</TableCell>
-                      <TableCell>{c.title}</TableCell>
-                      <TableCell>{c.contractor_name}</TableCell>
-                      <TableCell>{typeLabels[c.contract_type] || c.contract_type || '-'}</TableCell>
-                      <TableCell>{formatValue(c.contract_value)}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
-                          {statusLabels[c.status] || c.status}
-                        </Badge>
+                </TableHeader>
+                <TableBody>
+                  {paginated.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        لا توجد عقود
                       </TableCell>
-                      <TableCell>{c.end_date ? format(new Date(c.end_date), 'yyyy/MM/dd') : '-'}</TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paginated.map((c) => (
+                      <TableRow
+                        key={c.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/contracts/${c.id}`)}
+                      >
+                        <TableCell className="font-mono">{c.contract_number}</TableCell>
+                        <TableCell>{c.title}</TableCell>
+                        <TableCell>{c.contractor_name}</TableCell>
+                        <TableCell>{typeLabels[c.contract_type] || c.contract_type || '-'}</TableCell>
+                        <TableCell>{formatValue(c.contract_value)}</TableCell>
+                        <TableCell>
+                          <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
+                            {statusLabels[c.status] || c.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{c.end_date ? format(new Date(c.end_date), 'yyyy/MM/dd') : '-'}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4">
+                  <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>
+                  <span className="text-sm text-muted-foreground">
+                    صفحة {page + 1} من {totalPages} ({filtered.length} عقد)
+                  </span>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>التالي</Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
