@@ -16,7 +16,9 @@ import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash } fr
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
-const API_BASE_URL = 'http://localhost:8000';
+import { config } from '@/config';
+
+const API_BASE_URL = config.API_BASE_URL;
 
 const statusLabels: Record<string, string> = {
   draft: 'مسودة', under_review: 'قيد المراجعة', approved: 'مُعتمد',

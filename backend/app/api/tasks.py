@@ -8,7 +8,7 @@ from app.models.task import Task, TaskActivity, TaskStatus, TaskPriority
 from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
 from app.schemas.report import PaginatedTasks
-from app.api.deps import get_current_user, require_role
+from app.api.deps import get_current_user, require_role, get_current_internal_user
 from app.services.audit import write_audit_log
 from app.schemas.file_utils import serialize_file_list
 
@@ -56,7 +56,7 @@ def list_tasks(
     area_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Task)
@@ -90,7 +90,7 @@ def list_tasks(
 @router.get("/{task_id}", response_model=TaskResponse)
 def get_task(
     task_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -164,7 +164,7 @@ def delete_task(
 @router.get("/{task_id}/activities", response_model=List[TaskActivityResponse])
 def get_task_activities(
     task_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     activities = db.query(TaskActivity).filter(

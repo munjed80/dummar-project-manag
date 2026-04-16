@@ -40,11 +40,21 @@ docker-compose exec backend python -m app.scripts.seed_data
 
 ```bash
 npm install
+# Copy .env.example and adjust if needed
+cp .env.example .env
 npm run dev
 ```
 
 Frontend: http://localhost:5173
 Backend API docs: http://localhost:8000/docs
+
+### Frontend Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend API URL (no trailing slash) |
+
+For deployment, set `VITE_API_BASE_URL` to your production backend URL before building.
 
 ### Local Backend Development (without Docker)
 
@@ -60,6 +70,17 @@ cp .env.example .env
 
 uvicorn app.main:app --reload --port 8000
 ```
+
+### Running Tests
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m pytest tests/ -v
+```
+
+> **Note:** `bcrypt==3.2.2` is pinned in requirements.txt for compatibility with `passlib==1.7.4`.
+> Later versions of bcrypt (4.x+) remove internal APIs that passlib depends on.
 
 ## Default Login Credentials
 
@@ -118,7 +139,6 @@ uvicorn app.main:app --reload --port 8000
 
 ### Auth
 - `POST /auth/login` - Login
-- `POST /auth/register` - Register
 - `GET /auth/me` - Current user
 
 ### Complaints

@@ -5,6 +5,7 @@ from app.models.complaint import Complaint, ComplaintActivity, ComplaintType, Co
 from app.models.task import Task, TaskActivity, TaskStatus, TaskSourceType, TaskPriority
 from app.models.contract import Contract, ContractApproval, ContractType, ContractStatus
 from app.models.audit import AuditLog
+from app.models.notification import Notification, NotificationType
 
 __all__ = [
     "Base",
@@ -28,4 +29,6 @@ __all__ = [
     "ContractType",
     "ContractStatus",
     "AuditLog",
+    "Notification",
+    "NotificationType",
 ]

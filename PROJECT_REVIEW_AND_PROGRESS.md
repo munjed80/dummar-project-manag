@@ -11,6 +11,41 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-16T21:44 — 5 إصلاحات حرجة لتعزيز الثقة في MVP
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-16T21:44
+- **الهدف:** تنفيذ 5 إصلاحات حرجة لجعل MVP أكثر موثوقية للعرض والمراجعة
+- **المشاكل المستهدفة:**
+  1. إكمال قاعدة بيانات الإشعارات — Notification غير مُصدّر في `__init__.py`، لا يوجد migration مخصص
+  2. تقوية RBAC — بعض endpoints GET الحساسة متاحة لأي مستخدم مُصادق، مسارات الواجهة غير مقيدة بالدور
+  3. نقل API base URL إلى env config — لا يزال hardcoded `localhost:8000`
+  4. إزالة بقايا Spark — نصوص Spark في ErrorFallback، ملفات spark.meta.json
+  5. استقرار بيئة الاختبار — مشاكل توافق passlib/bcrypt
+- **الملفات المخطط تعديلها:**
+  - `backend/app/models/__init__.py`
+  - `backend/alembic/versions/002_add_notifications.py` (جديد)
+  - `backend/app/api/users.py`
+  - `backend/app/api/reports.py`
+  - `backend/app/api/contracts.py`
+  - `backend/app/api/tasks.py`
+  - `backend/app/api/complaints.py`
+  - `backend/app/api/locations.py`
+  - `backend/requirements.txt`
+  - `src/App.tsx`
+  - `src/services/api.ts`
+  - `src/components/FileUpload.tsx`
+  - `src/pages/ContractDetailsPage.tsx`
+  - `src/ErrorFallback.tsx`
+  - `.env.example` (frontend — جديد)
+  - `README.md`
+  - `spark.meta.json` (حذف)
+  - `.spark-initial-sha` (حذف)
+  - `runtime.config.json` (حذف)
+- **المخاطر:** تغيير RBAC قد يؤثر على اختبارات RBAC الحالية — يجب التأكد من بقاء الاختبارات ناجحة
+
+---
+
 ### الدفعة: 2026-04-16T21:10 — المرحلة الثانية: لوحة تحكم المواطن + إشعارات + خرائط GIS
 
 **قبل البدء:**
