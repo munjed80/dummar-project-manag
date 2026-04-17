@@ -173,7 +173,7 @@ HTTP_PORT=$(grep '^HTTP_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "80")
 step "Building frontend"
 
 info "Installing dependencies…"
-npm ci --prefer-offline --no-audit --no-fund 2>&1 | tail -1
+npm ci --prefer-offline --no-audit --no-fund 2>&1 | tail -5
 
 info "Running production build…"
 npm run build 2>&1 | tail -3

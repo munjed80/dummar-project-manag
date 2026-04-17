@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { config } from '@/config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -41,7 +42,7 @@ export default function SettingsPage() {
     setHealthLoading(true);
     try {
       const resp = await fetch(
-        `${(window as any).__API_BASE || '/api'}/health/detailed`,
+        `${config.API_BASE_URL}/health/detailed`,
         { headers: { 'Content-Type': 'application/json' } }
       );
       if (resp.ok) {
