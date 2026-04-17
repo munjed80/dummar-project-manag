@@ -98,11 +98,11 @@ export default function ContractIntelligencePage() {
 
   const statCards = [
     { label: 'إجمالي المستندات', key: 'total_documents', icon: FileText, color: 'text-blue-600' },
-    { label: 'قيد المراجعة', key: 'in_review', icon: Clock, color: 'text-yellow-600' },
+    { label: 'قيد المراجعة', key: 'review', icon: Clock, color: 'text-yellow-600' },
     { label: 'مُعتمد', key: 'approved', icon: CheckCircle, color: 'text-green-600' },
     { label: 'فشل', key: 'failed', icon: XCircle, color: 'text-red-600' },
-    { label: 'علامات المخاطر', key: 'risk_flags', icon: ShieldWarning, color: 'text-orange-600' },
-    { label: 'التكرارات', key: 'duplicates', icon: CopySimple, color: 'text-purple-600' },
+    { label: 'علامات المخاطر', key: 'total_risk_flags', icon: ShieldWarning, color: 'text-orange-600' },
+    { label: 'التكرارات', key: 'total_duplicates', icon: CopySimple, color: 'text-purple-600' },
   ];
 
   const quickLinks = [
