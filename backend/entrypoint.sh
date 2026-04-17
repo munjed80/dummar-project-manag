@@ -23,6 +23,22 @@ alembic upgrade head || {
     echo "Check DATABASE_URL and migration files."
 }
 
+# Verify OCR/Tesseract availability for contract intelligence
+echo "=== OCR Engine Check ==="
+if command -v tesseract > /dev/null 2>&1; then
+    echo "Tesseract OCR: $(tesseract --version 2>&1 | head -1)"
+    echo "Languages: $(tesseract --list-langs 2>&1 | tail -n +2 | tr '\n' ' ')"
+else
+    echo "Tesseract OCR: NOT INSTALLED (BasicTextExtractor will be used)"
+fi
+
+# Verify Arabic PDF font availability
+if [ -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
+    echo "Arabic PDF font (DejaVu Sans): Available"
+else
+    echo "Arabic PDF font (DejaVu Sans): NOT FOUND — PDF export will use Helvetica fallback"
+fi
+
 echo "Starting Dummar API server..."
 exec gunicorn app.main:app \
     --workers "${GUNICORN_WORKERS:-4}" \

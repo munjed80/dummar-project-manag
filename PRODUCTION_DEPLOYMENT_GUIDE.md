@@ -18,12 +18,13 @@
 10. [CORS Configuration](#cors-configuration)
 11. [File Upload / Storage](#file-upload--storage)
 12. [Tesseract OCR Setup (Contract Intelligence)](#tesseract-ocr-setup-contract-intelligence)
-13. [Security Checklist](#security-checklist)
-14. [CI/CD Pipeline](#cicd-pipeline)
-15. [Rollback & Migration Caution](#rollback--migration-caution)
-16. [Monitoring & Observability](#monitoring--observability)
-17. [Audit Trail](#audit-trail)
-18. [Troubleshooting](#troubleshooting)
+13. [Arabic PDF Export](#arabic-pdf-export)
+14. [Security Checklist](#security-checklist)
+15. [CI/CD Pipeline](#cicd-pipeline)
+16. [Rollback & Migration Caution](#rollback--migration-caution)
+17. [Monitoring & Observability](#monitoring--observability)
+18. [Audit Trail](#audit-trail)
+19. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -606,6 +607,60 @@ pip install pytesseract
 | Low OCR confidence | Check scan quality — 300 DPI minimum recommended |
 | Memory issues with large PDFs | Increase `GUNICORN_TIMEOUT` and container memory limits |
 
+### Tesseract Production Verification Checklist
+
+Before considering OCR fully operational in production, verify all of the following:
+
+- [ ] `GET /contract-intelligence/ocr-status` returns `"engine": "tesseract"` and `"tesseract_available": true`
+- [ ] `tesseract_languages` list includes `ara` and `eng`
+- [ ] Backend startup logs show `Tesseract OCR: tesseract X.X.X` (check via `docker compose logs backend | grep Tesseract`)
+- [ ] Upload a test Arabic scanned image (JPG/PNG) — verify text extraction succeeds
+- [ ] Upload a test text-layer PDF — verify text extraction succeeds
+- [ ] Verify fallback: stop Tesseract (`docker exec backend apt-get remove tesseract-ocr`) → confirm text extraction still works for PDFs/TXT via BasicTextExtractor → reinstall
+- [ ] `GET /health/ready` returns 200 regardless of Tesseract availability
+
+---
+
+## Arabic PDF Export
+
+PDF export for contract intelligence reports now uses **DejaVu Sans** TTF font with **arabic-reshaper** and **python-bidi** for proper Arabic rendering.
+
+### How it works
+
+1. **Font**: DejaVu Sans (`fonts-dejavu-core` package) is installed in the Docker image and registered with reportlab as a TTF font
+2. **Text shaping**: `arabic-reshaper` joins Arabic letters correctly (isolated → connected forms)
+3. **Bidi**: `python-bidi` handles right-to-left text ordering for mixed Arabic/English content
+4. **Fallback**: If DejaVu Sans or bidi packages are not available, the system falls back to Helvetica (English-only rendering)
+
+### Verification
+
+```bash
+# 1. Check font availability in Docker
+docker exec <backend-container> ls /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+
+# 2. Check Python packages
+docker exec <backend-container> python -c "import arabic_reshaper; from bidi.algorithm import get_display; print('OK')"
+
+# 3. Export a PDF report (requires contracts_manager or project_director auth)
+curl -H "Authorization: Bearer <token>" \
+  https://your-domain/api/contract-intelligence/reports/export/pdf -o report.pdf
+
+# 4. Export a single document record
+curl -H "Authorization: Bearer <token>" \
+  https://your-domain/api/contract-intelligence/documents/1/export/pdf -o document_1.pdf
+
+# 5. Open the PDF and verify Arabic text is correctly shaped and readable
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|---------|
+| Arabic text shows as boxes/tofu | Verify `fonts-dejavu-core` is installed in Docker image |
+| Arabic letters not joined | Verify `arabic-reshaper` is installed: `pip list \| grep arabic` |
+| Text direction wrong | Verify `python-bidi` is installed: `pip list \| grep bidi` |
+| PDF export fails | Check backend logs: `docker compose logs backend \| grep PDF` |
+
 ---
 
 ## Security Checklist
@@ -911,10 +966,13 @@ docker compose logs -f backend
 **The `docker-compose.yml` includes:**
 - PostgreSQL with PostGIS (persistent volume)
 - Backend with auto-migration on startup (entrypoint.sh)
-- nginx reverse proxy with rate limiting, security headers, SPA routing
+- nginx reverse proxy with rate limiting (API, auth, uploads), security headers, gzip, SPA routing
 - Health checks for all services
 - Automatic restart on failure
 - Non-root container user for backend
+- Memory limits per service (db: 512M, backend: 1G, nginx: 128M)
+- Tesseract OCR with Arabic support (verified at startup)
+- Arabic PDF export with DejaVu Sans font
 
 **Important Docker notes:**
 - Backend entrypoint auto-runs `alembic upgrade head` on every start

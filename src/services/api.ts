@@ -762,6 +762,20 @@ class ApiService {
     URL.revokeObjectURL(url);
   }
 
+  async downloadDocumentPdf(documentId: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${documentId}/export/pdf`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to download document PDF');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `document_${documentId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');

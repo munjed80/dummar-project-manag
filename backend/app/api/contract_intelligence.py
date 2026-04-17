@@ -62,6 +62,52 @@ ALLOWED_DOC_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".cs
 MAX_DOC_SIZE = 20 * 1024 * 1024  # 20MB
 MAX_IMPORT_ROWS = 500  # Safety limit for bulk import (CSV/Excel)
 BATCH_FAILURE_THRESHOLD = 0.5  # 50% — notify as batch_import_failed if failures exceed this
+MAX_FILENAME_DISPLAY = 40  # Truncation limit for filenames in reports
+
+# ─────────────────────────────────────────────────────────────
+# Arabic PDF helpers (shared by report and document export)
+# ─────────────────────────────────────────────────────────────
+
+try:
+    import arabic_reshaper as _arabic_reshaper
+    from bidi.algorithm import get_display as _bidi_get_display
+    _HAS_BIDI = True
+except ImportError:
+    _HAS_BIDI = False
+
+
+def _shape_arabic(text: str) -> str:
+    """Reshape Arabic text for correct rendering in PDF (joined letters + RTL)."""
+    if not _HAS_BIDI or not text:
+        return text
+    try:
+        reshaped = _arabic_reshaper.reshape(text)
+        return _bidi_get_display(reshaped)
+    except Exception:
+        return text
+
+
+def _register_arabic_font():
+    """
+    Register DejaVu Sans TTF fonts for Arabic PDF rendering.
+    Returns (regular_font_name, bold_font_name).
+    Falls back to Helvetica if DejaVu Sans is not available.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    _font_regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    _font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    if os.path.exists(_font_regular):
+        try:
+            pdfmetrics.registerFont(TTFont("DejaVuSans", _font_regular))
+            pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", _font_bold))
+            return "DejaVuSans", "DejaVuSans-Bold"
+        except Exception:
+            logger.warning("Failed to register DejaVu Sans font — falling back to Helvetica")
+
+    return "Helvetica", "Helvetica-Bold"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1993,15 +2039,16 @@ def export_intelligence_pdf(
     db: Session = Depends(get_db),
 ):
     """
-    Export intelligence report summary as PDF.
-    Uses reportlab (already in requirements.txt).
+    Export intelligence report summary as PDF with proper Arabic rendering.
+    Uses DejaVu Sans TTF font + arabic-reshaper + python-bidi for correct
+    Arabic text display including letter joining and right-to-left order.
     """
     from fastapi.responses import StreamingResponse
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as pdf_canvas
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
+
+    _FONT, _FONT_BOLD = _register_arabic_font()
 
     # Build filtered document query
     doc_query = db.query(ContractDocument)
@@ -2036,11 +2083,17 @@ def export_intelligence_pdf(
     width, height = A4
     y = height - 30 * mm
 
-    # Title
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(30 * mm, y, "Contract Intelligence Report")
+    # Helper: draw a line of text (Arabic-aware)
+    def _draw(text: str, x, y_pos, font=None, size=None):
+        if font:
+            c.setFont(font, size or 10)
+        c.drawString(x, y_pos, _shape_arabic(text))
+
+    # Title (Arabic)
+    c.setFont(_FONT_BOLD, 18)
+    _draw("تقرير ذكاء العقود — مشروع دمّر", 30 * mm, y, _FONT_BOLD, 18)
     y -= 10 * mm
-    c.setFont("Helvetica", 10)
+    c.setFont(_FONT, 10)
     c.drawString(30 * mm, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     y -= 6 * mm
 
@@ -2068,16 +2121,15 @@ def export_intelligence_pdf(
 
     y -= 5 * mm
 
-    # Summary section
-    c.setFont("Helvetica-Bold", 13)
-    c.drawString(30 * mm, y, "Summary")
+    # Summary section (Arabic labels)
+    _draw("ملخص التقرير", 30 * mm, y, _FONT_BOLD, 13)
     y -= 7 * mm
-    c.setFont("Helvetica", 10)
+    c.setFont(_FONT, 10)
 
     summary_items = [
-        f"Total Documents: {total_docs}",
-        f"Total Risk Flags: {total_risks} (Unresolved: {unresolved})",
-        f"Total Duplicate Candidates: {total_dups_pdf}",
+        _shape_arabic(f"إجمالي المستندات: {total_docs}"),
+        _shape_arabic(f"إجمالي المخاطر: {total_risks} (غير محلولة: {unresolved})"),
+        _shape_arabic(f"حالات التكرار المحتملة: {total_dups_pdf}"),
     ]
     for item in summary_items:
         c.drawString(35 * mm, y, item)
@@ -2085,28 +2137,29 @@ def export_intelligence_pdf(
 
     y -= 3 * mm
 
-    # Status breakdown
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(30 * mm, y, "Processing Status")
+    # Status breakdown (Arabic header)
+    _draw("حالة المعالجة", 30 * mm, y, _FONT_BOLD, 12)
     y -= 6 * mm
-    c.setFont("Helvetica", 10)
-    for status, count in sorted(status_breakdown.items()):
-        c.drawString(35 * mm, y, f"{status}: {count}")
+    c.setFont(_FONT, 10)
+    for st, count in sorted(status_breakdown.items()):
+        c.drawString(35 * mm, y, f"{st}: {count}")
         y -= 5 * mm
 
     y -= 3 * mm
 
     # Document list (top 50)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(30 * mm, y, f"Documents (showing up to 50 of {total_docs})")
+    _draw(f"المستندات (حتى 50 من {total_docs})", 30 * mm, y, _FONT_BOLD, 12)
     y -= 6 * mm
-    c.setFont("Helvetica", 8)
+    c.setFont(_FONT, 8)
     for doc in documents[:50]:
         if y < 25 * mm:
             c.showPage()
             y = height - 20 * mm
-            c.setFont("Helvetica", 8)
-        line = f"#{doc.id} | {doc.original_filename[:40]} | {doc.processing_status.value if doc.processing_status else '?'} | {doc.suggested_type or '-'}"
+            c.setFont(_FONT, 8)
+        fname = doc.original_filename[:MAX_FILENAME_DISPLAY] if doc.original_filename else "?"
+        pstatus = doc.processing_status.value if doc.processing_status else "?"
+        stype = doc.suggested_type or "-"
+        line = _shape_arabic(f"#{doc.id} | {fname} | {pstatus} | {stype}")
         c.drawString(30 * mm, y, line)
         y -= 4 * mm
 
@@ -2114,7 +2167,7 @@ def export_intelligence_pdf(
         db, action="intelligence_report_export_pdf",
         entity_type="intelligence_report",
         user_id=current_user.id,
-        description="PDF export",
+        description="PDF export (Arabic-rendered)",
         request=request,
     )
 
@@ -2124,4 +2177,155 @@ def export_intelligence_pdf(
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=intelligence_report.pdf"},
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Individual Document Export (PDF)
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/documents/{document_id}/export/pdf")
+def export_document_pdf(
+    document_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_contracts_manager),
+    db: Session = Depends(get_db),
+):
+    """
+    Export a single contract document intelligence record as PDF.
+    Includes: document metadata, extracted fields, classification,
+    risk flags, duplicate candidates, and summary.
+    """
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    _FONT, _FONT_BOLD = _register_arabic_font()
+
+    doc = db.query(ContractDocument).filter(ContractDocument.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="المستند غير موجود")
+
+    # Fetch related data
+    risks = db.query(ContractRiskFlag).filter(ContractRiskFlag.document_id == doc.id).all()
+    duplicates = db.query(ContractDuplicate).filter(ContractDuplicate.document_id == doc.id).all()
+    fields = fields_from_json(doc.extracted_fields) if doc.extracted_fields else {}
+
+    # Build PDF
+    buffer = io.BytesIO()
+    c = pdf_canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 30 * mm
+
+    def _draw(text, x, y_pos, font=None, size=None):
+        if font:
+            c.setFont(font, size or 10)
+        c.drawString(x, y_pos, _shape_arabic(str(text)))
+
+    def _new_page_if_needed():
+        nonlocal y
+        if y < 30 * mm:
+            c.showPage()
+            y = height - 20 * mm
+            c.setFont(_FONT, 10)
+
+    # Title
+    _draw(f"تقرير مستند #{doc.id}", 30 * mm, y, _FONT_BOLD, 16)
+    y -= 8 * mm
+    _draw(f"الملف: {doc.original_filename or '?'}", 30 * mm, y, _FONT, 10)
+    y -= 5 * mm
+    c.drawString(30 * mm, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    y -= 8 * mm
+
+    # Document info section
+    _draw("معلومات المستند", 30 * mm, y, _FONT_BOLD, 12)
+    y -= 6 * mm
+    c.setFont(_FONT, 10)
+    info_items = [
+        ("الحالة", doc.processing_status.value if doc.processing_status else "?"),
+        ("النوع المُقترح", doc.suggested_type or "-"),
+        ("ثقة التصنيف", f"{round(doc.classification_confidence, 3)}" if doc.classification_confidence else "-"),
+        ("محرك OCR", doc.ocr_engine or "-"),
+        ("ثقة OCR", f"{round(doc.ocr_confidence, 3)}" if doc.ocr_confidence else "-"),
+        ("مصدر الاستيراد", doc.import_source or "-"),
+        ("تاريخ الرفع", doc.created_at.strftime("%Y-%m-%d %H:%M") if doc.created_at else "-"),
+    ]
+    for label, value in info_items:
+        _draw(f"{label}: {value}", 35 * mm, y, _FONT, 10)
+        y -= 5 * mm
+        _new_page_if_needed()
+
+    y -= 3 * mm
+
+    # Extracted fields
+    if fields:
+        _draw("الحقول المستخرجة", 30 * mm, y, _FONT_BOLD, 12)
+        y -= 6 * mm
+        c.setFont(_FONT, 10)
+        for key, value in fields.items():
+            _draw(f"{key}: {value}", 35 * mm, y, _FONT, 10)
+            y -= 5 * mm
+            _new_page_if_needed()
+        y -= 3 * mm
+
+    # Summary
+    if doc.auto_summary:
+        _new_page_if_needed()
+        _draw("الملخص التلقائي", 30 * mm, y, _FONT_BOLD, 12)
+        y -= 6 * mm
+        c.setFont(_FONT, 9)
+        # Word-wrap the summary
+        summary_text = doc.auto_summary
+        line_width = 120
+        for i in range(0, len(summary_text), line_width):
+            chunk = summary_text[i:i + line_width]
+            c.drawString(35 * mm, y, _shape_arabic(chunk))
+            y -= 4.5 * mm
+            _new_page_if_needed()
+        y -= 3 * mm
+
+    # Risk flags
+    if risks:
+        _new_page_if_needed()
+        _draw(f"المخاطر ({len(risks)})", 30 * mm, y, _FONT_BOLD, 12)
+        y -= 6 * mm
+        c.setFont(_FONT, 9)
+        for risk in risks:
+            _new_page_if_needed()
+            sev = risk.severity.value if risk.severity else "?"
+            resolved = "محلولة" if risk.is_resolved else "غير محلولة"
+            _draw(f"- [{sev}] {risk.risk_type}: {(risk.description or '')[:80]} ({resolved})", 35 * mm, y, _FONT, 9)
+            y -= 4.5 * mm
+        y -= 3 * mm
+
+    # Duplicates
+    if duplicates:
+        _new_page_if_needed()
+        _draw(f"حالات التكرار ({len(duplicates)})", 30 * mm, y, _FONT_BOLD, 12)
+        y -= 6 * mm
+        c.setFont(_FONT, 9)
+        for dup in duplicates:
+            _new_page_if_needed()
+            dup_status = dup.status.value if dup.status else "?"
+            sim = f"{round(dup.similarity_score, 2)}" if dup.similarity_score else "?"
+            _draw(f"- Contract {dup.contract_id_a or '?'} vs {dup.contract_id_b or '?'} | Score: {sim} | {dup_status}", 35 * mm, y, _FONT, 9)
+            y -= 4.5 * mm
+
+    write_audit_log(
+        db, action="intelligence_document_export_pdf",
+        entity_type="contract_document",
+        entity_id=doc.id,
+        user_id=current_user.id,
+        description=f"Individual document PDF export: {doc.original_filename}",
+        request=request,
+    )
+
+    c.save()
+    buffer.seek(0)
+    safe_name = (doc.original_filename or "document").replace(" ", "_")[:MAX_FILENAME_DISPLAY]
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=document_{doc.id}_{safe_name}.pdf"},
     )

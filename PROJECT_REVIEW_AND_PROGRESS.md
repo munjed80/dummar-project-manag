@@ -11,6 +11,74 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T14:08
+- **فهم النظام الحالي:**
+  - 201 اختبار ناجح (76 API + 43 E2E + 82 contract intelligence)، بناء الواجهة ناجح
+  - Contract Intelligence Center مكتمل مع full pipeline, reports, CSV/PDF export, filters, time-series
+  - PDF export exists but uses Helvetica font — Arabic text does not render correctly
+  - DejaVu Sans TTF font available on system and supports Arabic glyphs
+  - arabic-reshaper + python-bidi needed for proper Arabic text shaping in reportlab
+  - Docker deployment stack exists (db + backend + nginx) but needs hardening
+  - Tesseract integration works in Docker but is not verified in CI
+  - Production deployment guide exists but needs improvement for operator handoff
+- **أهداف الدفعة:**
+  1. Proper Arabic PDF export with real TTF font (DejaVu Sans) + arabic-reshaper + python-bidi
+  2. Production deployment hardening (Dockerfile fonts, docker-compose improvements, deployment guide)
+  3. Real Tesseract OCR verification path in production stack
+  4. Optional individual document/record export endpoint
+  5. Preserve RBAC, audit logging, and test quality
+- **الملفات المتوقع تعديلها:**
+  - backend/app/api/contract_intelligence.py (Arabic PDF rendering rewrite, individual export)
+  - backend/requirements.txt (add arabic-reshaper, python-bidi)
+  - backend/Dockerfile (add fonts-dejavu-core for Arabic PDF)
+  - docker-compose.yml (deployment hardening)
+  - nginx.conf (improvements)
+  - backend/entrypoint.sh (improvements)
+  - backend/tests/test_contract_intelligence.py (new tests)
+  - PRODUCTION_DEPLOYMENT_GUIDE.md (Tesseract + deployment improvements)
+  - PROJECT_REVIEW_AND_PROGRESS.md (batch log)
+  - HANDOFF_STATUS.md (update)
+- **المخاطر/العوائق:**
+  - DejaVu Sans supports Arabic glyphs but reportlab needs arabic-reshaper for proper letter joining
+  - python-bidi needed for correct right-to-left display order
+  - Tesseract binary not available in CI — tests must handle gracefully
+  - Full OCR verification only possible inside Docker container
+
+**بعد الانتهاء:**
+- **الحالة:** ✅ مكتمل بالكامل
+- **الاختبارات:** 205 ناجح (201 سابق + 4 جديد)
+- **بناء الواجهة:** ناجح
+- **الملفات المُعدّلة فعلياً:**
+  - `backend/app/api/contract_intelligence.py` — Arabic PDF export rewrite (DejaVu Sans + arabic-reshaper + python-bidi), individual document PDF export endpoint
+  - `backend/requirements.txt` — added arabic-reshaper==3.0.0, python-bidi==0.6.7
+  - `backend/Dockerfile` — added fonts-dejavu-core package
+  - `docker-compose.yml` — added memory limits for all services
+  - `nginx.conf` — added gzip, auth rate limiting, upload rate limiting with extended timeout, client_max_body_size 20M
+  - `backend/entrypoint.sh` — added Tesseract + Arabic font verification at startup
+  - `backend/tests/test_contract_intelligence.py` — 4 new tests (Arabic PDF, individual doc export, 404, RBAC)
+  - `src/services/api.ts` — added downloadDocumentPdf() method
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — added Arabic PDF section, Tesseract verification checklist, updated Docker features
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — full update
+- **القرارات الهندسية:**
+  - DejaVu Sans chosen over Noto/Amiri because it's available in Debian default package (fonts-dejavu-core), supports Arabic glyphs, and has matching Bold variant
+  - arabic-reshaper used for proper Arabic letter joining (isolated→connected forms) since reportlab doesn't do this natively
+  - python-bidi used for correct RTL display order in PDF (drawString is LTR by default)
+  - Font registration uses graceful fallback: if DejaVu Sans not found, Helvetica is used (English-only but still valid PDF)
+  - Individual document export includes: metadata, extracted fields, classification, summary, risks, duplicates
+  - nginx auth_limit (10r/s) added separately from api_limit (30r/s) for login endpoint protection
+  - Upload timeout extended to 300s for contract intelligence bulk imports
+  - Memory limits: db 512M, backend 1G, nginx 128M — conservative for small VPS
+- **الفجوات المتبقية:**
+  - Tesseract binary not available in CI (only in Docker) — tests detect and handle gracefully
+  - Full OCR verification with real scanned documents only possible in Docker deployment
+  - No SSL/TLS (Let's Encrypt) setup — requires real domain and server
+
+---
+
 ### الدفعة: 2026-04-17T13:27 — Intelligence Export, Filters, Extraction & Production Readiness
 
 **قبل البدء:**
