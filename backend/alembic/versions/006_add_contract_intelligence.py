@@ -58,7 +58,7 @@ def upgrade() -> None:
         sa.Column('severity', sa.Enum('LOW', 'MEDIUM', 'HIGH', 'CRITICAL', name='riskseverity'), nullable=False),
         sa.Column('description', sa.Text(), nullable=False),
         sa.Column('details', sa.Text(), nullable=True),
-        sa.Column('is_resolved', sa.Boolean(), default=False),
+        sa.Column('is_resolved', sa.Boolean(), server_default=sa.text('false')),
         sa.Column('resolved_by_id', sa.Integer(), nullable=True),
         sa.Column('resolved_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('resolution_notes', sa.Text(), nullable=True),
@@ -97,3 +97,6 @@ def downgrade() -> None:
     op.drop_table('contract_duplicates')
     op.drop_table('contract_risk_flags')
     op.drop_table('contract_documents')
+    op.execute('DROP TYPE IF EXISTS duplicatestatus')
+    op.execute('DROP TYPE IF EXISTS riskseverity')
+    op.execute('DROP TYPE IF EXISTS documentprocessingstatus')
