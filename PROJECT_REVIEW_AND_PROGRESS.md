@@ -51,6 +51,40 @@
   - Full deployment can only be verified in a real VPS environment
   - Docker compose up cannot run in this CI environment
 
+**بعد الانتهاء:**
+- **الحالة:** ✅ مكتمل (مع عناصر جزئية موثقة بوضوح)
+- **الاختبارات:** 207 ناجح (205 سابق + 2 جديد)
+- **بناء الواجهة:** ناجح
+- **الملفات المُعدّلة فعلياً:**
+  - `deploy.sh` — **جديد** — automated VPS deployment script with pre-flight checks, frontend build, Docker compose, health verification, seed data
+  - `ssl-setup.sh` — **جديد** — Let's Encrypt certificate acquisition with DNS validation, auto-renewal cron, Docker integration
+  - `nginx-ssl.conf` — **جديد** — production SSL nginx config with TLS 1.2+1.3, HSTS, OCSP stapling, ACME challenge
+  - `docker-compose.yml` — added port 443, letsencrypt volume comments for SSL
+  - `backend/entrypoint.sh` — added SMTP configuration check at startup
+  - `backend/app/api/health.py` — added GET /health/ocr endpoint with Arabic text verification
+  - `backend/tests/test_api.py` — 2 new tests (OCR health auth, OCR health status)
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — SSL/TLS section, VPS deployment checklist, deploy.sh docs, health endpoints table updated
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log with before/after
+  - `HANDOFF_STATUS.md` — full update
+- **القرارات الهندسية:**
+  - deploy.sh generates .env with random secrets if missing (safer than default passwords)
+  - SSL nginx config uses DOMAIN_PLACEHOLDER for easy sed replacement
+  - Let's Encrypt cert symlinked to ./certs/ for Docker volume stability
+  - OCR health endpoint tests Arabic text processing inline (no external files needed)
+  - SMTP startup check in entrypoint is informational (never blocks startup)
+  - Port 443 exposed in docker-compose by default (harmless without SSL cert)
+- **نتائج التحقق:**
+  - Arabic OCR: Tesseract 5.3.4 with ara+eng languages verified. 5/6 Arabic tokens correctly extracted from generated contract image. Text file processing 100% accurate.
+  - SMTP: Startup check implemented, production test path documented with exact endpoints and flow
+  - SSL/TLS: Complete setup path implemented (cannot issue cert without real domain)
+  - Deployment: deploy.sh tested for syntax/logic, cannot run Docker compose in CI
+  - Tests: 207 pass, frontend builds cleanly
+- **الفجوات المتبقية:**
+  - SSL/TLS: Cannot issue real certificate (requires real domain + DNS) — Partial
+  - SMTP: Cannot test with real SMTP server (requires live SMTP credentials) — Partial
+  - Docker compose: Cannot run full stack in CI environment — Partial
+  - Real scanned document OCR: Verified with generated image, not with real scanned paper document — Partial
+
 ---
 
 ### الدفعة: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification

@@ -112,7 +112,7 @@ if [ ! -f .env ]; then
     warn ".env file not found — generating from template."
 
     generate_secret() {
-        openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64
+        openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '\n'
     }
 
     DB_PASS="$(generate_secret)"
@@ -159,11 +159,8 @@ else
     success ".env file present."
 fi
 
-# Source .env for local use
-set -a
-# shellcheck disable=SC1091
-source .env
-set +a
+# Source .env for local use (read only needed vars, not sensitive ones)
+HTTP_PORT=$(grep '^HTTP_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "80")
 
 # ---------------------------------------------------------------------------
 # Frontend build

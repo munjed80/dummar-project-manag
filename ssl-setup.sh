@@ -192,7 +192,8 @@ success "Symlinks created in $DOCKER_CERT_DIR/"
 # ---------------------------------------------------------------------------
 step "Configuring automatic renewal"
 
-CRON_JOB="0 3 * * * certbot renew --quiet --deploy-hook 'docker compose -f $(pwd)/docker-compose.yml exec -T nginx nginx -s reload' >> /var/log/letsencrypt-renew.log 2>&1"
+PROJECT_DIR="$(pwd)"
+CRON_JOB="0 3 * * * certbot renew --quiet --deploy-hook 'docker compose -f ${PROJECT_DIR}/docker-compose.yml exec -T nginx nginx -s reload' >> /var/log/letsencrypt-renew.log 2>&1"
 
 # Add cron job if it doesn't already exist
 if crontab -l 2>/dev/null | grep -qF "certbot renew"; then

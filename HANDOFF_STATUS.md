@@ -1,24 +1,23 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T14:30
+## آخر تحديث: 2026-04-17T21:45
 
 ---
 
-## الدفعة الحالية: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification
+## الدفعة الحالية: 2026-04-17T21:21 — Real VPS Deployment, SSL/TLS, SMTP Verification, OCR Verification & Production Polish
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `backend/app/api/contract_intelligence.py` | إعادة كتابة: PDF export مع DejaVu Sans + arabic-reshaper + python-bidi، إضافة individual document PDF export |
-| `backend/requirements.txt` | إضافة: arabic-reshaper==3.0.0, python-bidi==0.6.7 |
-| `backend/Dockerfile` | إضافة: fonts-dejavu-core لدعم خط عربي في PDF |
-| `docker-compose.yml` | تحسين: memory limits لجميع الخدمات |
-| `nginx.conf` | تحسين: gzip, auth rate limiting, upload timeout 300s, client_max_body_size 20M |
-| `backend/entrypoint.sh` | تحسين: Tesseract + Arabic font verification عند بدء التشغيل |
-| `backend/tests/test_contract_intelligence.py` | 4 اختبارات جديدة (Arabic PDF, individual export, 404, RBAC) |
-| `src/services/api.ts` | إضافة: downloadDocumentPdf() method |
-| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: Arabic PDF section, Tesseract verification checklist |
+| `deploy.sh` | **جديد** — automated VPS deployment script with pre-flight checks, .env generation, frontend build, Docker compose, health verification |
+| `ssl-setup.sh` | **جديد** — Let's Encrypt SSL setup with DNS validation, certbot, auto-renewal cron |
+| `nginx-ssl.conf` | **جديد** — SSL nginx config with TLS 1.2+1.3, HSTS, OCSP stapling, ACME challenge |
+| `docker-compose.yml` | تحسين: added port 443, letsencrypt volume comments for SSL mode |
+| `backend/entrypoint.sh` | تحسين: SMTP configuration visibility check at startup |
+| `backend/app/api/health.py` | إضافة: GET /health/ocr endpoint with Arabic text processing verification |
+| `backend/tests/test_api.py` | 2 اختبارات جديدة (OCR health auth, OCR health status) |
+| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: SSL/TLS section, VPS deployment checklist, deploy.sh docs, health endpoints table |
 | `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
@@ -28,74 +27,74 @@
 
 ### ✅ مكتمل ومُتحقق منه:
 
-**A) Proper Arabic PDF Export:**
-- ✅ DejaVu Sans TTF font مُسجّل في reportlab (Regular + Bold)
-- ✅ arabic-reshaper يربط الحروف العربية بشكل صحيح (معزولة → متصلة)
-- ✅ python-bidi يعالج اتجاه النص من اليمين لليسار
-- ✅ عنوان التقرير بالعربية: "تقرير ذكاء العقود — مشروع دمّر"
-- ✅ تسميات الأقسام بالعربية: ملخص التقرير، حالة المعالجة، المستندات
-- ✅ محتوى مختلط عربي/إنجليزي يظهر بشكل صحيح
-- ✅ Fallback لـ Helvetica إذا DejaVu Sans غير متوفر (PDF صالح لكن بدون عربي)
-- ✅ fonts-dejavu-core مُثبّت في Dockerfile
-- ✅ اختبار يتحقق من إنشاء PDF صالح مع محتوى عربي
-- ✅ Audit logging محفوظ
+**A) Real VPS Deployment Support:**
+- ✅ `deploy.sh` — automated deployment script with pre-flight checks, .env generation, frontend build, Docker compose up, health verification, seed data loading
+- ✅ `docker-compose.yml` — port 443 exposed, letsencrypt volume ready (commented)
+- ✅ `entrypoint.sh` — SMTP configuration check at startup, OCR + font checks preserved
+- ✅ `PRODUCTION_DEPLOYMENT_GUIDE.md` — VPS deployment checklist, deploy.sh documentation
+- ✅ Backend health checks: GET /health, /health/ready, /health/detailed, /health/smtp, /health/ocr
+- ✅ Deployment path is realistic for a fresh VPS
 
-**B) Production Deployment Hardening:**
-- ✅ docker-compose.yml: memory limits (db: 512M, backend: 1G, nginx: 128M)
-- ✅ nginx.conf: gzip compression لأنواع الملفات الشائعة
-- ✅ nginx.conf: auth_limit zone منفصل (10r/s) لحماية نقطة تسجيل الدخول
-- ✅ nginx.conf: upload rate limiting مع timeout ممتد (300s) لاستيراد العقود
-- ✅ nginx.conf: client_max_body_size 20M (يتطابق مع حد contract intelligence)
-- ✅ entrypoint.sh: Tesseract version + languages verification عند بدء التشغيل
-- ✅ entrypoint.sh: Arabic PDF font availability check
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Arabic PDF section كامل مع verification + troubleshooting
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Tesseract Production Verification Checklist مفصّل
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Updated Docker features list
+**B) SSL/TLS Setup Path with Let's Encrypt:**
+- ✅ `ssl-setup.sh` — complete certbot flow: DNS validation, certificate acquisition, Docker integration, auto-renewal cron
+- ✅ `nginx-ssl.conf` — TLS 1.2+1.3, strong ciphers (CHACHA20+AES-GCM), HSTS, OCSP stapling, HTTP→HTTPS redirect, ACME challenge
+- ✅ DOMAIN_PLACEHOLDER for easy sed replacement
+- ✅ Documentation: exact DNS requirements, quick setup steps, renewal testing
+- ⚠️ Cannot issue real certificate (requires real domain + DNS) — documented
 
-**C) Real Tesseract OCR Verification Path:**
-- ✅ Dockerfile يثبّت: tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils + fonts-dejavu-core
-- ✅ entrypoint.sh يتحقق من Tesseract version + languages عند كل بدء تشغيل
-- ✅ get_ocr_status() API يعرض: engine, tesseract_version, tesseract_languages
-- ✅ is_tesseract_available() يكتشف: Python package + system binary مع caching
-- ✅ Graceful fallback: BasicTextExtractor يعمل تلقائياً بدون Tesseract
-- ✅ CI tests تمر بدون Tesseract binary (detection + fallback tested)
-- ✅ Production verification checklist مُفصّل في PRODUCTION_DEPLOYMENT_GUIDE.md
+**C) Real SMTP Verification Path:**
+- ✅ `entrypoint.sh` — SMTP configuration check at startup with clear status messages
+- ✅ `GET /health/smtp` — SMTP connection test (requires staff auth)
+- ✅ `GET /health/detailed` — includes SMTP status
+- ✅ `POST /health/smtp/test-send` — sends real test email (requires staff auth + SMTP_ENABLED)
+- ✅ SMTP disabled by default (SMTP_ENABLED=false)
+- ✅ Email failures never break operational workflows
+- ✅ Deduplication guard (5min window)
+- ✅ TLS fallback (port 465=SSL, 587=STARTTLS)
+- ✅ Production verification checklist in PRODUCTION_DEPLOYMENT_GUIDE.md
+- ⚠️ Cannot test with real SMTP server (CI environment limitation)
 
-**D) Individual Document Export:**
-- ✅ GET /contract-intelligence/documents/{id}/export/pdf — PDF export لمستند واحد
-- ✅ يتضمن: metadata, extracted fields, classification, summary, risks, duplicates
-- ✅ Arabic rendering بنفس جودة التقرير العام
-- ✅ RBAC: contracts_manager + project_director فقط
-- ✅ Audit logging: intelligence_document_export_pdf
-- ✅ 3 اختبارات: export success, 404, RBAC denied
-- ✅ Frontend API method: downloadDocumentPdf()
+**D) Real Arabic Scanned OCR Verification:**
+- ✅ Tesseract 5.3.4 installed and verified with `ara+eng` languages
+- ✅ Arabic contract image OCR tested: 5/6 key tokens correctly extracted (عقد، شركة، قيمة، ليرة، تاريخ)
+- ✅ Arabic text file processing: 100% accurate
+- ✅ `GET /health/ocr` — new endpoint with Arabic text processing verification
+- ✅ OCR engine auto-detection works: TesseractEngine when available, BasicTextExtractor fallback
+- ✅ `get_ocr_status()` API shows engine, version, languages, supported formats
+- ✅ Dockerfile includes tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils
+- ✅ Graceful fallback preserved
+- ⚠️ Tested with programmatically generated Arabic image, not with real scanned paper document
 
-**E) Operational Trust:**
-- ✅ RBAC سليم: contracts_manager + project_director لجميع النقاط الجديدة
-- ✅ Audit logging: intelligence_report_export_pdf, intelligence_document_export_pdf
-- ✅ Code في English، UI عربي RTL
-- ✅ لا توجد placeholders مزيفة
+**E) Final Production Verification:**
+- ✅ 207 backend tests pass (205 → 207)
+- ✅ Frontend builds successfully
+- ✅ RBAC strict (project_director/contracts_manager for sensitive endpoints)
+- ✅ Audit logging intact (20+ event types)
+- ✅ Arabic-first RTL UI preserved
+- ✅ Health/readiness endpoints verified
+- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md comprehensive with 23 sections including SSL, VPS checklist
 
 ### المقاييس:
-- **اختبارات الخلفية:** 205 ناجح (201 سابق + 4 جديد)
+- **اختبارات الخلفية:** 207 ناجح (205 سابق + 2 جديد)
 - **بناء الواجهة:** ناجح
-- **ملفات مُعدّلة:** 11
-- **نقاط نهاية API جديدة:** 1 (documents/{id}/export/pdf)
-- **حزم Python جديدة:** 2 (arabic-reshaper, python-bidi)
-- **حزم نظام جديدة:** 1 (fonts-dejavu-core)
+- **ملفات مُعدّلة:** 10
+- **نقاط نهاية API جديدة:** 1 (GET /health/ocr)
+- **ملفات جديدة:** 3 (deploy.sh, ssl-setup.sh, nginx-ssl.conf)
 
 ### ⚠️ جزئي:
-- **Tesseract في CI:** Binary غير متوفر — المحرك يكتشف ذلك ويعود لـ BasicTextExtractor. في Docker production يعمل بالكامل. Startup logs تتحقق من الحالة.
-- **Arabic PDF rendering:** Verified with arabic-reshaper + python-bidi + DejaVu Sans. Letter joining and RTL ordering confirmed in test environment. Full visual verification requires opening the generated PDF.
+- **SSL/TLS:** Complete setup path implemented (scripts, config, docs). Cannot issue real certificate without real domain + DNS. Marked as Partial.
+- **SMTP:** Complete verification path implemented (startup check, health endpoints, test-send, production checklist). Cannot test with real SMTP server in CI. Marked as Partial.
+- **OCR Arabic scanned:** Tesseract verified with generated Arabic image (5/6 tokens correct). Real scanned paper document verification only possible in Docker with actual scans. Marked as Partial.
+- **Docker deployment:** Scripts and config complete. Cannot run `docker compose up` in CI. Marked as Partial.
 
 ---
 
 ## الدفعة التالية المُقترحة:
-1. نشر فعلي على خادم إنتاج — اختبار النظام الكامل مع Docker
-2. SSL/TLS setup مع Let's Encrypt
-3. اختبار SMTP مع خادم حقيقي
-4. تحسين extraction باستخدام ML (اختياري، يتطلب training data)
-5. اختبار بيانات حقيقية (Arabic scanned contracts) مع Tesseract
+1. نشر فعلي على VPS حقيقي — تشغيل deploy.sh + ssl-setup.sh
+2. اختبار SMTP مع خادم حقيقي — POST /health/smtp/test-send + trigger real workflows
+3. اختبار OCR مع وثائق مسحوبة ضوئياً حقيقية (عقود عربية مسحوبة بالماسح الضوئي)
+4. اختبار أداء على الخادم الحقيقي — python -m tests.load_test
+5. تحسين UI/UX بناءً على ملاحظات المستخدمين
 6. تكامل مع أنظمة خارجية (إن وُجدت)
 
 ---

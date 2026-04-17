@@ -298,9 +298,10 @@ def ocr_health_check(
             finally:
                 os.unlink(temp_path)
         except Exception as e:
+            logger.exception("OCR Arabic verification check failed")
             arabic_verification = {
                 "status": "error",
-                "message": f"Arabic verification failed: {str(e)[:200]}",
+                "message": "Arabic verification failed. Check server logs for details.",
             }
 
     status["arabic_verification"] = arabic_verification
