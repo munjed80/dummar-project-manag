@@ -20,11 +20,15 @@
 12. [Tesseract OCR Setup (Contract Intelligence)](#tesseract-ocr-setup-contract-intelligence)
 13. [Arabic PDF Export](#arabic-pdf-export)
 14. [Security Checklist](#security-checklist)
-15. [CI/CD Pipeline](#cicd-pipeline)
-16. [Rollback & Migration Caution](#rollback--migration-caution)
-17. [Monitoring & Observability](#monitoring--observability)
-18. [Audit Trail](#audit-trail)
-19. [Troubleshooting](#troubleshooting)
+15. [SSL/TLS Setup with Let's Encrypt](#ssltls-setup-with-lets-encrypt)
+16. [CI/CD Pipeline](#cicd-pipeline)
+17. [Rollback & Migration Caution](#rollback--migration-caution)
+18. [Monitoring & Observability](#monitoring--observability)
+19. [Audit Trail](#audit-trail)
+20. [Troubleshooting](#troubleshooting)
+21. [Docker Deployment (Primary)](#docker-deployment-primary)
+22. [Load / Performance Testing](#load--performance-testing)
+23. [VPS Deployment Checklist](#vps-deployment-checklist)
 
 ---
 
@@ -681,6 +685,91 @@ curl -H "Authorization: Bearer <token>" \
 
 ---
 
+## SSL/TLS Setup with Let's Encrypt
+
+The project includes ready-to-use scripts and configuration for securing the platform with HTTPS.
+
+### Prerequisites
+
+1. A registered domain name (e.g., `dummar.example.com`)
+2. An A record pointing the domain to your server's public IP
+3. Port 80 and 443 open in your firewall
+4. `certbot` installed on the server
+
+### Quick Setup
+
+```bash
+# 1. Install certbot
+sudo apt update && sudo apt install -y certbot
+
+# 2. Ensure DNS is configured (A record → your server IP)
+dig +short dummar.example.com  # Should show your server IP
+
+# 3. Run the SSL setup script
+sudo ./ssl-setup.sh dummar.example.com
+
+# 4. Switch to SSL nginx config
+cp nginx-ssl.conf nginx.conf
+sed -i 's/DOMAIN_PLACEHOLDER/dummar.example.com/g' nginx.conf
+
+# 5. Update docker-compose.yml — uncomment the letsencrypt volume:
+#   volumes:
+#     - /etc/letsencrypt:/etc/letsencrypt:ro
+#     - /var/www/certbot:/var/www/certbot:ro
+
+# 6. Update CORS_ORIGINS in .env
+# CORS_ORIGINS=https://dummar.example.com
+
+# 7. Restart nginx
+docker compose up -d --build nginx
+```
+
+### Files Provided
+
+| File | Purpose |
+|------|---------|
+| `ssl-setup.sh` | Automated Let's Encrypt certificate acquisition + renewal setup |
+| `nginx-ssl.conf` | Production SSL nginx config (copy to `nginx.conf` after setup) |
+| `nginx.conf` | Default HTTP-only config (used before SSL is set up) |
+
+### SSL Configuration Details
+
+The `nginx-ssl.conf` includes:
+- TLS 1.2 and 1.3 only (no legacy protocols)
+- Strong cipher suites (CHACHA20, AES-GCM)
+- HSTS header (Strict-Transport-Security) with 2-year max-age
+- OCSP stapling for faster TLS handshakes
+- HTTP → HTTPS redirect on port 80
+- Let's Encrypt ACME challenge path for certificate renewal
+- All existing rate limiting, security headers, and proxy rules
+
+### Certificate Renewal
+
+The `ssl-setup.sh` script sets up automatic renewal via cron:
+- Runs daily at 03:00 via `certbot renew`
+- Automatically reloads nginx after renewal
+- Logged to `/var/log/letsencrypt-renew.log`
+
+To test renewal manually:
+```bash
+sudo certbot renew --dry-run
+```
+
+### DNS Requirements
+
+Before running `ssl-setup.sh`, ensure your domain's DNS is configured:
+
+| Record Type | Name | Value |
+|-------------|------|-------|
+| A | `dummar.example.com` | `<your-server-ip>` |
+
+DNS propagation can take up to 48 hours. Verify with:
+```bash
+dig +short dummar.example.com
+```
+
+---
+
 ## CI/CD Pipeline
 
 The project includes a GitHub Actions CI pipeline (`.github/workflows/ci.yml`) that runs on push and pull request:
@@ -756,6 +845,7 @@ alembic history
 | `GET /health/detailed` | No         | Checks DB + SMTP connectivity with latency      |
 | `GET /health/ready` | No            | Readiness probe — returns 503 if DB unreachable  |
 | `GET /health/smtp`  | Yes (staff)   | Tests SMTP connection + authentication           |
+| `GET /health/ocr`   | Yes (staff)   | OCR engine status + Arabic text verification     |
 | `GET /metrics`      | No            | Uptime, request counts, version info             |
 
 ### Structured Request Logging
@@ -928,7 +1018,32 @@ npm run build
 
 ## Docker Deployment (Primary)
 
-The recommended production deployment uses `docker-compose.yml` with three services: **db** (PostgreSQL), **backend** (FastAPI), and **nginx** (reverse proxy):
+The recommended production deployment uses `docker-compose.yml` with three services: **db** (PostgreSQL), **backend** (FastAPI), and **nginx** (reverse proxy).
+
+### Automated Deployment
+
+Use the included `deploy.sh` script for streamlined deployment:
+
+```bash
+# First-time deployment with seed data
+./deploy.sh --seed
+
+# Update existing deployment
+./deploy.sh
+
+# Force rebuild all images
+./deploy.sh --rebuild
+```
+
+The script handles:
+- Pre-flight checks (Docker, Compose, Node.js)
+- `.env` generation with random secrets (if missing)
+- Frontend build (`npm ci && npm run build`)
+- Docker image build and service startup
+- Health check verification
+- Seed data loading (first deployment only)
+
+### Manual Deployment
 
 ```bash
 # 1. Clone and configure
@@ -1027,3 +1142,63 @@ The tool outputs a table with avg/p95/min/max response times, error counts, and 
 - Dashboard stats: < 300ms average (aggregation queries)
 
 If any endpoint exceeds 500ms average, investigate database query performance and consider adding indexes.
+
+---
+
+## VPS Deployment Checklist
+
+Use this checklist when deploying to a new VPS for the first time:
+
+### Server Preparation
+
+- [ ] Ubuntu 22.04+ or Debian 12+ installed
+- [ ] SSH access configured
+- [ ] Non-root sudo user created
+- [ ] Firewall configured (ports 22, 80, 443 only)
+- [ ] Docker and Docker Compose installed
+- [ ] Node.js 20+ installed (for frontend build)
+- [ ] Git installed
+- [ ] Domain name registered and DNS A record pointing to server IP
+
+### Initial Deployment
+
+- [ ] Clone repository to `/var/www/dummar`
+- [ ] Run `./deploy.sh --seed` for first deployment
+- [ ] Verify `curl http://localhost/api/health/ready` returns 200
+- [ ] Verify `curl http://localhost/api/health/detailed` shows healthy
+- [ ] Login with default admin credentials and **change password immediately**
+- [ ] Change all seed user passwords
+
+### SSL/TLS Setup
+
+- [ ] Install certbot: `sudo apt install certbot`
+- [ ] Run `sudo ./ssl-setup.sh your-domain.com`
+- [ ] Copy SSL config: `cp nginx-ssl.conf nginx.conf`
+- [ ] Replace domain: `sed -i 's/DOMAIN_PLACEHOLDER/your-domain.com/g' nginx.conf`
+- [ ] Uncomment letsencrypt volume in `docker-compose.yml`
+- [ ] Update `CORS_ORIGINS` in `.env` to `https://your-domain.com`
+- [ ] Restart: `docker compose up -d --build nginx`
+- [ ] Verify HTTPS: `curl -I https://your-domain.com`
+
+### SMTP Configuration (Optional)
+
+- [ ] Set `SMTP_ENABLED=true` in `.env`
+- [ ] Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+- [ ] Restart backend: `docker compose restart backend`
+- [ ] Verify: `GET /health/smtp` returns `"status": "ok"`
+- [ ] Test email: `POST /health/smtp/test-send` with test email address
+- [ ] Trigger a real workflow (complaint status change) and verify email delivery
+
+### Post-Deployment Verification
+
+- [ ] All health endpoints return expected status
+- [ ] Login works for all roles
+- [ ] Complaint creation and status flow works
+- [ ] Task assignment and completion works
+- [ ] Contract approval flow works
+- [ ] File upload works
+- [ ] Arabic RTL UI renders correctly
+- [ ] OCR status shows Tesseract available: `GET /health/ocr`
+- [ ] PDF export produces readable Arabic content
+- [ ] Audit logs are recording actions
+- [ ] Backup strategy implemented (database + uploads)

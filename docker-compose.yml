@@ -5,8 +5,11 @@ services:
       POSTGRES_USER: dummar
       POSTGRES_PASSWORD: ${DB_PASSWORD:-dummar_password}
       POSTGRES_DB: dummar_db
-    ports:
-      - "5432:5432"
+    # Port NOT exposed externally for security.
+    # To access DB from the host, use: docker compose exec db psql -U dummar dummar_db
+    # Uncomment only for local development:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -66,10 +69,16 @@ services:
     image: nginx:alpine
     ports:
       - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./dist:/usr/share/nginx/html:ro
       - backend_uploads:/usr/share/nginx/uploads:ro
+      # SSL certificates — mount Let's Encrypt directory when available
+      # To enable SSL: run ssl-setup.sh, copy nginx-ssl.conf → nginx.conf,
+      # and uncomment the letsencrypt volume below:
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      # - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       backend:
         condition: service_healthy

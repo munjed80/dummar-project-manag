@@ -581,6 +581,22 @@ class TestHealthEndpoints:
         data = resp.json()
         assert data["status"] == "disabled"
 
+    def test_ocr_health_requires_auth(self, client):
+        """OCR health endpoint requires authentication."""
+        resp = client.get("/health/ocr")
+        assert resp.status_code in (401, 403)
+
+    def test_ocr_health_returns_status(self, client, director_token):
+        """OCR health returns engine status and supported formats."""
+        resp = client.get("/health/ocr", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "engine" in data
+        assert "tesseract_available" in data
+        assert "supported_formats" in data
+        assert "arabic_verification" in data
+        assert data["supported_formats"]["always"] == ["pdf (text-layer)", "txt", "csv"]
+
 
 # ---------------------------------------------------------------------------
 # 13. Area boundary update + DB-backed boundaries

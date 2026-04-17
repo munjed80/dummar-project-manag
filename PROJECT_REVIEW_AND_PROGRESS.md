@@ -11,6 +11,138 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T21:45 — UI/UX Improvements, Load Test Enhancement, Deploy Hardening, OCR Verification
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T21:45
+- **فهم النظام الحالي:**
+  - 207 اختبار ناجح، بناء الواجهة ناجح
+  - Previous batch completed: VPS deployment scripts, SSL/TLS setup, SMTP verification path, OCR health endpoint
+  - Dashboard shows raw English status keys (new, under_review, etc.) instead of Arabic labels
+  - Login page displays hardcoded default credentials (security concern for production)
+  - Settings page lacks system health visibility for admins
+  - Load test covers 7 core endpoints but not contract intelligence
+  - deploy.sh says Node.js 18+ but project requires Node.js 20+
+- **أهداف الدفعة:**
+  1. UI/UX: Arabic status labels + progress bars on Dashboard
+  2. UI/UX: Remove hardcoded credentials from Login page
+  3. UI/UX: Add system health panel to Settings page for admins
+  4. UI/UX: Quick navigation buttons on Dashboard
+  5. Load test: Add contract intelligence endpoints
+  6. Deploy: Fix Node.js version requirement + SSL hint
+  7. OCR: Verify Tesseract Arabic OCR with pytesseract + Pillow
+- **الملفات المتوقع تعديلها:**
+  - src/pages/DashboardPage.tsx
+  - src/pages/LoginPage.tsx
+  - src/pages/SettingsPage.tsx
+  - backend/tests/load_test.py
+  - deploy.sh
+  - PROJECT_REVIEW_AND_PROGRESS.md
+  - HANDOFF_STATUS.md
+
+**بعد الانتهاء:**
+- **الحالة:** ✅ مكتمل
+- **الاختبارات:** 207 ناجح (لا تغيير)
+- **بناء الواجهة:** ناجح
+- **الملفات المُعدّلة فعلياً:**
+  - `src/pages/DashboardPage.tsx` — Arabic status labels, progress bars, quick navigation buttons, spinner loading state
+  - `src/pages/LoginPage.tsx` — Removed hardcoded credentials, added help toggle, input placeholders, autocomplete attributes, empty field validation
+  - `src/pages/SettingsPage.tsx` — System health panel for project_director/contracts_manager (DB, SMTP, overall status)
+  - `backend/tests/load_test.py` — Added 3 contract intelligence endpoints (documents, reports, risks)
+  - `deploy.sh` — Fixed Node.js version check (20+), added SSL setup hint
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — full update
+- **القرارات الهندسية:**
+  - Login page shows "contact admin" help instead of exposing default passwords
+  - Dashboard uses color-coded progress bars matching status semantics
+  - Settings health panel fetches /health/detailed only for admin roles (no unnecessary API calls)
+  - Load test contract intelligence endpoints may return 403 for non-contracts_manager users (expected)
+- **نتائج التحقق:**
+  - Arabic OCR with Tesseract: 5/5 key tokens extracted from generated contract image
+  - Frontend build: clean, no errors
+  - Backend tests: 207 pass
+  - Dashboard now shows Arabic labels instead of English keys
+  - Login page no longer exposes credentials
+  - Settings page shows system health for admin roles
+
+---
+
+### الدفعة: 2026-04-17T21:21 — Real VPS Deployment, SSL/TLS, SMTP Verification, OCR Verification & Production Polish
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T21:21
+- **فهم النظام الحالي:**
+  - 205 اختبار ناجح (76 API + 43 E2E + 86 contract intelligence)، بناء الواجهة ناجح
+  - Docker deployment stack exists (db + backend + nginx) with memory limits, health checks, restart policies
+  - Dockerfile has Tesseract, Arabic fonts, non-root user, healthcheck
+  - entrypoint.sh has DB wait, auto-migration, OCR/font verification
+  - nginx.conf has rate limiting, gzip, SPA routing, but HTTP only (no SSL)
+  - SMTP path hardened but never tested with real SMTP server
+  - OCR path implemented with TesseractEngine but Arabic scanned files not tested in current environment
+  - Production deployment guide exists but lacks SSL/TLS setup, deployment scripts, and some operational details
+  - No certbot/Let's Encrypt integration
+  - No deployment automation scripts
+- **أهداف الدفعة:**
+  1. Real VPS deployment readiness — improve Dockerfile, docker-compose, entrypoint, nginx, add deploy script
+  2. SSL/TLS setup path with Let's Encrypt — certbot script, nginx SSL config, domain docs
+  3. Real SMTP verification path — startup visibility, production test procedure, env docs
+  4. Real Arabic scanned OCR verification — test Tesseract in runtime with Arabic text
+  5. Final production-oriented verification and documentation polish
+- **الملفات المتوقع تعديلها:**
+  - docker-compose.yml (SSL support, certbot)
+  - nginx.conf (SSL config)
+  - backend/Dockerfile (improvements)
+  - backend/entrypoint.sh (SMTP startup check)
+  - backend/app/api/health.py (OCR verification endpoint)
+  - deploy.sh (new — deployment automation)
+  - ssl-setup.sh (new — Let's Encrypt setup)
+  - nginx-ssl.conf (new — SSL nginx config)
+  - PRODUCTION_DEPLOYMENT_GUIDE.md (SSL, SMTP, deployment improvements)
+  - PROJECT_REVIEW_AND_PROGRESS.md (batch log)
+  - HANDOFF_STATUS.md (update)
+- **المخاطر/العوائق:**
+  - Cannot issue real SSL certificate without real domain/DNS
+  - Cannot test real SMTP without live SMTP server
+  - Tesseract binary available in this environment for verification
+  - Full deployment can only be verified in a real VPS environment
+  - Docker compose up cannot run in this CI environment
+
+**بعد الانتهاء:**
+- **الحالة:** ✅ مكتمل (مع عناصر جزئية موثقة بوضوح)
+- **الاختبارات:** 207 ناجح (205 سابق + 2 جديد)
+- **بناء الواجهة:** ناجح
+- **الملفات المُعدّلة فعلياً:**
+  - `deploy.sh` — **جديد** — automated VPS deployment script with pre-flight checks, frontend build, Docker compose, health verification, seed data
+  - `ssl-setup.sh` — **جديد** — Let's Encrypt certificate acquisition with DNS validation, auto-renewal cron, Docker integration
+  - `nginx-ssl.conf` — **جديد** — production SSL nginx config with TLS 1.2+1.3, HSTS, OCSP stapling, ACME challenge
+  - `docker-compose.yml` — added port 443, letsencrypt volume comments for SSL
+  - `backend/entrypoint.sh` — added SMTP configuration check at startup
+  - `backend/app/api/health.py` — added GET /health/ocr endpoint with Arabic text verification
+  - `backend/tests/test_api.py` — 2 new tests (OCR health auth, OCR health status)
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — SSL/TLS section, VPS deployment checklist, deploy.sh docs, health endpoints table updated
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log with before/after
+  - `HANDOFF_STATUS.md` — full update
+- **القرارات الهندسية:**
+  - deploy.sh generates .env with random secrets if missing (safer than default passwords)
+  - SSL nginx config uses DOMAIN_PLACEHOLDER for easy sed replacement
+  - Let's Encrypt cert symlinked to ./certs/ for Docker volume stability
+  - OCR health endpoint tests Arabic text processing inline (no external files needed)
+  - SMTP startup check in entrypoint is informational (never blocks startup)
+  - Port 443 exposed in docker-compose by default (harmless without SSL cert)
+- **نتائج التحقق:**
+  - Arabic OCR: Tesseract 5.3.4 with ara+eng languages verified. 5/6 Arabic tokens correctly extracted from generated contract image. Text file processing 100% accurate.
+  - SMTP: Startup check implemented, production test path documented with exact endpoints and flow
+  - SSL/TLS: Complete setup path implemented (cannot issue cert without real domain)
+  - Deployment: deploy.sh tested for syntax/logic, cannot run Docker compose in CI
+  - Tests: 207 pass, frontend builds cleanly
+- **الفجوات المتبقية:**
+  - SSL/TLS: Cannot issue real certificate (requires real domain + DNS) — Partial
+  - SMTP: Cannot test with real SMTP server (requires live SMTP credentials) — Partial
+  - Docker compose: Cannot run full stack in CI environment — Partial
+  - Real scanned document OCR: Verified with generated image, not with real scanned paper document — Partial
+
+---
+
 ### الدفعة: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification
 
 **قبل البدء:**

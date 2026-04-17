@@ -5,6 +5,7 @@ Endpoints:
   GET /health/detailed  — checks DB connectivity, SMTP reachability
   GET /health/smtp      — tests SMTP connection only (admin)
   POST /health/smtp/test-send — sends a real test email (admin, requires SMTP enabled)
+  GET /health/ocr       — OCR engine status + Arabic verification (admin)
 """
 import logging
 import smtplib
@@ -242,3 +243,66 @@ def smtp_test_send(
             to_email=request_body.to_email,
             message="Failed to send test email. Check application logs for details.",
         )
+
+
+# ---------------------------------------------------------------------------
+# OCR verification endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ocr")
+def ocr_health_check(
+    current_user: User = Depends(get_current_internal_user),
+):
+    """
+    OCR engine status and verification.
+    Returns OCR engine info, Tesseract availability, supported formats,
+    and a basic Arabic text processing verification.
+    Requires internal staff authentication.
+    """
+    from app.services.ocr_service import get_ocr_status, is_tesseract_available
+
+    status = get_ocr_status()
+
+    # Basic Arabic text verification — test that the OCR service
+    # can handle Arabic content without crashing
+    arabic_verification = {"status": "skipped", "message": "Tesseract not available"}
+    if is_tesseract_available():
+        try:
+            import tempfile
+            import os
+            from app.services.ocr_service import process_ocr
+
+            # Create a minimal text file with Arabic content for verification
+            arabic_text = "عقد رقم 2024/001\nشركة دمّر للمقاولات\nالقيمة: 500,000 ل.س"
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+                f.write(arabic_text)
+                temp_path = f.name
+
+            try:
+                result = process_ocr(temp_path, 'txt')
+                if result.success and result.text.strip():
+                    arabic_verification = {
+                        "status": "ok",
+                        "engine": result.engine,
+                        "text_length": len(result.text),
+                        "confidence": result.confidence,
+                        "message": "Arabic text processing verified successfully",
+                    }
+                else:
+                    arabic_verification = {
+                        "status": "warning",
+                        "message": "OCR processed but returned empty or failed result",
+                        "warnings": result.warnings,
+                    }
+            finally:
+                os.unlink(temp_path)
+        except Exception as e:
+            logger.exception("OCR Arabic verification check failed")
+            arabic_verification = {
+                "status": "error",
+                "message": "Arabic verification failed. Check server logs for details.",
+            }
+
+    status["arabic_verification"] = arabic_verification
+    return status

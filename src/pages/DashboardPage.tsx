@@ -1,12 +1,39 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { apiService } from '@/services/api';
-import { ChatCircleDots, ListChecks, FileText, WarningCircle } from '@phosphor-icons/react';
+import { useAuth } from '@/hooks/useAuth';
+import { ChatCircleDots, ListChecks, FileText, WarningCircle, Plus, ArrowRight, Spinner } from '@phosphor-icons/react';
+
+const complaintStatusLabels: Record<string, string> = {
+  new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
+  in_progress: 'قيد التنفيذ', resolved: 'تم الحل', rejected: 'مرفوضة',
+};
+
+const complaintStatusColors: Record<string, string> = {
+  new: 'bg-blue-500', under_review: 'bg-yellow-500',
+  assigned: 'bg-orange-500', in_progress: 'bg-purple-500',
+  resolved: 'bg-green-500', rejected: 'bg-red-500',
+};
+
+const taskStatusLabels: Record<string, string> = {
+  pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
+  completed: 'مكتملة', cancelled: 'ملغاة',
+};
+
+const taskStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-500', assigned: 'bg-orange-500',
+  in_progress: 'bg-purple-500', completed: 'bg-green-500',
+  cancelled: 'bg-red-500',
+};
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { role } = useAuth();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -26,17 +53,40 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="text-center py-12">جاري التحميل...</div>
+        <div className="flex justify-center py-12">
+          <Spinner className="animate-spin" size={32} />
+        </div>
       </Layout>
     );
   }
 
+  const totalComplaints = stats?.total_complaints || 0;
+  const totalTasks = stats?.total_tasks || 0;
+
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">لوحة التحكم</h1>
-          <p className="text-muted-foreground">نظرة عامة على نشاطات مشروع دمر</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1">لوحة التحكم</h1>
+            <p className="text-muted-foreground text-sm">نظرة عامة على نشاطات مشروع دمر</p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link to="/complaints">
+                <ChatCircleDots size={16} className="ml-1" />
+                الشكاوى
+                <ArrowRight size={14} className="mr-1" />
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/tasks">
+                <ListChecks size={16} className="ml-1" />
+                المهام
+                <ArrowRight size={14} className="mr-1" />
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -46,7 +96,7 @@ export default function DashboardPage() {
               <ChatCircleDots size={20} className="text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.total_complaints || 0}</div>
+              <div className="text-2xl font-bold">{totalComplaints}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 جديدة: {stats?.complaints_by_status?.new || 0}
               </p>
@@ -59,7 +109,7 @@ export default function DashboardPage() {
               <ListChecks size={20} className="text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.total_tasks || 0}</div>
+              <div className="text-2xl font-bold">{totalTasks}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 قيد التنفيذ: {stats?.tasks_by_status?.in_progress || 0}
               </p>
@@ -82,7 +132,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">عقود قرب الانتهاء</CardTitle>
-              <WarningCircle size={20} className="text-warning" />
+              <WarningCircle size={20} className="text-destructive" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats?.contracts_nearing_expiry || 0}</div>
@@ -97,13 +147,24 @@ export default function DashboardPage() {
               <CardTitle>توزيع الشكاوى حسب الحالة</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {stats && Object.entries(stats.complaints_by_status as Record<string, number>).map(([status, count]) => (
-                  <div key={status} className="flex items-center justify-between">
-                    <span className="text-sm">{status}</span>
-                    <span className="font-semibold">{count}</span>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {stats && Object.entries(stats.complaints_by_status as Record<string, number>).map(([status, count]) => {
+                  const pct = totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0;
+                  return (
+                    <div key={status} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>{complaintStatusLabels[status] || status}</span>
+                        <span className="font-semibold">{count} <span className="text-xs text-muted-foreground">({pct}%)</span></span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${complaintStatusColors[status] || 'bg-gray-400'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -113,13 +174,24 @@ export default function DashboardPage() {
               <CardTitle>توزيع المهام حسب الحالة</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {stats && Object.entries(stats.tasks_by_status as Record<string, number>).map(([status, count]) => (
-                  <div key={status} className="flex items-center justify-between">
-                    <span className="text-sm">{status}</span>
-                    <span className="font-semibold">{count}</span>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {stats && Object.entries(stats.tasks_by_status as Record<string, number>).map(([status, count]) => {
+                  const pct = totalTasks > 0 ? Math.round((count / totalTasks) * 100) : 0;
+                  return (
+                    <div key={status} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>{taskStatusLabels[status] || status}</span>
+                        <span className="font-semibold">{count} <span className="text-xs text-muted-foreground">({pct}%)</span></span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${taskStatusColors[status] || 'bg-gray-400'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
+import { config } from '@/config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Spinner, GearSix, Buildings, Info, Upload, Database } from '@phosphor-icons/react';
+import { Spinner, GearSix, Buildings, Info, Upload, Database, Heartbeat, CheckCircle, XCircle, Warning } from '@phosphor-icons/react';
+
+interface HealthData {
+  status: string;
+  database: { status: string; latency_ms?: number };
+  smtp: { status: string; message?: string };
+  version: string;
+}
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null);
   const [areas, setAreas] = useState<any[]>([]);
+  const [healthData, setHealthData] = useState<HealthData | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { role } = useAuth();
 
   useEffect(() => {
     setLoading(true);
@@ -25,6 +37,29 @@ export default function SettingsPage() {
       .catch(() => setError('فشل تحميل الإعدادات'))
       .finally(() => setLoading(false));
   }, []);
+
+  const fetchHealth = async () => {
+    setHealthLoading(true);
+    try {
+      const resp = await fetch(
+        `${config.API_BASE_URL}/health/detailed`,
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      if (resp.ok) {
+        setHealthData(await resp.json());
+      }
+    } catch {
+      // Health endpoint may not be available during development
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (role === 'project_director' || role === 'contracts_manager') {
+      fetchHealth();
+    }
+  }, [role]);
 
   if (loading) {
     return (
@@ -67,6 +102,62 @@ export default function SettingsPage() {
           <GearSix size={24} />
           الإعدادات
         </h1>
+
+        {/* System Health — visible to project_director and contracts_manager */}
+        {(role === 'project_director' || role === 'contracts_manager') && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heartbeat size={20} />
+                صحة النظام
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {healthLoading ? (
+                <div className="flex justify-center py-4"><Spinner className="animate-spin" size={24} /></div>
+              ) : healthData ? (
+                <div className="space-y-1">
+                  {detail('الحالة العامة', (
+                    <Badge className={
+                      healthData.status === 'healthy' ? 'bg-green-100 text-green-800' :
+                      healthData.status === 'degraded' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }>
+                      {healthData.status === 'healthy' ? (
+                        <><CheckCircle size={14} className="ml-1" /> سليم</>
+                      ) : healthData.status === 'degraded' ? (
+                        <><Warning size={14} className="ml-1" /> متدهور</>
+                      ) : (
+                        <><XCircle size={14} className="ml-1" /> غير سليم</>
+                      )}
+                    </Badge>
+                  ))}
+                  {detail('قاعدة البيانات', (
+                    <Badge className={healthData.database.status === 'ok' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                      {healthData.database.status === 'ok' ? 'متصلة' : 'غير متصلة'}
+                      {healthData.database.latency_ms && ` (${healthData.database.latency_ms}ms)`}
+                    </Badge>
+                  ))}
+                  {detail('البريد الإلكتروني (SMTP)', (
+                    <Badge className={
+                      healthData.smtp.status === 'ok' ? 'bg-green-100 text-green-800' :
+                      healthData.smtp.status === 'disabled' ? 'bg-gray-100 text-gray-800' :
+                      'bg-red-100 text-red-800'
+                    }>
+                      {healthData.smtp.status === 'ok' ? 'متصل' :
+                       healthData.smtp.status === 'disabled' ? 'معطّل' : 'خطأ'}
+                    </Badge>
+                  ))}
+                  {detail('إصدار API', healthData.version)}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  لا يمكن الاتصال بخدمة الصحة
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Organization Settings */}
         <Card>

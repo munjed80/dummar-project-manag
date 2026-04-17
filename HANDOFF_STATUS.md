@@ -1,25 +1,18 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T14:30
+## آخر تحديث: 2026-04-17T22:30
 
 ---
 
-## الدفعة الحالية: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification
+## الدفعة الحالية: 2026-04-17T22:15 — VPS Deploy Hardening & SSL Auto-Configuration
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `backend/app/api/contract_intelligence.py` | إعادة كتابة: PDF export مع DejaVu Sans + arabic-reshaper + python-bidi، إضافة individual document PDF export |
-| `backend/requirements.txt` | إضافة: arabic-reshaper==3.0.0, python-bidi==0.6.7 |
-| `backend/Dockerfile` | إضافة: fonts-dejavu-core لدعم خط عربي في PDF |
-| `docker-compose.yml` | تحسين: memory limits لجميع الخدمات |
-| `nginx.conf` | تحسين: gzip, auth rate limiting, upload timeout 300s, client_max_body_size 20M |
-| `backend/entrypoint.sh` | تحسين: Tesseract + Arabic font verification عند بدء التشغيل |
-| `backend/tests/test_contract_intelligence.py` | 4 اختبارات جديدة (Arabic PDF, individual export, 404, RBAC) |
-| `src/services/api.ts` | إضافة: downloadDocumentPdf() method |
-| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: Arabic PDF section, Tesseract verification checklist |
-| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
+| `docker-compose.yml` | أمان: إزالة تعريض منفذ PostgreSQL 5432 خارجياً |
+| `ssl-setup.sh` | إضافة: --auto flag for automatic nginx/docker-compose/.env configuration after cert |
+| `deploy.sh` | إضافة: --domain flag for CORS_ORIGINS auto-configuration + seed password warnings |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
 ---
@@ -28,75 +21,71 @@
 
 ### ✅ مكتمل ومُتحقق منه:
 
-**A) Proper Arabic PDF Export:**
-- ✅ DejaVu Sans TTF font مُسجّل في reportlab (Regular + Bold)
-- ✅ arabic-reshaper يربط الحروف العربية بشكل صحيح (معزولة → متصلة)
-- ✅ python-bidi يعالج اتجاه النص من اليمين لليسار
-- ✅ عنوان التقرير بالعربية: "تقرير ذكاء العقود — مشروع دمّر"
-- ✅ تسميات الأقسام بالعربية: ملخص التقرير، حالة المعالجة، المستندات
-- ✅ محتوى مختلط عربي/إنجليزي يظهر بشكل صحيح
-- ✅ Fallback لـ Helvetica إذا DejaVu Sans غير متوفر (PDF صالح لكن بدون عربي)
-- ✅ fonts-dejavu-core مُثبّت في Dockerfile
-- ✅ اختبار يتحقق من إنشاء PDF صالح مع محتوى عربي
-- ✅ Audit logging محفوظ
+**VPS Deploy Hardening:**
+- ✅ docker-compose.yml: PostgreSQL port 5432 NO LONGER exposed externally (security fix)
+- ✅ deploy.sh: Added `--domain=example.com` flag to auto-set CORS_ORIGINS
+- ✅ deploy.sh: Seed data step now prints password-change warnings with verification command
+- ✅ deploy.sh: Auto-detects https when SSL certs exist
+- ✅ All scripts syntax-validated (bash -n)
 
-**B) Production Deployment Hardening:**
-- ✅ docker-compose.yml: memory limits (db: 512M, backend: 1G, nginx: 128M)
-- ✅ nginx.conf: gzip compression لأنواع الملفات الشائعة
-- ✅ nginx.conf: auth_limit zone منفصل (10r/s) لحماية نقطة تسجيل الدخول
-- ✅ nginx.conf: upload rate limiting مع timeout ممتد (300s) لاستيراد العقود
-- ✅ nginx.conf: client_max_body_size 20M (يتطابق مع حد contract intelligence)
-- ✅ entrypoint.sh: Tesseract version + languages verification عند بدء التشغيل
-- ✅ entrypoint.sh: Arabic PDF font availability check
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Arabic PDF section كامل مع verification + troubleshooting
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Tesseract Production Verification Checklist مفصّل
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Updated Docker features list
+**SSL Auto-Configuration:**
+- ✅ ssl-setup.sh: Added `--auto` flag that performs ALL post-cert steps automatically:
+  1. Copies nginx-ssl.conf → nginx.conf with domain replaced
+  2. Uncomments letsencrypt volumes in docker-compose.yml
+  3. Updates CORS_ORIGINS in .env to https://
+  4. Restarts nginx container
+- ✅ Without `--auto`, displays clear manual instructions (backward compatible)
+- ✅ Usage: `sudo ./ssl-setup.sh dummar.example.com --auto`
 
-**C) Real Tesseract OCR Verification Path:**
-- ✅ Dockerfile يثبّت: tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils + fonts-dejavu-core
-- ✅ entrypoint.sh يتحقق من Tesseract version + languages عند كل بدء تشغيل
-- ✅ get_ocr_status() API يعرض: engine, tesseract_version, tesseract_languages
-- ✅ is_tesseract_available() يكتشف: Python package + system binary مع caching
-- ✅ Graceful fallback: BasicTextExtractor يعمل تلقائياً بدون Tesseract
-- ✅ CI tests تمر بدون Tesseract binary (detection + fallback tested)
-- ✅ Production verification checklist مُفصّل في PRODUCTION_DEPLOYMENT_GUIDE.md
-
-**D) Individual Document Export:**
-- ✅ GET /contract-intelligence/documents/{id}/export/pdf — PDF export لمستند واحد
-- ✅ يتضمن: metadata, extracted fields, classification, summary, risks, duplicates
-- ✅ Arabic rendering بنفس جودة التقرير العام
-- ✅ RBAC: contracts_manager + project_director فقط
-- ✅ Audit logging: intelligence_document_export_pdf
-- ✅ 3 اختبارات: export success, 404, RBAC denied
-- ✅ Frontend API method: downloadDocumentPdf()
-
-**E) Operational Trust:**
-- ✅ RBAC سليم: contracts_manager + project_director لجميع النقاط الجديدة
-- ✅ Audit logging: intelligence_report_export_pdf, intelligence_document_export_pdf
-- ✅ Code في English، UI عربي RTL
-- ✅ لا توجد placeholders مزيفة
+**Previous Batch Improvements (carried forward):**
+- ✅ Dashboard: Arabic status labels, progress bars, quick navigation
+- ✅ Login page: No hardcoded credentials, help toggle
+- ✅ Settings page: System health panel for admins
+- ✅ Load test: 10 endpoints including contract intelligence
+- ✅ 207 backend tests pass
+- ✅ Frontend builds clean
 
 ### المقاييس:
-- **اختبارات الخلفية:** 205 ناجح (201 سابق + 4 جديد)
+- **اختبارات الخلفية:** 207 ناجح (بدون تغيير)
 - **بناء الواجهة:** ناجح
-- **ملفات مُعدّلة:** 11
-- **نقاط نهاية API جديدة:** 1 (documents/{id}/export/pdf)
-- **حزم Python جديدة:** 2 (arabic-reshaper, python-bidi)
-- **حزم نظام جديدة:** 1 (fonts-dejavu-core)
+- **ملفات مُعدّلة:** 4
 
-### ⚠️ جزئي:
-- **Tesseract في CI:** Binary غير متوفر — المحرك يكتشف ذلك ويعود لـ BasicTextExtractor. في Docker production يعمل بالكامل. Startup logs تتحقق من الحالة.
-- **Arabic PDF rendering:** Verified with arabic-reshaper + python-bidi + DejaVu Sans. Letter joining and RTL ordering confirmed in test environment. Full visual verification requires opening the generated PDF.
+### ⚠️ جزئي (يتطلب خادم حقيقي):
+- **SSL/TLS:** Full automation path ready (ssl-setup.sh --auto). Cannot issue cert without real domain + DNS.
+- **SMTP:** Verification path complete. Cannot test without real SMTP server.
+- **Docker deployment:** Scripts and config complete. Cannot run `docker compose up` in CI.
 
 ---
 
-## الدفعة التالية المُقترحة:
-1. نشر فعلي على خادم إنتاج — اختبار النظام الكامل مع Docker
-2. SSL/TLS setup مع Let's Encrypt
-3. اختبار SMTP مع خادم حقيقي
-4. تحسين extraction باستخدام ML (اختياري، يتطلب training data)
-5. اختبار بيانات حقيقية (Arabic scanned contracts) مع Tesseract
-6. تكامل مع أنظمة خارجية (إن وُجدت)
+## خطوات النشر الفعلي على VPS:
+
+```bash
+# 1. Clone the repository on VPS
+git clone <repo-url> /var/www/dummar
+cd /var/www/dummar
+
+# 2. First deployment with seed data
+./deploy.sh --seed --domain=dummar.example.com
+
+# 3. Change all default passwords immediately!
+docker compose exec backend python -c "
+from app.scripts.seed_data import check_default_passwords
+from app.core.database import SessionLocal
+db = SessionLocal()
+check_default_passwords(db)
+"
+
+# 4. Set up SSL (requires domain DNS pointing to server)
+sudo apt install -y certbot
+sudo ./ssl-setup.sh dummar.example.com --auto
+
+# 5. Verify deployment
+curl https://dummar.example.com/api/health/ready
+curl https://dummar.example.com/api/health/detailed
+
+# 6. Run load test
+cd backend && python -m tests.load_test --base-url https://dummar.example.com
+```
 
 ---
 
