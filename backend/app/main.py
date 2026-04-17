@@ -17,7 +17,7 @@ from app.middleware.request_logging import RequestLoggingMiddleware
 # ---------------------------------------------------------------------------
 # Structured logging setup
 # ---------------------------------------------------------------------------
-_log_level = os.environ.get("LOG_LEVEL", "info").upper()
+_log_level = settings.LOG_LEVEL.upper()
 logging.basicConfig(
     level=getattr(logging, _log_level, logging.INFO),
     format="%(asctime)s %(levelname)-5s [%(name)s] %(message)s",

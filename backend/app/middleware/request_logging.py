@@ -15,7 +15,7 @@ from starlette.responses import Response
 logger = logging.getLogger("dummar.requests")
 
 # Paths to exclude from request logging (health checks are too noisy)
-_SKIP_PATHS = frozenset({"/health", "/health/detailed", "/docs", "/redoc", "/openapi.json"})
+_SKIP_PATHS = frozenset({"/health", "/health/detailed", "/health/ready", "/docs", "/redoc", "/openapi.json"})
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
