@@ -11,10 +11,15 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      toast.error('يرجى إدخال اسم المستخدم وكلمة المرور');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -44,8 +49,10 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="أدخل اسم المستخدم"
                 required
                 disabled={loading}
+                autoComplete="username"
               />
             </div>
             <div className="space-y-2">
@@ -55,17 +62,29 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="أدخل كلمة المرور"
                 required
                 disabled={loading}
+                autoComplete="current-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
             </Button>
           </form>
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>المستخدمون الافتراضيون: director, contracts_mgr, engineer</p>
-            <p>كلمة المرور: password123</p>
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
+              onClick={() => setShowHelp(!showHelp)}
+            >
+              {showHelp ? 'إخفاء المساعدة' : 'هل تحتاج مساعدة في تسجيل الدخول؟'}
+            </button>
+            {showHelp && (
+              <p className="text-xs text-muted-foreground mt-2">
+                تواصل مع مدير النظام للحصول على بيانات تسجيل الدخول الخاصة بك.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

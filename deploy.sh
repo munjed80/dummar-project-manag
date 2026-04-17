@@ -12,7 +12,7 @@
 # Prerequisites:
 #   - Docker and Docker Compose (v2) installed
 #   - .env file configured (generated from template if missing)
-#   - Node.js 18+ (for frontend build)
+#   - Node.js 20+ (for frontend build — required by Vite 8)
 #   - Port 80 (and 443 if SSL) available
 # =============================================================================
 
@@ -85,9 +85,14 @@ else
 fi
 success "Docker Compose available ($COMPOSE)"
 
-# Node.js
+# Node.js (v20+ required for Vite 8 + Tailwind CSS 4)
 if ! command -v node &>/dev/null; then
-    error "Node.js is not installed. Required for frontend build."
+    error "Node.js is not installed. Required for frontend build (v20+)."
+    exit 1
+fi
+NODE_MAJOR=$(node --version | cut -d. -f1 | tr -d 'v')
+if [ "$NODE_MAJOR" -lt 20 ]; then
+    error "Node.js v20+ required (found: $(node --version)). Upgrade: https://nodejs.org/"
     exit 1
 fi
 success "Node.js $(node --version)"
@@ -288,6 +293,10 @@ echo ""
 info "Services:  $COMPOSE ps"
 info "Logs:      $COMPOSE logs -f"
 info "Stop:      $COMPOSE down"
+if [ -f ssl-setup.sh ] && [ ! -d certs ]; then
+    echo ""
+    info "SSL:       ./ssl-setup.sh <your-domain.com>  (to enable HTTPS)"
+fi
 echo ""
 
 exit $FAIL

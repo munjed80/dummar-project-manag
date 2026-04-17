@@ -11,6 +11,62 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T21:45 — UI/UX Improvements, Load Test Enhancement, Deploy Hardening, OCR Verification
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T21:45
+- **فهم النظام الحالي:**
+  - 207 اختبار ناجح، بناء الواجهة ناجح
+  - Previous batch completed: VPS deployment scripts, SSL/TLS setup, SMTP verification path, OCR health endpoint
+  - Dashboard shows raw English status keys (new, under_review, etc.) instead of Arabic labels
+  - Login page displays hardcoded default credentials (security concern for production)
+  - Settings page lacks system health visibility for admins
+  - Load test covers 7 core endpoints but not contract intelligence
+  - deploy.sh says Node.js 18+ but project requires Node.js 20+
+- **أهداف الدفعة:**
+  1. UI/UX: Arabic status labels + progress bars on Dashboard
+  2. UI/UX: Remove hardcoded credentials from Login page
+  3. UI/UX: Add system health panel to Settings page for admins
+  4. UI/UX: Quick navigation buttons on Dashboard
+  5. Load test: Add contract intelligence endpoints
+  6. Deploy: Fix Node.js version requirement + SSL hint
+  7. OCR: Verify Tesseract Arabic OCR with pytesseract + Pillow
+- **الملفات المتوقع تعديلها:**
+  - src/pages/DashboardPage.tsx
+  - src/pages/LoginPage.tsx
+  - src/pages/SettingsPage.tsx
+  - backend/tests/load_test.py
+  - deploy.sh
+  - PROJECT_REVIEW_AND_PROGRESS.md
+  - HANDOFF_STATUS.md
+
+**بعد الانتهاء:**
+- **الحالة:** ✅ مكتمل
+- **الاختبارات:** 207 ناجح (لا تغيير)
+- **بناء الواجهة:** ناجح
+- **الملفات المُعدّلة فعلياً:**
+  - `src/pages/DashboardPage.tsx` — Arabic status labels, progress bars, quick navigation buttons, spinner loading state
+  - `src/pages/LoginPage.tsx` — Removed hardcoded credentials, added help toggle, input placeholders, autocomplete attributes, empty field validation
+  - `src/pages/SettingsPage.tsx` — System health panel for project_director/contracts_manager (DB, SMTP, overall status)
+  - `backend/tests/load_test.py` — Added 3 contract intelligence endpoints (documents, reports, risks)
+  - `deploy.sh` — Fixed Node.js version check (20+), added SSL setup hint
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — full update
+- **القرارات الهندسية:**
+  - Login page shows "contact admin" help instead of exposing default passwords
+  - Dashboard uses color-coded progress bars matching status semantics
+  - Settings health panel fetches /health/detailed only for admin roles (no unnecessary API calls)
+  - Load test contract intelligence endpoints may return 403 for non-contracts_manager users (expected)
+- **نتائج التحقق:**
+  - Arabic OCR with Tesseract: 5/5 key tokens extracted from generated contract image
+  - Frontend build: clean, no errors
+  - Backend tests: 207 pass
+  - Dashboard now shows Arabic labels instead of English keys
+  - Login page no longer exposes credentials
+  - Settings page shows system health for admin roles
+
+---
+
 ### الدفعة: 2026-04-17T21:21 — Real VPS Deployment, SSL/TLS, SMTP Verification, OCR Verification & Production Polish
 
 **قبل البدء:**

@@ -518,6 +518,24 @@ def main(argv: Optional[List[str]] = None) -> None:
             "method": "GET",
             "headers": hdrs,
         },
+        {
+            "label": "GET /ci/documents",
+            "url": f"{base_url}/contract-intelligence/documents",
+            "method": "GET",
+            "headers": hdrs,
+        },
+        {
+            "label": "GET /ci/reports",
+            "url": f"{base_url}/contract-intelligence/reports",
+            "method": "GET",
+            "headers": hdrs,
+        },
+        {
+            "label": "GET /ci/risks",
+            "url": f"{base_url}/contract-intelligence/risks",
+            "method": "GET",
+            "headers": hdrs,
+        },
     ]
 
     # ---- Run per-endpoint load tests ----

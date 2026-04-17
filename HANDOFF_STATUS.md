@@ -1,23 +1,20 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T21:45
+## آخر تحديث: 2026-04-17T22:00
 
 ---
 
-## الدفعة الحالية: 2026-04-17T21:21 — Real VPS Deployment, SSL/TLS, SMTP Verification, OCR Verification & Production Polish
+## الدفعة الحالية: 2026-04-17T21:45 — UI/UX Improvements, Load Test Enhancement, Deploy Hardening, OCR Verification
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `deploy.sh` | **جديد** — automated VPS deployment script with pre-flight checks, .env generation, frontend build, Docker compose, health verification |
-| `ssl-setup.sh` | **جديد** — Let's Encrypt SSL setup with DNS validation, certbot, auto-renewal cron |
-| `nginx-ssl.conf` | **جديد** — SSL nginx config with TLS 1.2+1.3, HSTS, OCSP stapling, ACME challenge |
-| `docker-compose.yml` | تحسين: added port 443, letsencrypt volume comments for SSL mode |
-| `backend/entrypoint.sh` | تحسين: SMTP configuration visibility check at startup |
-| `backend/app/api/health.py` | إضافة: GET /health/ocr endpoint with Arabic text processing verification |
-| `backend/tests/test_api.py` | 2 اختبارات جديدة (OCR health auth, OCR health status) |
-| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: SSL/TLS section, VPS deployment checklist, deploy.sh docs, health endpoints table |
+| `src/pages/DashboardPage.tsx` | تحسين: Arabic status labels, progress bars, quick navigation buttons, spinner loading |
+| `src/pages/LoginPage.tsx` | تحسين: removed hardcoded credentials, help toggle, input placeholders, validation |
+| `src/pages/SettingsPage.tsx` | إضافة: system health panel for admin roles (DB, SMTP, overall status) |
+| `backend/tests/load_test.py` | إضافة: 3 contract intelligence endpoints (documents, reports, risks) |
+| `deploy.sh` | إصلاح: Node.js 20+ version check, SSL setup hint |
 | `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
@@ -27,74 +24,54 @@
 
 ### ✅ مكتمل ومُتحقق منه:
 
-**A) Real VPS Deployment Support:**
-- ✅ `deploy.sh` — automated deployment script with pre-flight checks, .env generation, frontend build, Docker compose up, health verification, seed data loading
-- ✅ `docker-compose.yml` — port 443 exposed, letsencrypt volume ready (commented)
-- ✅ `entrypoint.sh` — SMTP configuration check at startup, OCR + font checks preserved
-- ✅ `PRODUCTION_DEPLOYMENT_GUIDE.md` — VPS deployment checklist, deploy.sh documentation
-- ✅ Backend health checks: GET /health, /health/ready, /health/detailed, /health/smtp, /health/ocr
-- ✅ Deployment path is realistic for a fresh VPS
+**UI/UX Improvements:**
+- ✅ Dashboard: Arabic status labels (جديدة، قيد المراجعة، مُعينة، etc.) instead of English keys
+- ✅ Dashboard: Color-coded progress bars showing percentage distribution for complaints and tasks
+- ✅ Dashboard: Quick navigation buttons (الشكاوى / المهام) with ArrowRight icons
+- ✅ Dashboard: Proper spinner loading state instead of plain text
+- ✅ Login page: Removed hardcoded default credentials (director, contracts_mgr, password123)
+- ✅ Login page: Added "contact admin" help toggle for login assistance
+- ✅ Login page: Added input placeholders and autocomplete attributes
+- ✅ Login page: Client-side validation for empty fields
+- ✅ Settings page: System health panel showing DB, SMTP, and overall status
+- ✅ Settings page: Health panel only visible to project_director and contracts_manager
+- ✅ Settings page: Automatic health check fetch on page load for admin roles
 
-**B) SSL/TLS Setup Path with Let's Encrypt:**
-- ✅ `ssl-setup.sh` — complete certbot flow: DNS validation, certificate acquisition, Docker integration, auto-renewal cron
-- ✅ `nginx-ssl.conf` — TLS 1.2+1.3, strong ciphers (CHACHA20+AES-GCM), HSTS, OCSP stapling, HTTP→HTTPS redirect, ACME challenge
-- ✅ DOMAIN_PLACEHOLDER for easy sed replacement
-- ✅ Documentation: exact DNS requirements, quick setup steps, renewal testing
-- ⚠️ Cannot issue real certificate (requires real domain + DNS) — documented
+**Load Test Enhancement:**
+- ✅ Added 3 contract intelligence endpoints: documents, reports, risks
+- ✅ Total endpoints tested: 10 (7 core + 3 contract intelligence) + login + complaints + workflow
+- ✅ Contract intelligence endpoints properly test RBAC (403 expected for non-authorized users)
 
-**C) Real SMTP Verification Path:**
-- ✅ `entrypoint.sh` — SMTP configuration check at startup with clear status messages
-- ✅ `GET /health/smtp` — SMTP connection test (requires staff auth)
-- ✅ `GET /health/detailed` — includes SMTP status
-- ✅ `POST /health/smtp/test-send` — sends real test email (requires staff auth + SMTP_ENABLED)
-- ✅ SMTP disabled by default (SMTP_ENABLED=false)
-- ✅ Email failures never break operational workflows
-- ✅ Deduplication guard (5min window)
-- ✅ TLS fallback (port 465=SSL, 587=STARTTLS)
-- ✅ Production verification checklist in PRODUCTION_DEPLOYMENT_GUIDE.md
-- ⚠️ Cannot test with real SMTP server (CI environment limitation)
+**Deploy Hardening:**
+- ✅ deploy.sh: Node.js version check fixed to require v20+ (Vite 8 + Tailwind CSS 4 requirement)
+- ✅ deploy.sh: SSL setup hint after deployment if certs directory doesn't exist
+- ✅ deploy.sh: Prerequisites documentation updated
 
-**D) Real Arabic Scanned OCR Verification:**
-- ✅ Tesseract 5.3.4 installed and verified with `ara+eng` languages
-- ✅ Arabic contract image OCR tested: 5/6 key tokens correctly extracted (عقد، شركة، قيمة، ليرة، تاريخ)
-- ✅ Arabic text file processing: 100% accurate
-- ✅ `GET /health/ocr` — new endpoint with Arabic text processing verification
-- ✅ OCR engine auto-detection works: TesseractEngine when available, BasicTextExtractor fallback
-- ✅ `get_ocr_status()` API shows engine, version, languages, supported formats
-- ✅ Dockerfile includes tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils
-- ✅ Graceful fallback preserved
-- ⚠️ Tested with programmatically generated Arabic image, not with real scanned paper document
-
-**E) Final Production Verification:**
-- ✅ 207 backend tests pass (205 → 207)
-- ✅ Frontend builds successfully
-- ✅ RBAC strict (project_director/contracts_manager for sensitive endpoints)
-- ✅ Audit logging intact (20+ event types)
-- ✅ Arabic-first RTL UI preserved
-- ✅ Health/readiness endpoints verified
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md comprehensive with 23 sections including SSL, VPS checklist
+**OCR Verification:**
+- ✅ Tesseract 5.3.4 with ara+eng+osd languages verified
+- ✅ Arabic contract image OCR: 5/5 key tokens extracted (عقد، شركة، قيمة، ليرة، تاريخ)
+- ✅ Confidence: 0.99 on generated Arabic contract image
+- ✅ Text file extraction: 7/7 key tokens (عقد، شركة، قيمة، ليرة، تاريخ، دمّر، البنية التحتية)
 
 ### المقاييس:
-- **اختبارات الخلفية:** 207 ناجح (205 سابق + 2 جديد)
+- **اختبارات الخلفية:** 207 ناجح (بدون تغيير)
 - **بناء الواجهة:** ناجح
-- **ملفات مُعدّلة:** 10
-- **نقاط نهاية API جديدة:** 1 (GET /health/ocr)
-- **ملفات جديدة:** 3 (deploy.sh, ssl-setup.sh, nginx-ssl.conf)
+- **ملفات مُعدّلة:** 7
 
-### ⚠️ جزئي:
-- **SSL/TLS:** Complete setup path implemented (scripts, config, docs). Cannot issue real certificate without real domain + DNS. Marked as Partial.
-- **SMTP:** Complete verification path implemented (startup check, health endpoints, test-send, production checklist). Cannot test with real SMTP server in CI. Marked as Partial.
-- **OCR Arabic scanned:** Tesseract verified with generated Arabic image (5/6 tokens correct). Real scanned paper document verification only possible in Docker with actual scans. Marked as Partial.
-- **Docker deployment:** Scripts and config complete. Cannot run `docker compose up` in CI. Marked as Partial.
+### ⚠️ جزئي (مرحّل من الدفعة السابقة):
+- **SSL/TLS:** Complete setup path implemented (scripts, config, docs). Cannot issue real certificate without real domain + DNS.
+- **SMTP:** Complete verification path implemented. Cannot test with real SMTP server in CI.
+- **Docker deployment:** Scripts and config complete. Cannot run `docker compose up` in CI.
+- **Real scanned documents:** Verified with generated images, not with actual scanner output.
 
 ---
 
 ## الدفعة التالية المُقترحة:
-1. نشر فعلي على VPS حقيقي — تشغيل deploy.sh + ssl-setup.sh
-2. اختبار SMTP مع خادم حقيقي — POST /health/smtp/test-send + trigger real workflows
+1. نشر فعلي على VPS حقيقي — تشغيل deploy.sh --seed + ssl-setup.sh
+2. اختبار SMTP مع خادم بريد حقيقي
 3. اختبار OCR مع وثائق مسحوبة ضوئياً حقيقية (عقود عربية مسحوبة بالماسح الضوئي)
-4. اختبار أداء على الخادم الحقيقي — python -m tests.load_test
-5. تحسين UI/UX بناءً على ملاحظات المستخدمين
+4. اختبار أداء على الخادم الحقيقي
+5. تحسينات إضافية بناءً على ملاحظات المستخدمين الفعلية
 6. تكامل مع أنظمة خارجية (إن وُجدت)
 
 ---
