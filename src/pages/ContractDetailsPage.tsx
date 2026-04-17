@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash } from '@phosphor-icons/react';
+import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash, ShieldWarning, Brain, Copy } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -48,6 +48,7 @@ export default function ContractDetailsPage() {
   const { canManageContracts } = useAuth();
   const [contract, setContract] = useState<any>(null);
   const [approvals, setApprovals] = useState<any[]>([]);
+  const [intelligence, setIntelligence] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -62,10 +63,12 @@ export default function ContractDetailsPage() {
     Promise.all([
       apiService.getContract(numId),
       apiService.getContractApprovals(numId).catch(() => []),
+      apiService.getContractIntelligence(numId).catch(() => null),
     ])
-      .then(([contractData, approvalsData]) => {
+      .then(([contractData, approvalsData, intelligenceData]) => {
         setContract(contractData);
         setApprovals(Array.isArray(approvalsData) ? approvalsData : []);
+        setIntelligence(intelligenceData);
       })
       .catch(() => setError('فشل تحميل بيانات العقد'))
       .finally(() => setLoading(false));
@@ -250,6 +253,105 @@ export default function ContractDetailsPage() {
             />
           </CardContent>
         </Card>
+
+        {/* Intelligence Data */}
+        {intelligence && (intelligence.risk_flags?.length > 0 || intelligence.duplicates?.length > 0 || intelligence.documents?.length > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain size={20} />
+                بيانات الذكاء الاصطناعي
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Risk Flags */}
+              {intelligence.risk_flags?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <ShieldWarning size={16} />
+                    مؤشرات المخاطر ({intelligence.risk_flags.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {intelligence.risk_flags.map((flag: any) => (
+                      <div key={flag.id} className="flex items-start gap-2 p-2 rounded border bg-muted/30">
+                        <Badge className={
+                          flag.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                          flag.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                          flag.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }>
+                          {flag.severity === 'critical' ? 'حرج' : flag.severity === 'high' ? 'مرتفع' : flag.severity === 'medium' ? 'متوسط' : 'منخفض'}
+                        </Badge>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{flag.description}</p>
+                          {flag.details && <p className="text-xs text-muted-foreground mt-1">{flag.details}</p>}
+                        </div>
+                        {flag.is_resolved && (
+                          <Badge className="bg-green-100 text-green-800">محلول</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Duplicates */}
+              {intelligence.duplicates?.length > 0 && (
+                <div>
+                  <Separator className="my-3" />
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <Copy size={16} />
+                    عقود مشابهة محتملة ({intelligence.duplicates.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {intelligence.duplicates.map((dup: any) => {
+                      let reasons: string[] = [];
+                      try { reasons = JSON.parse(dup.match_reasons || '[]'); } catch { /* ignore */ }
+                      return (
+                        <div key={dup.id} className="p-2 rounded border bg-muted/30">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline">تشابه: {((dup.similarity_score || 0) * 100).toFixed(0)}%</Badge>
+                            {dup.contract_id_b && (
+                              <Link to={`/contracts/${dup.contract_id_b}`} className="text-primary text-sm hover:underline">
+                                عقد #{dup.contract_id_b}
+                              </Link>
+                            )}
+                          </div>
+                          {reasons.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {reasons.map((r: string, i: number) => (
+                                <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{r}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Source Documents */}
+              {intelligence.documents?.length > 0 && (
+                <div>
+                  <Separator className="my-3" />
+                  <h4 className="font-semibold mb-2">المستندات المصدرية ({intelligence.documents.length})</h4>
+                  <div className="space-y-1">
+                    {intelligence.documents.map((doc: any) => (
+                      <Link
+                        key={doc.id}
+                        to={`/contract-intelligence/documents/${doc.id}`}
+                        className="block p-2 rounded border hover:bg-muted/50 text-sm"
+                      >
+                        {doc.original_filename} — {doc.processing_status}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Approval Trail */}
         <Card>

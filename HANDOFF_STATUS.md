@@ -1,11 +1,87 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T07:51
+## آخر تحديث: 2026-04-17T10:20
 
 ---
 
-## الدفعة الحالية: 2026-04-17T07:51 — Deployment Readiness, E2E Validation, Load Testing, SMTP Verification
+## الدفعة الحالية: 2026-04-17T09:30 — Contract Intelligence Center
+
+### الملفات المُعدّلة/الجديدة في هذه الدفعة:
+| الملف | التغيير |
+|---|---|
+| `backend/app/models/contract_intelligence.py` | **جديد** — 3 نماذج: ContractDocument, ContractRiskFlag, ContractDuplicate |
+| `backend/app/schemas/contract_intelligence.py` | **جديد** — 12 مخطط Pydantic |
+| `backend/alembic/versions/006_add_contract_intelligence.py` | **جديد** — ترحيل 3 جداول |
+| `backend/app/services/ocr_service.py` | **جديد** — تجريد OCR مع محرك قابل للاستبدال |
+| `backend/app/services/extraction_service.py` | **جديد** — استخراج حقول ذكي |
+| `backend/app/services/classification_service.py` | **جديد** — تصنيف عقود |
+| `backend/app/services/summary_service.py` | **جديد** — إنشاء ملخص تلقائي |
+| `backend/app/services/duplicate_service.py` | **جديد** — كشف تكرارات |
+| `backend/app/services/risk_service.py` | **جديد** — تحليل مخاطر |
+| `backend/app/api/contract_intelligence.py` | **جديد** — 20+ نقطة نهاية API |
+| `backend/app/main.py` | إضافة router ذكاء العقود |
+| `backend/app/api/uploads.py` | إضافة فئة contract_intelligence |
+| `backend/tests/test_contract_intelligence.py` | **جديد** — 41 اختبار |
+| `src/services/api.ts` | 20+ دالة API جديدة لذكاء العقود |
+| `src/pages/ContractIntelligencePage.tsx` | **جديد** — لوحة تحكم ذكاء العقود |
+| `src/pages/ProcessingQueuePage.tsx` | **جديد** — طابور المعالجة |
+| `src/pages/DocumentReviewPage.tsx` | **جديد** — مراجعة المستند (OCR + حقول + ملخص) |
+| `src/pages/BulkImportPage.tsx` | **جديد** — معالج الاستيراد الجماعي |
+| `src/pages/RiskInsightsPage.tsx` | **جديد** — مؤشرات المخاطر |
+| `src/pages/DuplicateReviewPage.tsx` | **جديد** — مراجعة التكرارات |
+| `src/pages/ContractDetailsPage.tsx` | تكامل بيانات الذكاء |
+| `src/components/Layout.tsx` | إضافة رابط تنقل ذكاء العقود |
+| `src/App.tsx` | إضافة مسارات + RBAC |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
+| `HANDOFF_STATUS.md` | هذا التحديث |
+
+---
+
+## الحالة الحقيقية المُتحقق منها
+
+### ✅ مكتمل ومُتحقق منه:
+
+**Contract Intelligence Center (مركز ذكاء العقود):**
+- ✅ OCR للعقود: تجريد محرك OCR، استخراج نص من PDF/text، بنية قابلة لاستبدال المحرك (Tesseract/Cloud)
+- ✅ استخراج حقول ذكي: 10+ حقول (رقم العقد، تواريخ، قيمة، مقاول، مدة، نطاق، مواقع، مرفقات)
+- ✅ تصنيف تلقائي: 8 أنواع عقود (صيانة، تنظيف، إنشاء، طرق، إنارة، توريد، استشارات، خدمات)
+- ✅ ملخص تلقائي: ملخص عربي مهيكل من الحقول المستخرجة
+- ✅ كشف تكرارات: 5 إشارات (رقم مطابق، اسم مشابه، عنوان مشابه، قيمة قريبة، تداخل زمني)
+- ✅ تحليل مخاطر: 10+ أنواع (حقول مفقودة، تواريخ خاطئة، قيمة مرتفعة، منتهي، قريب الانتهاء، نطاق غامض)
+- ✅ استيراد CSV جماعي مع معاينة وتحقق
+- ✅ استيراد ملفات ممسوحة دفعياً
+- ✅ تحويل مستند إلى عقد رسمي
+- ✅ 6 صفحات واجهة عربية RTL
+- ✅ تكامل مع صفحة تفاصيل العقد
+- ✅ RBAC: contracts_manager + project_director فقط
+- ✅ تسجيل تدقيق لجميع العمليات
+- ✅ 41 اختبار جديد (160 إجمالي)
+
+**ملاحظات الجزئية:**
+- OCR للصور (Tesseract) يتطلب تثبيت pytesseract + tesseract-ocr (غير متوفر في بيئة CI)
+- خدمة OCR مصممة كتجريد — يمكن استبدال المحرك بسهولة
+- استخراج Excel يتطلب مكتبة openpyxl (CSV مدعوم بالكامل)
+
+### المقاييس:
+- **اختبارات الخلفية:** 160 ناجح (119 سابق + 41 جديد)
+- **بناء الواجهة:** ناجح
+- **ملفات جديدة:** 20+
+- **نقاط نهاية API جديدة:** 20+
+
+---
+
+## الدفعة التالية المُقترحة:
+1. تثبيت Tesseract/pytesseract لدعم OCR الصور الحقيقي
+2. إضافة دعم Excel (openpyxl) للاستيراد الجماعي
+3. إضافة إشعارات تلقائية عند اكتمال معالجة المستندات
+4. إضافة تقارير ذكاء العقود (إحصائيات، رسوم بيانية)
+5. تحسين دقة استخراج الحقول بأنماط إضافية
+6. إضافة تصدير بيانات الذكاء (CSV/PDF)
+
+---
+
+## الدفعة السابقة: 2026-04-17T07:51 — Deployment Readiness, E2E Validation, Load Testing, SMTP Verification
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |

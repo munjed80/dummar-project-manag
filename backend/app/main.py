@@ -10,7 +10,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs
+from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence
 from app.core.config import settings
 from app.middleware.request_logging import RequestLoggingMiddleware
 
@@ -117,6 +117,7 @@ app.include_router(notifications.router)
 app.include_router(gis.router)
 app.include_router(health.router)
 app.include_router(audit_logs.router)
+app.include_router(contract_intelligence.router)
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")

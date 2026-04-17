@@ -493,6 +493,191 @@ class ApiService {
     return response.json();
   }
 
+  // ── Contract Intelligence ──
+  async getIntelligenceDashboard(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/dashboard`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch intelligence dashboard');
+    return response.json();
+  }
+
+  async getProcessingQueue(params?: { status_filter?: string; skip?: number; limit?: number }): Promise<any> {
+    const qp = new URLSearchParams();
+    if (params?.status_filter) qp.append('status_filter', params.status_filter);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/queue?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch processing queue');
+    return response.json();
+  }
+
+  async uploadContractDocument(file: File): Promise<any> {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/upload`, {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to upload contract document');
+    return response.json();
+  }
+
+  async getContractDocument(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch document');
+    return response.json();
+  }
+
+  async updateContractDocument(id: number, data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update document');
+    return response.json();
+  }
+
+  async approveContractDocument(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/approve`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to approve document');
+    return response.json();
+  }
+
+  async rejectContractDocument(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/reject`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to reject document');
+    return response.json();
+  }
+
+  async reprocessDocument(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/reprocess`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to reprocess document');
+    return response.json();
+  }
+
+  async convertDocumentToContract(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/convert-to-contract`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to convert to contract');
+    return response.json();
+  }
+
+  async getIntelligenceRisks(params?: { document_id?: number; contract_id?: number; unresolved_only?: boolean }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.document_id) qp.append('document_id', params.document_id.toString());
+    if (params?.contract_id) qp.append('contract_id', params.contract_id.toString());
+    if (params?.unresolved_only) qp.append('unresolved_only', 'true');
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/risks?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch risks');
+    return response.json();
+  }
+
+  async resolveRiskFlag(id: number, notes?: string): Promise<any> {
+    const qp = new URLSearchParams();
+    if (notes) qp.append('resolution_notes', notes);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/risks/${id}/resolve?${qp}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to resolve risk');
+    return response.json();
+  }
+
+  async getIntelligenceDuplicates(params?: { status_filter?: string; document_id?: number }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.status_filter) qp.append('status_filter', params.status_filter);
+    if (params?.document_id) qp.append('document_id', params.document_id.toString());
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/duplicates?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch duplicates');
+    return response.json();
+  }
+
+  async reviewDuplicate(id: number, data: { status: string; review_notes?: string }): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/duplicates/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to review duplicate');
+    return response.json();
+  }
+
+  async previewCsvImport(file: File): Promise<any> {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/preview-csv`, {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to preview CSV');
+    return response.json();
+  }
+
+  async executeCsvImport(file: File): Promise<any> {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/execute-csv`, {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to execute CSV import');
+    return response.json();
+  }
+
+  async bulkScanImport(files: File[]): Promise<any> {
+    const token = localStorage.getItem('access_token');
+    const formData = new FormData();
+    files.forEach(f => formData.append('files', f));
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/scan-batch`, {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to bulk scan import');
+    return response.json();
+  }
+
+  async getContractIntelligence(contractId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/intelligence`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch contract intelligence');
+    return response.json();
+  }
+
+  async analyzeContractRisks(contractId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/analyze-risks`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to analyze risks');
+    return response.json();
+  }
+
+  async detectContractDuplicates(contractId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/detect-duplicates`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to detect duplicates');
+    return response.json();
+  }
+
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');
