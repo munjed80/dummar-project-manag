@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from typing import List, Optional
 from datetime import datetime
+import logging
 import random
 import string
 from slowapi import Limiter
@@ -25,6 +26,7 @@ from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger("dummar.complaints")
 
 # Roles allowed to manage complaints
 _complaint_managers = require_role(
@@ -199,6 +201,7 @@ def update_complaint(
         raise HTTPException(status_code=404, detail="Complaint not found")
     
     old_status = complaint.status
+    old_assigned_to_id = complaint.assigned_to_id
     
     update_data = complaint_update.model_dump(exclude_unset=True)
 
@@ -238,8 +241,25 @@ def update_complaint(
                 assigned_to_id=complaint.assigned_to_id,
             )
         except Exception:
-            pass  # Don't block the update if notification fails
+            logger.exception("Notification failed for complaint %s status change", complaint.tracking_number)
+
+        # Audit: specific status change
+        write_audit_log(
+            db, action="complaint_status_change", entity_type="complaint",
+            entity_id=complaint.id, user_id=current_user.id,
+            description=f"Complaint {complaint.tracking_number} status: {old_status.value} -> {complaint_update.status.value}",
+            request=request,
+        )
     
+    # Audit: assignment change
+    if "assigned_to_id" in update_data and complaint.assigned_to_id != old_assigned_to_id:
+        write_audit_log(
+            db, action="complaint_assignment", entity_type="complaint",
+            entity_id=complaint.id, user_id=current_user.id,
+            description=f"Complaint {complaint.tracking_number} assigned: user {old_assigned_to_id} -> {complaint.assigned_to_id}",
+            request=request,
+        )
+
     write_audit_log(db, action="complaint_update", entity_type="complaint", entity_id=complaint.id, user_id=current_user.id, description=f"Complaint {complaint.tracking_number} updated", request=request)
     
     return complaint

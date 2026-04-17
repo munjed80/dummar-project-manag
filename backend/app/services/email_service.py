@@ -157,19 +157,20 @@ def _render_html(title: str, content: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def send_email(to_email: str, subject: str, body_html: str) -> None:
+def send_email(to_email: str, subject: str, body_html: str) -> bool:
     """Send an HTML email via SMTP.
 
     * Returns immediately (no-op) when ``SMTP_ENABLED`` is ``False``.
     * Never raises — all exceptions are caught and logged.
     * Deduplicates: same (to, subject) within 5 minutes is silently skipped.
     * TLS handling: uses STARTTLS on port 587 (default), direct SSL on port 465.
+    * Returns True if email was sent successfully, False otherwise.
     """
     if not settings.SMTP_ENABLED:
         logger.debug(
             "SMTP disabled — skipping email to %s (subject: %s)", to_email, subject
         )
-        return
+        return False
 
     if _is_duplicate(to_email, subject):
         logger.info(
@@ -177,7 +178,7 @@ def send_email(to_email: str, subject: str, body_html: str) -> None:
             to_email,
             subject,
         )
-        return
+        return False
 
     try:
         if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
@@ -185,7 +186,7 @@ def send_email(to_email: str, subject: str, body_html: str) -> None:
                 "SMTP credentials are not fully configured — "
                 "check SMTP_HOST, SMTP_USER, and SMTP_PASSWORD"
             )
-            return
+            return False
 
         msg = MIMEMultipart("alternative")
         msg["From"] = settings.SMTP_FROM_EMAIL
@@ -214,11 +215,13 @@ def send_email(to_email: str, subject: str, body_html: str) -> None:
                 server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
 
         logger.info("Email sent successfully to %s (subject: %s)", to_email, subject)
+        return True
 
     except Exception:
         logger.exception(
             "Failed to send email to %s (subject: %s)", to_email, subject
         )
+        return False
 
 
 # ---------------------------------------------------------------------------

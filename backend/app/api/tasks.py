@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
 from datetime import datetime
+import logging
 from app.core.database import get_db
 from app.models.task import Task, TaskActivity, TaskStatus, TaskPriority
 from app.models.user import User, UserRole
@@ -14,6 +15,7 @@ from app.services.notification_service import notify_task_assigned
 from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+logger = logging.getLogger("dummar.tasks")
 
 # Roles allowed to manage tasks
 _task_managers = require_role(
@@ -27,6 +29,7 @@ _task_managers = require_role(
 @router.post("/", response_model=TaskResponse)
 def create_task(
     task: TaskCreate,
+    request: Request,
     current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
@@ -45,6 +48,13 @@ def create_task(
     db.add(activity)
     db.commit()
 
+    write_audit_log(
+        db, action="task_create", entity_type="task",
+        entity_id=db_task.id, user_id=current_user.id,
+        description=f"Task '{db_task.title}' created",
+        request=request,
+    )
+
     # Notify assigned user
     if db_task.assigned_to_id:
         try:
@@ -55,7 +65,7 @@ def create_task(
                 assigned_to_id=db_task.assigned_to_id,
             )
         except Exception:
-            pass  # Don't block task creation if notification fails
+            logger.exception("Notification failed for task %d assignment", db_task.id)
     
     return db_task
 
@@ -155,6 +165,13 @@ def update_task(
         db.add(activity)
         db.commit()
 
+        write_audit_log(
+            db, action="task_status_change", entity_type="task",
+            entity_id=task.id, user_id=current_user.id,
+            description=f"Task {task.id} status: {old_status.value} -> {task_update.status.value}",
+            request=request,
+        )
+
     # Notify when task is assigned to a different user
     if (
         "assigned_to_id" in update_data
@@ -170,7 +187,16 @@ def update_task(
                 assigned_to_id=task.assigned_to_id,
             )
         except Exception:
-            pass
+            logger.exception("Notification failed for task %d reassignment", task.id)
+
+    # Audit: assignment change
+    if "assigned_to_id" in update_data and task.assigned_to_id != old_assigned_to_id:
+        write_audit_log(
+            db, action="task_assignment", entity_type="task",
+            entity_id=task.id, user_id=current_user.id,
+            description=f"Task {task.id} assigned: user {old_assigned_to_id} -> {task.assigned_to_id}",
+            request=request,
+        )
     
     write_audit_log(db, action="task_update", entity_type="task", entity_id=task.id, user_id=current_user.id, description=f"Task {task.id} updated", request=request)
     
@@ -180,6 +206,7 @@ def update_task(
 @router.delete("/{task_id}")
 def delete_task(
     task_id: int,
+    request: Request,
     current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
@@ -187,6 +214,13 @@ def delete_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    write_audit_log(
+        db, action="task_delete", entity_type="task",
+        entity_id=task.id, user_id=current_user.id,
+        description=f"Task '{task.title}' deleted",
+        request=request,
+    )
+
     db.delete(task)
     db.commit()
     

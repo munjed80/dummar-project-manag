@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     UPLOAD_DIR: str = "/app/uploads"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    LOG_LEVEL: str = "info"
     # Email settings (optional — notifications work in-app without email)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

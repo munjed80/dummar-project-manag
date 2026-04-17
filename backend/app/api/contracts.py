@@ -4,6 +4,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import json
+import logging
 from app.core.database import get_db
 from app.models.contract import Contract, ContractApproval, ContractStatus, ContractType
 from app.models.user import User
@@ -24,6 +25,7 @@ import io
 import base64
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
+logger = logging.getLogger("dummar.contracts")
 
 
 def generate_qr_code(contract_id: int) -> str:
@@ -222,7 +224,7 @@ def approve_contract(
             action=approval_request.action,
         )
     except Exception:
-        pass  # Don't block the action if notification fails
+        logger.exception("Notification failed for contract %s action=%s", contract.contract_number, approval_request.action)
     
     return contract
 

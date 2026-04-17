@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.post("/", response_model=UserResponse)
 def create_user(
     user: UserCreate,
+    request: Request,
     current_user: User = Depends(get_current_active_director),
     db: Session = Depends(get_db)
 ):
@@ -47,7 +48,12 @@ def create_user(
     db.commit()
     db.refresh(db_user)
     
-    write_audit_log(db, action="user_create", entity_type="user", entity_id=db_user.id, user_id=current_user.id, description=f"User {db_user.username} created")
+    write_audit_log(
+        db, action="user_create", entity_type="user",
+        entity_id=db_user.id, user_id=current_user.id,
+        description=f"User {db_user.username} (role={db_user.role.value}) created",
+        request=request,
+    )
     
     return db_user
 
@@ -101,6 +107,7 @@ def get_user(
 def update_user(
     user_id: int,
     user_update: UserUpdate,
+    request: Request,
     current_user: User = Depends(get_current_active_director),
     db: Session = Depends(get_db)
 ):
@@ -108,14 +115,33 @@ def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    old_role = user.role
     update_data = user_update.model_dump(exclude_unset=True)
+
+    # Track what changed for audit
+    changes = []
+    for field, value in update_data.items():
+        if field == "password":
+            changes.append("password changed")
+        elif getattr(user, field, None) != value:
+            changes.append(f"{field}: {getattr(user, field, None)} -> {value}")
+
     for field, value in update_data.items():
         setattr(user, field, value)
     
     db.commit()
     db.refresh(user)
     
-    write_audit_log(db, action="user_update", entity_type="user", entity_id=user.id, user_id=current_user.id, description=f"User {user.username} updated")
+    desc = f"User {user.username} updated"
+    if changes:
+        desc += f" [{', '.join(changes[:5])}]"
+
+    write_audit_log(
+        db, action="user_update", entity_type="user",
+        entity_id=user.id, user_id=current_user.id,
+        description=desc,
+        request=request,
+    )
     
     return user
 
@@ -123,6 +149,7 @@ def update_user(
 @router.delete("/{user_id}")
 def delete_user(
     user_id: int,
+    request: Request,
     current_user: User = Depends(get_current_active_director),
     db: Session = Depends(get_db)
 ):
@@ -133,6 +160,11 @@ def delete_user(
     user.is_active = 0
     db.commit()
     
-    write_audit_log(db, action="user_deactivate", entity_type="user", entity_id=user.id, user_id=current_user.id, description=f"User {user.username} deactivated")
+    write_audit_log(
+        db, action="user_deactivate", entity_type="user",
+        entity_id=user.id, user_id=current_user.id,
+        description=f"User {user.username} (role={user.role.value}) deactivated",
+        request=request,
+    )
     
     return {"message": "User deactivated successfully"}

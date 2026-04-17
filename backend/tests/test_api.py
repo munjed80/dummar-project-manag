@@ -692,3 +692,207 @@ class TestAuditLogAPI:
         """Anonymous user cannot access audit logs."""
         resp = client.get("/audit-logs/")
         assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# 15. Metrics and readiness endpoints
+# ---------------------------------------------------------------------------
+
+class TestMonitoringEndpoints:
+    """Test monitoring-related endpoints."""
+
+    def test_metrics_endpoint(self, client):
+        """Metrics endpoint returns uptime and version."""
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "uptime_seconds" in data
+        assert "version" in data
+        assert data["version"] == "1.0.0"
+
+    def test_readiness_endpoint(self, client):
+        """Readiness endpoint confirms DB is reachable."""
+        resp = client.get("/health/ready")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ready"
+
+    def test_health_basic(self, client):
+        """Basic health check returns healthy."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "healthy"
+
+
+# ---------------------------------------------------------------------------
+# 16. Enhanced audit logging for key flows
+# ---------------------------------------------------------------------------
+
+class TestEnhancedAuditLogging:
+    """Verify audit logging covers key operational events."""
+
+    def test_task_create_audit(self, client, db, director_user, director_token, sample_area):
+        """Task creation generates an audit log entry."""
+        from app.models.audit import AuditLog
+        resp = client.post("/tasks/", json={
+            "title": "Audit test task",
+            "description": "Testing audit on creation",
+            "area_id": sample_area.id,
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        task_id = resp.json()["id"]
+        log = db.query(AuditLog).filter(
+            AuditLog.action == "task_create",
+            AuditLog.entity_id == task_id,
+        ).first()
+        assert log is not None
+        assert log.user_id == director_user.id
+
+    def test_user_create_audit(self, client, db, director_user, director_token):
+        """User creation generates an audit log with role info."""
+        from app.models.audit import AuditLog
+        resp = client.post("/users/", json={
+            "username": "audit_test_user",
+            "full_name": "Audit Test",
+            "password": "securepass123",
+            "role": "field_team",
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        user_id = resp.json()["id"]
+        log = db.query(AuditLog).filter(
+            AuditLog.action == "user_create",
+            AuditLog.entity_id == user_id,
+        ).first()
+        assert log is not None
+        assert "field_team" in (log.description or "")
+
+    def test_user_deactivate_audit(self, client, db, director_user, director_token):
+        """User deactivation generates an audit log."""
+        from app.models.audit import AuditLog
+        # Create a user first
+        resp = client.post("/users/", json={
+            "username": "to_deactivate",
+            "full_name": "Will Deactivate",
+            "password": "securepass123",
+            "role": "field_team",
+        }, headers=_auth_headers(director_token))
+        uid = resp.json()["id"]
+        # Deactivate
+        resp = client.delete(f"/users/{uid}", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        log = db.query(AuditLog).filter(
+            AuditLog.action == "user_deactivate",
+            AuditLog.entity_id == uid,
+        ).first()
+        assert log is not None
+        assert "deactivated" in (log.description or "")
+
+    def test_complaint_status_change_audit(self, client, db, director_user, director_token, sample_area):
+        """Complaint status change generates a specific audit entry."""
+        from app.models.audit import AuditLog
+        from app.models.complaint import Complaint, ComplaintStatus as CS
+        # Create complaint directly in DB to avoid rate limiter
+        complaint = Complaint(
+            tracking_number="AUD00000001",
+            full_name="Audit Citizen",
+            phone="+963999888777",
+            complaint_type="infrastructure",
+            description="Audit status test",
+            area_id=sample_area.id,
+            status=CS.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+        db.refresh(complaint)
+        cid = complaint.id
+        # Change status
+        resp = client.put(f"/complaints/{cid}", json={
+            "status": "under_review",
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        log = db.query(AuditLog).filter(
+            AuditLog.action == "complaint_status_change",
+            AuditLog.entity_id == cid,
+        ).first()
+        assert log is not None
+        assert "new" in (log.description or "")
+        assert "under_review" in (log.description or "")
+
+    def test_contract_approve_audit(self, client, db, director_user, director_token):
+        """Contract approval generates a specific audit entry."""
+        from app.models.audit import AuditLog
+        # Create contract
+        resp = client.post("/contracts/", json={
+            "contract_number": "AUD-001",
+            "title": "Audit test contract",
+            "contractor_name": "Test Co",
+            "contract_type": "maintenance",
+            "contract_value": 50000,
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+            "scope_description": "Audit test scope",
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200, resp.text
+        contract_id = resp.json()["id"]
+        # Approve
+        resp = client.post(f"/contracts/{contract_id}/approve", json={
+            "action": "approve",
+            "comments": "Approved for audit test",
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        log = db.query(AuditLog).filter(
+            AuditLog.action == "contract_approve",
+            AuditLog.entity_id == contract_id,
+        ).first()
+        assert log is not None
+
+    def test_audit_log_response_includes_user_agent(self, client, db, director_token):
+        """Audit log API response includes user_agent field."""
+        from app.services.audit import write_audit_log
+        write_audit_log(
+            db, action="ua_test", entity_type="test",
+            entity_id=1, user_agent="TestBrowser/1.0",
+        )
+        resp = client.get("/audit-logs/?action=ua_test", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 1
+        assert items[0]["user_agent"] == "TestBrowser/1.0"
+
+
+# ---------------------------------------------------------------------------
+# 17. Dashboard query optimization
+# ---------------------------------------------------------------------------
+
+class TestDashboardOptimized:
+    """Verify dashboard stats still work after optimization."""
+
+    def test_dashboard_stats_with_data(self, client, db, director_token, sample_area):
+        """Dashboard stats returns correct counts after optimization."""
+        from app.models.complaint import Complaint, ComplaintStatus as CS
+        # Create complaint directly in DB to avoid rate limiter
+        complaint = Complaint(
+            tracking_number="DSH00000001",
+            full_name="Stats Citizen",
+            phone="+963111222333",
+            complaint_type="infrastructure",
+            description="Stats test",
+            area_id=sample_area.id,
+            status=CS.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+        # Create task via API
+        client.post("/tasks/", json={
+            "title": "Stats task",
+            "description": "Stats test",
+            "area_id": sample_area.id,
+        }, headers=_auth_headers(director_token))
+
+        resp = client.get("/dashboard/stats", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_complaints"] >= 1
+        assert data["total_tasks"] >= 1
+        assert "new" in data["complaints_by_status"]
+        assert data["complaints_by_status"]["new"] >= 1
