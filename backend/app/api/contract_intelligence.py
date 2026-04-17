@@ -62,6 +62,52 @@ ALLOWED_DOC_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".cs
 MAX_DOC_SIZE = 20 * 1024 * 1024  # 20MB
 MAX_IMPORT_ROWS = 500  # Safety limit for bulk import (CSV/Excel)
 BATCH_FAILURE_THRESHOLD = 0.5  # 50% — notify as batch_import_failed if failures exceed this
+MAX_FILENAME_DISPLAY = 40  # Truncation limit for filenames in reports
+
+# ─────────────────────────────────────────────────────────────
+# Arabic PDF helpers (shared by report and document export)
+# ─────────────────────────────────────────────────────────────
+
+try:
+    import arabic_reshaper as _arabic_reshaper
+    from bidi.algorithm import get_display as _bidi_get_display
+    _HAS_BIDI = True
+except ImportError:
+    _HAS_BIDI = False
+
+
+def _shape_arabic(text: str) -> str:
+    """Reshape Arabic text for correct rendering in PDF (joined letters + RTL)."""
+    if not _HAS_BIDI or not text:
+        return text
+    try:
+        reshaped = _arabic_reshaper.reshape(text)
+        return _bidi_get_display(reshaped)
+    except Exception:
+        return text
+
+
+def _register_arabic_font():
+    """
+    Register DejaVu Sans TTF fonts for Arabic PDF rendering.
+    Returns (regular_font_name, bold_font_name).
+    Falls back to Helvetica if DejaVu Sans is not available.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    _font_regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    _font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    if os.path.exists(_font_regular):
+        try:
+            pdfmetrics.registerFont(TTFont("DejaVuSans", _font_regular))
+            pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", _font_bold))
+            return "DejaVuSans", "DejaVuSans-Bold"
+        except Exception:
+            logger.warning("Failed to register DejaVu Sans font — falling back to Helvetica")
+
+    return "Helvetica", "Helvetica-Bold"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -2001,42 +2047,8 @@ def export_intelligence_pdf(
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as pdf_canvas
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
 
-    # ── Arabic text shaping helpers ──
-    try:
-        import arabic_reshaper
-        from bidi.algorithm import get_display
-        _HAS_BIDI = True
-    except ImportError:
-        _HAS_BIDI = False
-
-    def _shape_arabic(text: str) -> str:
-        """Reshape Arabic text for correct rendering in PDF (joined letters + RTL)."""
-        if not _HAS_BIDI or not text:
-            return text
-        try:
-            reshaped = arabic_reshaper.reshape(text)
-            return get_display(reshaped)
-        except Exception:
-            return text
-
-    # ── Register Arabic-capable TTF font ──
-    _FONT = "Helvetica"
-    _FONT_BOLD = "Helvetica-Bold"
-    _font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ]
-    if os.path.exists(_font_paths[0]):
-        try:
-            pdfmetrics.registerFont(TTFont("DejaVuSans", _font_paths[0]))
-            pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", _font_paths[1]))
-            _FONT = "DejaVuSans"
-            _FONT_BOLD = "DejaVuSans-Bold"
-        except Exception:
-            logger.warning("Failed to register DejaVu Sans font — falling back to Helvetica")
+    _FONT, _FONT_BOLD = _register_arabic_font()
 
     # Build filtered document query
     doc_query = db.query(ContractDocument)
@@ -2144,7 +2156,7 @@ def export_intelligence_pdf(
             c.showPage()
             y = height - 20 * mm
             c.setFont(_FONT, 8)
-        fname = doc.original_filename[:40] if doc.original_filename else "?"
+        fname = doc.original_filename[:MAX_FILENAME_DISPLAY] if doc.original_filename else "?"
         pstatus = doc.processing_status.value if doc.processing_status else "?"
         stype = doc.suggested_type or "-"
         line = _shape_arabic(f"#{doc.id} | {fname} | {pstatus} | {stype}")
@@ -2188,41 +2200,8 @@ def export_document_pdf(
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as pdf_canvas
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
 
-    # Arabic text shaping
-    try:
-        import arabic_reshaper
-        from bidi.algorithm import get_display
-        _HAS_BIDI = True
-    except ImportError:
-        _HAS_BIDI = False
-
-    def _shape_arabic(text: str) -> str:
-        if not _HAS_BIDI or not text:
-            return text
-        try:
-            reshaped = arabic_reshaper.reshape(text)
-            return get_display(reshaped)
-        except Exception:
-            return text
-
-    # Register font
-    _FONT = "Helvetica"
-    _FONT_BOLD = "Helvetica-Bold"
-    _font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ]
-    if os.path.exists(_font_paths[0]):
-        try:
-            pdfmetrics.registerFont(TTFont("DejaVuSans", _font_paths[0]))
-            pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", _font_paths[1]))
-            _FONT = "DejaVuSans"
-            _FONT_BOLD = "DejaVuSans-Bold"
-        except Exception:
-            pass
+    _FONT, _FONT_BOLD = _register_arabic_font()
 
     doc = db.query(ContractDocument).filter(ContractDocument.id == document_id).first()
     if not doc:
@@ -2344,7 +2323,7 @@ def export_document_pdf(
 
     c.save()
     buffer.seek(0)
-    safe_name = (doc.original_filename or "document").replace(" ", "_")[:40]
+    safe_name = (doc.original_filename or "document").replace(" ", "_")[:MAX_FILENAME_DISPLAY]
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

@@ -1,22 +1,24 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T13:50
+## آخر تحديث: 2026-04-17T14:30
 
 ---
 
-## الدفعة الحالية: 2026-04-17T13:27 — Intelligence Export, Filters, Extraction & Production Readiness
+## الدفعة الحالية: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `backend/app/api/contract_intelligence.py` | إضافة: 10 filter params لـ reports, CSV export, PDF export, time-series data, active_filters |
-| `backend/app/services/extraction_service.py` | تحسين: OCR noise cleanup, dotted dates, mixed labels, contract number patterns, value parsing |
-| `backend/app/services/ocr_service.py` | تحسين: get_ocr_status() يعرض version + languages info |
-| `backend/tests/test_contract_intelligence.py` | 23 اختبار جديد (extraction edge cases, filters, CSV/PDF export, RBAC) |
-| `src/pages/IntelligenceReportsPage.tsx` | إضافة: filter panel, export buttons (CSV/PDF), time-series charts |
-| `src/services/api.ts` | إضافة: getIntelligenceReports(params), downloadIntelligenceCsv(), downloadIntelligencePdf() |
-| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: Tesseract OCR Setup section كامل مع verification steps |
+| `backend/app/api/contract_intelligence.py` | إعادة كتابة: PDF export مع DejaVu Sans + arabic-reshaper + python-bidi، إضافة individual document PDF export |
+| `backend/requirements.txt` | إضافة: arabic-reshaper==3.0.0, python-bidi==0.6.7 |
+| `backend/Dockerfile` | إضافة: fonts-dejavu-core لدعم خط عربي في PDF |
+| `docker-compose.yml` | تحسين: memory limits لجميع الخدمات |
+| `nginx.conf` | تحسين: gzip, auth rate limiting, upload timeout 300s, client_max_body_size 20M |
+| `backend/entrypoint.sh` | تحسين: Tesseract + Arabic font verification عند بدء التشغيل |
+| `backend/tests/test_contract_intelligence.py` | 4 اختبارات جديدة (Arabic PDF, individual export, 404, RBAC) |
+| `src/services/api.ts` | إضافة: downloadDocumentPdf() method |
+| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: Arabic PDF section, Tesseract verification checklist |
 | `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
@@ -26,93 +28,79 @@
 
 ### ✅ مكتمل ومُتحقق منه:
 
-**A) Data Export from Intelligence Reports:**
-- ✅ GET /contract-intelligence/reports/export/csv — CSV export مع section selection (all/documents/risks/duplicates/batches)
-- ✅ GET /contract-intelligence/reports/export/pdf — PDF export عبر reportlab مع:
-  - ملخص إحصائي (documents, risks, duplicates)
-  - تفصيل حالة المعالجة
-  - قائمة المستندات (أول 50)
-  - الفلاتر النشطة في التقرير
-- ✅ كلا التصديرين يحترمان الفلاتر النشطة
-- ✅ Audit logging لكل عملية تصدير
+**A) Proper Arabic PDF Export:**
+- ✅ DejaVu Sans TTF font مُسجّل في reportlab (Regular + Bold)
+- ✅ arabic-reshaper يربط الحروف العربية بشكل صحيح (معزولة → متصلة)
+- ✅ python-bidi يعالج اتجاه النص من اليمين لليسار
+- ✅ عنوان التقرير بالعربية: "تقرير ذكاء العقود — مشروع دمّر"
+- ✅ تسميات الأقسام بالعربية: ملخص التقرير، حالة المعالجة، المستندات
+- ✅ محتوى مختلط عربي/إنجليزي يظهر بشكل صحيح
+- ✅ Fallback لـ Helvetica إذا DejaVu Sans غير متوفر (PDF صالح لكن بدون عربي)
+- ✅ fonts-dejavu-core مُثبّت في Dockerfile
+- ✅ اختبار يتحقق من إنشاء PDF صالح مع محتوى عربي
+- ✅ Audit logging محفوظ
+
+**B) Production Deployment Hardening:**
+- ✅ docker-compose.yml: memory limits (db: 512M, backend: 1G, nginx: 128M)
+- ✅ nginx.conf: gzip compression لأنواع الملفات الشائعة
+- ✅ nginx.conf: auth_limit zone منفصل (10r/s) لحماية نقطة تسجيل الدخول
+- ✅ nginx.conf: upload rate limiting مع timeout ممتد (300s) لاستيراد العقود
+- ✅ nginx.conf: client_max_body_size 20M (يتطابق مع حد contract intelligence)
+- ✅ entrypoint.sh: Tesseract version + languages verification عند بدء التشغيل
+- ✅ entrypoint.sh: Arabic PDF font availability check
+- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Arabic PDF section كامل مع verification + troubleshooting
+- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Tesseract Production Verification Checklist مفصّل
+- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: Updated Docker features list
+
+**C) Real Tesseract OCR Verification Path:**
+- ✅ Dockerfile يثبّت: tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils + fonts-dejavu-core
+- ✅ entrypoint.sh يتحقق من Tesseract version + languages عند كل بدء تشغيل
+- ✅ get_ocr_status() API يعرض: engine, tesseract_version, tesseract_languages
+- ✅ is_tesseract_available() يكتشف: Python package + system binary مع caching
+- ✅ Graceful fallback: BasicTextExtractor يعمل تلقائياً بدون Tesseract
+- ✅ CI tests تمر بدون Tesseract binary (detection + fallback tested)
+- ✅ Production verification checklist مُفصّل في PRODUCTION_DEPLOYMENT_GUIDE.md
+
+**D) Individual Document Export:**
+- ✅ GET /contract-intelligence/documents/{id}/export/pdf — PDF export لمستند واحد
+- ✅ يتضمن: metadata, extracted fields, classification, summary, risks, duplicates
+- ✅ Arabic rendering بنفس جودة التقرير العام
 - ✅ RBAC: contracts_manager + project_director فقط
-- ✅ 6 اختبارات تغطي: CSV all, CSV documents, CSV risks, CSV with filter, PDF export, RBAC
+- ✅ Audit logging: intelligence_document_export_pdf
+- ✅ 3 اختبارات: export success, 404, RBAC denied
+- ✅ Frontend API method: downloadDocumentPdf()
 
-**B) Filters and Search in Intelligence Reports:**
-- ✅ 10 معاملات فلترة في GET /contract-intelligence/reports:
-  - date_from, date_to (نطاق زمني YYYY-MM-DD)
-  - ocr_status (complete/pending/failed)
-  - review_status (أي قيمة DocumentProcessingStatus)
-  - classification_type (maintenance/construction/etc)
-  - risk_severity (critical/high/medium/low)
-  - risk_type (نوع المخاطرة)
-  - duplicate_status (pending/confirmed_same/confirmed_different)
-  - import_source (upload/bulk_scan/spreadsheet)
-  - search (keyword بحث في الملفات والحقول والملخصات)
-- ✅ جميع أقسام التقرير (12) تُفلتر حسب المعاملات النشطة
-- ✅ active_filters في الاستجابة يُظهر الفلاتر المُطبّقة
-- ✅ Frontend filter panel مع 8 حقول فلترة + بحث + مسح الكل
-- ✅ 4 اختبارات: date filter, review_status, search, import_source
-
-**C) Production-Ready Tesseract Verification Path:**
-- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: قسم Tesseract كامل مع:
-  - Docker vs Bare Metal setup
-  - Production verification steps (API, admin UI, Docker exec)
-  - Graceful fallback behavior documentation
-  - Troubleshooting table
-- ✅ get_ocr_status() محسّن: يعرض tesseract_version + tesseract_languages
-- ✅ Frontend يعرض حالة المحرك (✅ متوفر / ❌ غير متوفر)
-- ✅ Dockerfile مُثبّت: tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils
-- ✅ CI لا يتعطل بدون Tesseract binary
-
-**D) Extraction Pattern Refinement:**
-- ✅ _clean_ocr_noise(): تنظيف تشكيل، مسافات متعددة، حروف ضوضائية
-- ✅ Dotted dates (dd.mm.yyyy, yyyy.mm.dd)
-- ✅ Two-digit years (15-03-24 → 2024-03-15)
-- ✅ Spaces inside currency values (5 000 000 → 5000000)
-- ✅ Reversed currency patterns (ل.س 2,500,000)
-- ✅ Year-prefix contract numbers (2024-MAINT-001)
-- ✅ Company prefix patterns (شركة/مؤسسة/مكتب as standalone patterns)
-- ✅ Week duration support (4 أسابيع → 28 days)
-- ✅ Mixed Arabic/English label patterns (Contract No., contractor, vendor, supplier)
-- ✅ 11 اختبار لحالات الحد
-
-**E) Time-Series Reporting:**
-- ✅ documents_over_time: عدد المستندات المُعالجة يومياً (آخر 90 يوم)
-- ✅ risks_over_time: عدد المخاطر المكتشفة يومياً (آخر 90 يوم)
-- ✅ SQLite-compatible date aggregation (sql_func.substr for cross-DB)
-- ✅ Frontend TimeSeriesChart مع أعمدة بيانية + تسميات تاريخ
-- ✅ يحترم الفلاتر النشطة
-
-**F) Operational Trust:**
+**E) Operational Trust:**
 - ✅ RBAC سليم: contracts_manager + project_director لجميع النقاط الجديدة
-- ✅ Audit logging: intelligence_report_export_csv, intelligence_report_export_pdf
+- ✅ Audit logging: intelligence_report_export_pdf, intelligence_document_export_pdf
 - ✅ Code في English، UI عربي RTL
 - ✅ لا توجد placeholders مزيفة
 
 ### المقاييس:
-- **اختبارات الخلفية:** 201 ناجح (178 سابق + 23 جديد)
+- **اختبارات الخلفية:** 205 ناجح (201 سابق + 4 جديد)
 - **بناء الواجهة:** ناجح
-- **ملفات مُعدّلة:** 9
-- **نقاط نهاية API جديدة:** 2 (reports/export/csv, reports/export/pdf)
-- **معاملات فلترة جديدة:** 10
+- **ملفات مُعدّلة:** 11
+- **نقاط نهاية API جديدة:** 1 (documents/{id}/export/pdf)
+- **حزم Python جديدة:** 2 (arabic-reshaper, python-bidi)
+- **حزم نظام جديدة:** 1 (fonts-dejavu-core)
 
 ### ⚠️ جزئي:
-- **Tesseract في CI:** Binary غير متوفر — المحرك يكتشف ذلك ويعود لـ BasicTextExtractor. في Docker production يعمل بالكامل.
-- **PDF export عربي:** reportlab لا يدعم خطوط عربية embedded بشكل native — PDF يستخدم خطوط Helvetica مع بيانات وصفية. المحتوى العربي يظهر في ملفات CSV بشكل كامل.
+- **Tesseract في CI:** Binary غير متوفر — المحرك يكتشف ذلك ويعود لـ BasicTextExtractor. في Docker production يعمل بالكامل. Startup logs تتحقق من الحالة.
+- **Arabic PDF rendering:** Verified with arabic-reshaper + python-bidi + DejaVu Sans. Letter joining and RTL ordering confirmed in test environment. Full visual verification requires opening the generated PDF.
 
 ---
 
 ## الدفعة التالية المُقترحة:
-1. خط عربي مخصص في PDF export (يتطلب خط TTF عربي + تسجيل في reportlab)
-2. تصدير بيانات مفصلة للمستندات الفردية
-3. نشر فعلي على خادم إنتاج — اختبار Tesseract OCR الحقيقي
+1. نشر فعلي على خادم إنتاج — اختبار النظام الكامل مع Docker
+2. SSL/TLS setup مع Let's Encrypt
+3. اختبار SMTP مع خادم حقيقي
 4. تحسين extraction باستخدام ML (اختياري، يتطلب training data)
-5. تكامل مع أنظمة خارجية (إن وُجدت)
+5. اختبار بيانات حقيقية (Arabic scanned contracts) مع Tesseract
+6. تكامل مع أنظمة خارجية (إن وُجدت)
 
 ---
 
-## الدفعة السابقة: 2026-04-17T12:34 — Contract Intelligence Operational Completion
+## الدفعة السابقة: 2026-04-17T13:27 — Intelligence Export, Filters, Extraction & Production Readiness
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
