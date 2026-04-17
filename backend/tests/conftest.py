@@ -48,6 +48,7 @@ from app.core.database import Base, get_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.models.location import Area  # noqa: E402
+from app.models.location import Location, LocationType, LocationStatus, ContractLocation  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -189,3 +190,60 @@ def sample_area(db):
     db.commit()
     db.refresh(area)
     return area
+
+
+@pytest.fixture()
+def sample_location(db):
+    loc = Location(
+        name="جزيرة 1",
+        code="ISL-001",
+        location_type=LocationType.ISLAND,
+        status=LocationStatus.ACTIVE,
+        description="الجزيرة الأولى",
+        is_active=1,
+    )
+    db.add(loc)
+    db.commit()
+    db.refresh(loc)
+    return loc
+
+
+@pytest.fixture()
+def sample_location_tree(db):
+    """Create a 3-level hierarchy: island -> sector -> building."""
+    island = Location(
+        name="جزيرة 5",
+        code="ISL-005",
+        location_type=LocationType.ISLAND,
+        status=LocationStatus.ACTIVE,
+        is_active=1,
+    )
+    db.add(island)
+    db.commit()
+    db.refresh(island)
+
+    sector = Location(
+        name="قطاع أ",
+        code="SEC-005-A",
+        location_type=LocationType.SECTOR,
+        parent_id=island.id,
+        status=LocationStatus.ACTIVE,
+        is_active=1,
+    )
+    db.add(sector)
+    db.commit()
+    db.refresh(sector)
+
+    building = Location(
+        name="مبنى 1",
+        code="BLD-005-A-01",
+        location_type=LocationType.BUILDING,
+        parent_id=sector.id,
+        status=LocationStatus.ACTIVE,
+        is_active=1,
+    )
+    db.add(building)
+    db.commit()
+    db.refresh(building)
+
+    return {"island": island, "sector": sector, "building": building}

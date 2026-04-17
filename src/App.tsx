@@ -27,6 +27,8 @@ const RiskInsightsPage = lazy(() => import('@/pages/RiskInsightsPage'));
 const DuplicateReviewPage = lazy(() => import('@/pages/DuplicateReviewPage'));
 const IntelligenceReportsPage = lazy(() => import('@/pages/IntelligenceReportsPage'));
 const LocationsListPage = lazy(() => import('@/pages/LocationsListPage'));
+const LocationDetailPage = lazy(() => import('@/pages/LocationDetailPage'));
+const LocationReportsPage = lazy(() => import('@/pages/LocationReportsPage'));
 const UsersPage = lazy(() => import('@/pages/UsersPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
@@ -113,6 +115,8 @@ function App() {
           <Route path="/contract-intelligence/duplicates" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DuplicateReviewPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/reports" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><IntelligenceReportsPage /></RoleProtectedRoute>} />
           <Route path="/locations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
+          <Route path="/locations/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><LocationReportsPage /></RoleProtectedRoute>} />
+          <Route path="/locations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
           <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
