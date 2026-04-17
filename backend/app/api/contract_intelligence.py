@@ -1743,19 +1743,16 @@ def get_intelligence_reports(
 
     # 13. Time-series data: documents processed per day (last 90 days)
     # Use string-based date extraction for SQLite compatibility
+    _date_col = sql_func.substr(sql_func.cast(ContractDocument.created_at, String), 1, 10)
     timeseries_rows = db.query(
-        sql_func.substr(sql_func.cast(ContractDocument.created_at, String), 1, 10).label("date"),
+        _date_col.label("date"),
         sql_func.count(ContractDocument.id).label("count"),
     )
     if filtered_ids:
         timeseries_rows = timeseries_rows.filter(ContractDocument.id.in_(filtered_ids))
     timeseries_rows = timeseries_rows.filter(
         ContractDocument.created_at.isnot(None)
-    ).group_by(
-        sql_func.substr(sql_func.cast(ContractDocument.created_at, String), 1, 10)
-    ).order_by(
-        sql_func.substr(sql_func.cast(ContractDocument.created_at, String), 1, 10)
-    ).limit(90).all()
+    ).group_by(_date_col).order_by(_date_col).limit(90).all()
 
     documents_over_time = [
         {"date": str(row[0]) if row[0] else None, "count": row[1]}
@@ -1763,19 +1760,16 @@ def get_intelligence_reports(
     ]
 
     # 14. Risk flags over time
+    _risk_date_col = sql_func.substr(sql_func.cast(ContractRiskFlag.created_at, String), 1, 10)
     risk_ts_rows = db.query(
-        sql_func.substr(sql_func.cast(ContractRiskFlag.created_at, String), 1, 10).label("date"),
+        _risk_date_col.label("date"),
         sql_func.count(ContractRiskFlag.id).label("count"),
     )
     if risk_ids:
         risk_ts_rows = risk_ts_rows.filter(ContractRiskFlag.id.in_(risk_ids))
     risk_ts_rows = risk_ts_rows.filter(
         ContractRiskFlag.created_at.isnot(None)
-    ).group_by(
-        sql_func.substr(sql_func.cast(ContractRiskFlag.created_at, String), 1, 10)
-    ).order_by(
-        sql_func.substr(sql_func.cast(ContractRiskFlag.created_at, String), 1, 10)
-    ).limit(90).all()
+    ).group_by(_risk_date_col).order_by(_risk_date_col).limit(90).all()
 
     risks_over_time = [
         {"date": str(row[0]) if row[0] else None, "count": row[1]}

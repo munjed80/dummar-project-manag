@@ -93,6 +93,10 @@ function BarChart({ data, labelMap }: { data: Record<string, number>; labelMap?:
   );
 }
 
+const TS_BAR_MIN_HEIGHT = 4;
+const TS_BAR_MAX_HEIGHT = 80;
+const TS_LABEL_THRESHOLD = 15;
+
 function TimeSeriesChart({ data, label }: { data: { date: string; count: number }[]; label: string }) {
   if (!data || data.length === 0) return <p className="text-sm text-muted-foreground">لا توجد بيانات زمنية</p>;
   const max = Math.max(...data.map(d => d.count), 1);
@@ -105,9 +109,9 @@ function TimeSeriesChart({ data, label }: { data: { date: string; count: number 
           <div key={i} className="flex flex-col items-center min-w-[20px]" title={`${d.date}: ${d.count}`}>
             <div
               className="w-4 bg-primary rounded-t transition-all"
-              style={{ height: `${Math.max(4, (d.count / max) * 80)}px` }}
+              style={{ height: `${Math.max(TS_BAR_MIN_HEIGHT, (d.count / max) * TS_BAR_MAX_HEIGHT)}px` }}
             />
-            {data.length <= 15 && (
+            {data.length <= TS_LABEL_THRESHOLD && (
               <span className="text-[9px] text-muted-foreground mt-0.5 rotate-[-45deg] origin-top-right w-12 truncate">
                 {d.date?.slice(5) || ''}
               </span>

@@ -229,6 +229,9 @@ def _extract_dates(text: str) -> List[str]:
     return sorted(dates)[:5]  # Return up to 5 dates, sorted
 
 
+_TWO_DIGIT_YEAR_CUTOFF = 50  # years below this are 2000s, above are 1900s
+
+
 def _normalize_date(date_str: str) -> Optional[str]:
     """Try to parse and normalize a date string to yyyy-mm-dd."""
     date_str = date_str.replace("/", "-").replace(".", "-")
@@ -243,7 +246,7 @@ def _normalize_date(date_str: str) -> Optional[str]:
             d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
         # Handle 2-digit years
         if y < 100:
-            y += 2000 if y < 50 else 1900
+            y += 2000 if y < _TWO_DIGIT_YEAR_CUTOFF else 1900
         if 1900 <= y <= 2100 and 1 <= m <= 12 and 1 <= d <= 31:
             return f"{y:04d}-{m:02d}-{d:02d}"
     except (ValueError, IndexError):
