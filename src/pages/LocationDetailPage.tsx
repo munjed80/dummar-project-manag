@@ -14,8 +14,11 @@ import {
 } from '@/components/ui/tabs';
 import {
   Spinner, MapPin, ChatCircleDots, ListChecks, FileText,
-  CaretLeft, ArrowRight, WarningCircle, Clock, TreeStructure,
+  CaretLeft, ArrowRight, WarningCircle, Clock, TreeStructure, PencilSimple, Plus,
 } from '@phosphor-icons/react';
+import { MapView } from '@/components/MapView';
+import type { MapMarker } from '@/components/MapView';
+import { LocationFormDialog } from '@/components/LocationFormDialog';
 
 const LOCATION_TYPE_LABELS: Record<string, string> = {
   island: 'جزيرة',
@@ -70,7 +73,10 @@ export default function LocationDetailPage() {
   const [tasks, setTasks] = useState<any>(null);
   const [contracts, setContracts] = useState<any>(null);
   const [activity, setActivity] = useState<any[]>([]);
+  const [mapData, setMapData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showCreateChildDialog, setShowCreateChildDialog] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -80,18 +86,20 @@ export default function LocationDetailPage() {
   const loadDetail = async (locationId: number) => {
     setLoading(true);
     try {
-      const [detailData, complaintsData, tasksData, contractsData, activityData] = await Promise.all([
+      const [detailData, complaintsData, tasksData, contractsData, activityData, mapDataResult] = await Promise.all([
         apiService.getLocationDetail(locationId),
         apiService.getLocationComplaints(locationId),
         apiService.getLocationTasks(locationId),
         apiService.getLocationContracts(locationId),
         apiService.getLocationActivity(locationId),
+        apiService.getLocationMapData(locationId).catch(() => null),
       ]);
       setDetail(detailData);
       setComplaints(complaintsData);
       setTasks(tasksData);
       setContracts(contractsData);
       setActivity(activityData);
+      setMapData(mapDataResult);
     } catch (err) {
       console.error('Failed to load location:', err);
     } finally {
@@ -142,9 +150,19 @@ export default function LocationDetailPage() {
               </Badge>
             </div>
           </div>
-          <Link to="/locations">
-            <Button variant="outline" size="sm">العودة للمواقع</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowCreateChildDialog(true)}>
+              <Plus size={14} className="ml-1" />
+              إضافة فرعي
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowEditDialog(true)}>
+              <PencilSimple size={14} className="ml-1" />
+              تعديل
+            </Button>
+            <Link to="/locations">
+              <Button variant="outline" size="sm">العودة للمواقع</Button>
+            </Link>
+          </div>
         </div>
 
         {/* Operational Summary Cards */}
@@ -451,6 +469,99 @@ export default function LocationDetailPage() {
             </Tabs>
           </div>
         </div>
+
+        {/* Interactive Map */}
+        {(loc.latitude || loc.longitude || (mapData?.complaints?.length > 0) || (mapData?.tasks?.length > 0) || (mapData?.children?.length > 0)) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin size={18} />
+                خريطة الموقع
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MapView
+                markers={[
+                  // Location point itself
+                  ...(loc.latitude && loc.longitude ? [{
+                    id: loc.id,
+                    latitude: loc.latitude,
+                    longitude: loc.longitude,
+                    title: loc.name,
+                    description: LOCATION_TYPE_LABELS[loc.location_type] || loc.location_type,
+                    status: loc.status,
+                    entity_type: 'location' as string,
+                    reference: loc.code,
+                  }] : []),
+                  // Child locations
+                  ...(mapData?.children || []).map((child: any) => ({
+                    id: child.id + 10000,
+                    latitude: child.latitude,
+                    longitude: child.longitude,
+                    title: child.name,
+                    description: child.code,
+                    entity_type: 'location' as string,
+                    reference: child.code,
+                  })),
+                  // Complaints
+                  ...(mapData?.complaints || []).map((c: any) => ({
+                    id: c.id,
+                    latitude: c.latitude,
+                    longitude: c.longitude,
+                    title: c.title,
+                    tracking_number: c.tracking_number,
+                    status: c.status,
+                    entity_type: 'complaint' as string,
+                    reference: c.tracking_number,
+                  })),
+                  // Tasks
+                  ...(mapData?.tasks || []).map((t: any) => ({
+                    id: t.id,
+                    latitude: t.latitude,
+                    longitude: t.longitude,
+                    title: t.title,
+                    status: t.status,
+                    entity_type: 'task' as string,
+                    reference: t.reference,
+                  })),
+                ]}
+                center={loc.latitude && loc.longitude ? [loc.latitude, loc.longitude] : undefined}
+                zoom={15}
+                height="400px"
+              />
+              <div className="flex gap-4 mt-3 text-xs text-muted-foreground justify-center">
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
+                  الموقع / فرعي
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
+                  شكوى
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" style={{ transform: 'rotate(45deg)' }} />
+                  مهمة
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Edit Dialog */}
+        <LocationFormDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          editData={loc}
+          onSuccess={() => loadDetail(parseInt(id!))}
+        />
+
+        {/* Create Child Dialog */}
+        <LocationFormDialog
+          open={showCreateChildDialog}
+          onOpenChange={setShowCreateChildDialog}
+          parentId={loc.id}
+          onSuccess={() => loadDetail(parseInt(id!))}
+        />
       </div>
     </Layout>
   );

@@ -15,7 +15,8 @@ import {
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
-import { Spinner, TreeStructure, ListBullets, MapPin, CaretDown, CaretLeft, ChatCircleDots, ListChecks, FileText, WarningCircle } from '@phosphor-icons/react';
+import { Spinner, TreeStructure, ListBullets, MapPin, CaretDown, CaretLeft, ChatCircleDots, ListChecks, FileText, WarningCircle, Plus } from '@phosphor-icons/react';
+import { LocationFormDialog } from '@/components/LocationFormDialog';
 
 const LOCATION_TYPE_LABELS: Record<string, string> = {
   island: 'جزيرة',
@@ -108,6 +109,7 @@ export default function LocationsListPage() {
   const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('tree');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -186,6 +188,10 @@ export default function LocationsListPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">المواقع والجغرافيا التشغيلية</h1>
           <div className="flex gap-2">
+            <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus size={16} className="ml-1" />
+              إضافة موقع
+            </Button>
             <Link to="/locations/reports">
               <Button variant="outline" size="sm">تقارير المواقع</Button>
             </Link>
@@ -380,6 +386,12 @@ export default function LocationsListPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <LocationFormDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          onSuccess={loadData}
+        />
       </div>
     </Layout>
   );

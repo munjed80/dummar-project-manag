@@ -560,3 +560,226 @@ class TestLocationAudit:
         from app.models.audit import AuditLog
         logs = db.query(AuditLog).filter(AuditLog.action == "location_update").all()
         assert len(logs) >= 1
+
+
+# ---------------------------------------------------------------------------
+# CSV Export
+# ---------------------------------------------------------------------------
+
+class TestLocationCSVExport:
+    def test_csv_export(self, client, db, director_token, sample_location):
+        resp = client.get("/locations/reports/export/csv",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        assert "text/csv" in resp.headers.get("content-type", "")
+        content = resp.text
+        assert "الاسم" in content  # Arabic header row
+        assert sample_location.name in content
+
+    def test_csv_export_with_type_filter(self, client, db, director_token, sample_location):
+        resp = client.get("/locations/reports/export/csv?location_type=island",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        content = resp.text
+        assert sample_location.name in content
+
+    def test_csv_export_with_status_filter(self, client, db, director_token, sample_location):
+        resp = client.get("/locations/reports/export/csv?status=active",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        content = resp.text
+        assert sample_location.name in content
+
+    def test_csv_export_requires_auth(self, client, db):
+        resp = client.get("/locations/reports/export/csv")
+        assert resp.status_code in [401, 403]
+
+
+# ---------------------------------------------------------------------------
+# Map Data
+# ---------------------------------------------------------------------------
+
+class TestLocationMapData:
+    def test_map_data_endpoint(self, client, db, director_token, sample_location):
+        resp = client.get(f"/locations/detail/{sample_location.id}/map-data",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "location" in data
+        assert "complaints" in data
+        assert "tasks" in data
+        assert "children" in data
+        assert data["location"]["id"] == sample_location.id
+
+    def test_map_data_with_coordinates(self, client, db, director_token):
+        loc = Location(
+            name="موقع خريطة",
+            code="MAP-001",
+            location_type=LocationType.ISLAND,
+            status=LocationStatus.ACTIVE,
+            latitude=33.5365,
+            longitude=36.2204,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        resp = client.get(f"/locations/detail/{loc.id}/map-data",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["location"]["point"]["latitude"] == 33.5365
+        assert data["location"]["point"]["longitude"] == 36.2204
+
+    def test_map_data_with_linked_complaints(self, client, db, director_token):
+        loc = Location(
+            name="موقع شكاوى خريطة",
+            code="MAP-002",
+            location_type=LocationType.BUILDING,
+            status=LocationStatus.ACTIVE,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        complaint = Complaint(
+            tracking_number="MAP-C-001",
+            full_name="مواطن",
+            phone="0911111111",
+            complaint_type=ComplaintType.INFRASTRUCTURE,
+            description="شكوى اختبار خريطة",
+            location_id=loc.id,
+            latitude=33.5370,
+            longitude=36.2210,
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+
+        resp = client.get(f"/locations/detail/{loc.id}/map-data",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["complaints"]) == 1
+        assert data["complaints"][0]["tracking_number"] == "MAP-C-001"
+
+    def test_map_data_not_found(self, client, db, director_token):
+        resp = client.get("/locations/detail/99999/map-data",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Auto-location assignment
+# ---------------------------------------------------------------------------
+
+class TestAutoLocationAssignment:
+    def test_complaint_auto_assign_explicit_location(self, client, db, director_token):
+        """When location_id is explicitly provided, it should be used."""
+        loc = Location(
+            name="موقع تلقائي",
+            code="AUTO-001",
+            location_type=LocationType.ISLAND,
+            status=LocationStatus.ACTIVE,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        resp = client.post("/complaints/", json={
+            "full_name": "اختبار",
+            "phone": "0900000001",
+            "complaint_type": "infrastructure",
+            "description": "اختبار ربط تلقائي",
+            "location_id": loc.id,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        # Check that complaint was assigned to the location in DB
+        c = db.query(Complaint).filter(Complaint.tracking_number == data["tracking_number"]).first()
+        assert c.location_id == loc.id
+
+    def test_task_auto_assign_explicit_location(self, client, db, director_token):
+        """When location_id is explicitly provided for task, it should be used."""
+        loc = Location(
+            name="موقع مهمة",
+            code="AUTO-002",
+            location_type=LocationType.BUILDING,
+            status=LocationStatus.ACTIVE,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        resp = client.post("/tasks/", json={
+            "title": "مهمة اختبار",
+            "description": "اختبار ربط تلقائي للمهام",
+            "location_id": loc.id,
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        t = db.query(Task).filter(Task.title == "مهمة اختبار").first()
+        assert t.location_id == loc.id
+
+    def test_complaint_no_location_no_error(self, client, db):
+        """Complaint without any location data should still work."""
+        resp = client.post("/complaints/", json={
+            "full_name": "بدون موقع",
+            "phone": "0900000002",
+            "complaint_type": "cleaning",
+            "description": "شكوى بدون موقع",
+        })
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Migration script (unit test)
+# ---------------------------------------------------------------------------
+
+class TestMigrationScript:
+    def test_migration_functions_exist(self):
+        """Ensure migration module imports correctly."""
+        from app.scripts.migrate_areas_to_locations import (
+            area_code, building_code, street_code,
+            migrate_areas, migrate_buildings, migrate_streets,
+            backfill_complaints, backfill_tasks,
+        )
+        # Verify code generators
+        class MockArea:
+            code = "A1"
+        class MockBuilding:
+            building_number = "101"
+            id = 1
+        class MockStreet:
+            code = "S1"
+            id = 2
+
+        assert area_code(MockArea()) == "LOC-A1"
+        assert building_code(MockArea(), MockBuilding()) == "BLD-A1-101"
+        assert street_code(MockStreet()) == "STR-S1"
+
+    def test_migration_idempotent(self, db):
+        """Running migration with existing codes should skip without error."""
+        from app.scripts.migrate_areas_to_locations import _get_or_create_location, LocationType, LocationStatus
+
+        # Create first time
+        loc1, created1 = _get_or_create_location(db, "IDEM-001", {
+            "name": "test",
+            "location_type": LocationType.ISLAND,
+            "status": LocationStatus.ACTIVE,
+            "is_active": 1,
+        })
+        assert created1 is True
+
+        # Try again — should skip
+        loc2, created2 = _get_or_create_location(db, "IDEM-001", {
+            "name": "test2",
+            "location_type": LocationType.ISLAND,
+            "status": LocationStatus.ACTIVE,
+            "is_active": 1,
+        })
+        assert created2 is False
+        assert loc1.id == loc2.id
