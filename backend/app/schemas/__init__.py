@@ -43,6 +43,20 @@ from app.schemas.contract import (
     ContractApprovalResponse,
 )
 from app.schemas.dashboard import DashboardStats, RecentActivity
+from app.schemas.contract_intelligence import (
+    ContractDocumentCreate,
+    ContractDocumentUpdate,
+    ContractDocumentResponse,
+    ExtractedFieldsSchema,
+    ContractRiskFlagResponse,
+    ContractDuplicateResponse,
+    ContractDuplicateReview,
+    BulkImportPreview,
+    BulkImportRow,
+    BulkImportResult,
+    IntelligenceDashboardStats,
+    ProcessingQueueResponse,
+)
 
 __all__ = [
     "UserBase",
@@ -81,4 +95,16 @@ __all__ = [
     "ContractApprovalResponse",
     "DashboardStats",
     "RecentActivity",
+    "ContractDocumentCreate",
+    "ContractDocumentUpdate",
+    "ContractDocumentResponse",
+    "ExtractedFieldsSchema",
+    "ContractRiskFlagResponse",
+    "ContractDuplicateResponse",
+    "ContractDuplicateReview",
+    "BulkImportPreview",
+    "BulkImportRow",
+    "BulkImportResult",
+    "IntelligenceDashboardStats",
+    "ProcessingQueueResponse",
 ]

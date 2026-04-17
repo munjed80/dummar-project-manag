@@ -6,6 +6,14 @@ from app.models.task import Task, TaskActivity, TaskStatus, TaskSourceType, Task
 from app.models.contract import Contract, ContractApproval, ContractType, ContractStatus
 from app.models.audit import AuditLog
 from app.models.notification import Notification, NotificationType
+from app.models.contract_intelligence import (
+    ContractDocument,
+    ContractRiskFlag,
+    ContractDuplicate,
+    DocumentProcessingStatus,
+    RiskSeverity,
+    DuplicateStatus,
+)
 
 __all__ = [
     "Base",
@@ -31,4 +39,10 @@ __all__ = [
     "AuditLog",
     "Notification",
     "NotificationType",
+    "ContractDocument",
+    "ContractRiskFlag",
+    "ContractDuplicate",
+    "DocumentProcessingStatus",
+    "RiskSeverity",
+    "DuplicateStatus",
 ]
