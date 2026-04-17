@@ -11,6 +11,39 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T00:25 — Fix CI + Audit Logging API + PWA Install Prompt
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T00:25
+- **فهم النظام الحالي:**
+  - CI failing: Node.js 18 في CI workflow لكن Vite 8 + Tailwind CSS 4 + React Router 7 تتطلب Node.js 20+
+  - AuditLog model موجود لكن لا يوجد API endpoint لعرض سجلات التدقيق
+  - write_audit_log لا يلتقط IP address أو user_agent تلقائياً من Request
+  - PWA manifest و service worker موجودان لكن لا يوجد custom install prompt
+
+- **أهداف هذه الدفعة:**
+  1. إصلاح CI: تحديث Node.js من 18 إلى 20
+  2. Audit Logging API: endpoint لعرض سجلات التدقيق مع pagination + filters
+  3. تحسين audit trail: التقاط IP + user_agent تلقائياً من Request
+  4. PWA Install Prompt: مكون عربي يعرض عند إمكانية التثبيت
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ CI fix — Node.js 18 → 20 في `.github/workflows/ci.yml`
+  2. ✅ `GET /audit-logs/` — endpoint مع pagination + filters (action, entity_type, user_id)
+  3. ✅ Migration 005 — indexes لـ created_at و (user_id, entity_type) على audit_logs
+  4. ✅ Schema — AuditLogResponse + PaginatedAuditLogs
+  5. ✅ RBAC — project_director فقط يمكنه عرض audit logs
+  6. ✅ IP capture — write_audit_log يقبل Request ويلتقط IP + user_agent تلقائياً
+  7. ✅ Complaints/Tasks/Contracts — يمررون Request إلى write_audit_log
+  8. ✅ InstallPrompt component — بانر عربي RTL مع أزرار تثبيت/إغلاق
+  9. ✅ localStorage dismiss — المستخدم يمكنه إخفاء البانر نهائياً
+  10. ✅ 66 اختبار ناجح (60 سابق + 6 audit log tests)
+  11. ✅ بناء الواجهة ناجح
+
+---
+
 ### الدفعة: 2026-04-17T00:01 — PWA + Area Boundaries Migration + Health Monitoring
 
 **قبل البدء:**
