@@ -264,8 +264,11 @@ if [ "$SEED_DATA" = true ]; then
         $COMPOSE exec -T backend python -m app.scripts.seed_data 2>&1 | tail -5
         success "Seed data loaded."
         warn "IMPORTANT: Change all default seed passwords before going live!"
-        warn "Seed accounts use password 'password123'. Run:"
-        warn "  $COMPOSE exec backend python -c \"from app.scripts.seed_data import check_default_passwords; from app.core.database import SessionLocal; db=SessionLocal(); check_default_passwords(db)\""
+        warn "Seed accounts use password 'password123'. Verify with:"
+        warn "  $COMPOSE exec backend python -c \\"
+        warn "    'from app.scripts.seed_data import check_default_passwords;"
+        warn "     from app.core.database import SessionLocal;"
+        warn "     check_default_passwords(SessionLocal())'"
     else
         warn "Skipping seed data — not a first-time deployment. Use --rebuild to force."
     fi
