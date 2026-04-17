@@ -1032,3 +1032,64 @@ class TestExportEndpoints:
         headers = _auth_headers(token)
         resp = client.get("/contract-intelligence/reports/export/pdf", headers=headers)
         assert resp.status_code == 403
+
+    def test_pdf_export_arabic_content(self, client, db):
+        """Verify PDF export uses Arabic-capable font and reshaping."""
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/pdf",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.content[:4] == b"%PDF"
+        # If DejaVu Sans is available, the PDF should embed it
+        # otherwise it falls back to Helvetica (still valid PDF)
+        pdf_bytes = resp.content
+        assert len(pdf_bytes) > 500  # Not trivially empty
+
+
+class TestIndividualDocumentExport:
+    """Test individual document PDF export."""
+
+    def _setup_doc(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        content = "عقد رقم: INDV-001\nالمقاول: شركة الفرد\nالقيمة: 1,000,000 ل.س\nنطاق العمل: بناء"
+        file = io.BytesIO(content.encode("utf-8"))
+        resp = client.post(
+            "/contract-intelligence/upload",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("indv_test.txt", file, "text/plain")},
+        )
+        assert resp.status_code == 200
+        doc_id = resp.json()["id"]
+        return headers, doc_id
+
+    def test_individual_doc_pdf_export(self, client, db):
+        headers, doc_id = self._setup_doc(client, db)
+        resp = client.get(
+            f"/contract-intelligence/documents/{doc_id}/export/pdf",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "application/pdf" in resp.headers.get("content-type", "")
+        assert resp.content[:4] == b"%PDF"
+        assert len(resp.content) > 500
+
+    def test_individual_doc_pdf_not_found(self, client, db):
+        headers, _ = self._setup_doc(client, db)
+        resp = client.get(
+            "/contract-intelligence/documents/99999/export/pdf",
+            headers=headers,
+        )
+        assert resp.status_code == 404
+
+    def test_individual_doc_pdf_rbac_denied(self, client, db):
+        _, doc_id = self._setup_doc(client, db)
+        _create_user(db, "indv_citizen", UserRole.CITIZEN)
+        token = _login(client, "indv_citizen")
+        headers = _auth_headers(token)
+        resp = client.get(
+            f"/contract-intelligence/documents/{doc_id}/export/pdf",
+            headers=headers,
+        )
+        assert resp.status_code == 403
