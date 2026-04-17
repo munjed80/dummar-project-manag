@@ -550,3 +550,96 @@ class TestEmailService:
         assert "Test Title" in result
         assert "<p>Content</p>" in result
         assert "منصة إدارة مشروع دمّر" in result
+
+
+# ---------------------------------------------------------------------------
+# 12. Health endpoints
+# ---------------------------------------------------------------------------
+
+class TestHealthEndpoints:
+    """Test detailed health check and SMTP test endpoints."""
+
+    def test_detailed_health_returns_healthy(self, client):
+        """Detailed health should return healthy when DB is working."""
+        resp = client.get("/health/detailed")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "healthy"
+        assert data["database"]["status"] == "ok"
+        assert data["smtp"]["status"] == "disabled"  # SMTP disabled in CI
+        assert "version" in data
+
+    def test_smtp_health_requires_auth(self, client):
+        """SMTP health endpoint requires authentication."""
+        resp = client.get("/health/smtp")
+        assert resp.status_code in (401, 403)
+
+    def test_smtp_health_returns_disabled(self, client, director_token):
+        """SMTP health returns disabled when SMTP_ENABLED=false."""
+        resp = client.get("/health/smtp", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# 13. Area boundary update + DB-backed boundaries
+# ---------------------------------------------------------------------------
+
+class TestAreaBoundaryUpdate:
+    """Test area boundary CRUD from database."""
+
+    def test_area_boundaries_from_db(self, client, db, director_token, sample_area):
+        """Area boundaries should read boundary_polygon from DB."""
+        import json
+        sample_area.boundary_polygon = json.dumps([[33.5, 36.2], [33.5, 36.3], [33.4, 36.3], [33.4, 36.2]])
+        sample_area.color = "#FF0000"
+        db.commit()
+
+        resp = client.get("/gis/area-boundaries", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        found = [a for a in data if a["code"] == "ISL-A"]
+        assert len(found) == 1
+        assert found[0]["boundary"] == [[33.5, 36.2], [33.5, 36.3], [33.4, 36.3], [33.4, 36.2]]
+        assert found[0]["color"] == "#FF0000"
+
+    def test_update_area_boundary(self, client, db, director_token, sample_area):
+        """Project director can update area boundaries."""
+        new_boundary = [[33.6, 36.3], [33.6, 36.4], [33.5, 36.4], [33.5, 36.3]]
+        resp = client.put(
+            f"/gis/area-boundaries/{sample_area.id}",
+            json={"boundary": new_boundary, "color": "#00FF00"},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["boundary"] == new_boundary
+        assert data["color"] == "#00FF00"
+
+    def test_non_director_cannot_update_boundary(self, client, db, field_token, sample_area):
+        """Non-director user cannot update area boundaries."""
+        resp = client.put(
+            f"/gis/area-boundaries/{sample_area.id}",
+            json={"boundary": [[1, 2]], "color": "#000"},
+            headers=_auth_headers(field_token),
+        )
+        assert resp.status_code == 403
+
+    def test_update_nonexistent_area(self, client, director_token):
+        """Updating a nonexistent area returns 404."""
+        resp = client.put(
+            "/gis/area-boundaries/9999",
+            json={"boundary": [[1, 2]], "color": "#000"},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 404
+
+    def test_area_boundary_null_when_not_set(self, client, db, director_token, sample_area):
+        """Areas without boundary_polygon should return null boundary."""
+        resp = client.get("/gis/area-boundaries", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        found = [a for a in data if a["code"] == "ISL-A"]
+        assert len(found) == 1
+        assert found[0]["boundary"] is None

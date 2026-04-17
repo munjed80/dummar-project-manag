@@ -11,6 +11,45 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T00:01 — PWA + Area Boundaries Migration + Health Monitoring
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T00:01
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL، FastAPI backend + React 19 frontend
+  - 52 اختبار ناجح، بناء الواجهة ناجح
+  - Mobile responsiveness مكتمل — hamburger nav، card views، responsive filters
+  - SMTP معزز — TLS fallback، dedup guard، escape — لم يُختبر مع خادم حقيقي
+  - Area boundaries ثابتة في gis.py كـ hardcoded dict — النموذج يحتوي geometry column لكن لا يُستخدم
+  - لا يوجد PWA/offline mode — التطبيق يحتاج اتصال إنترنت دائم
+  - لا يوجد endpoint صحة تفصيلي — فقط /health بسيط
+
+- **أهداف هذه الدفعة:**
+  1. PWA/offline mode — Service Worker + web app manifest للعمل دون اتصال ولإمكانية التثبيت
+  2. نقل area boundaries من hardcoded dict إلى قاعدة البيانات (migration + seed update + API update)
+  3. Health monitoring — endpoint تفصيلي يتحقق من DB + SMTP
+  4. SMTP connection test endpoint
+
+- **الملفات المخطط تعديلها:**
+  - `public/manifest.json` — جديد: PWA manifest
+  - `public/sw.js` — جديد: Service Worker
+  - `src/main.tsx` — تسجيل Service Worker
+  - `index.html` — PWA meta tags + manifest link
+  - `backend/alembic/versions/004_add_area_boundary_data.py` — جديد: migration
+  - `backend/app/scripts/seed_data.py` — تحديث لتخزين boundary data
+  - `backend/app/api/gis.py` — قراءة boundaries من DB + endpoint إداري لتحديثها
+  - `backend/app/api/health.py` — جديد: health checks تفصيلية
+  - `backend/app/main.py` — تسجيل health router
+  - `backend/tests/test_api.py` — اختبارات جديدة
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — سجل الدفعة
+  - `HANDOFF_STATUS.md` — تحديث الحالة
+
+- **المخاطر:**
+  - Service Worker caching قد يسبب مشاكل في عرض التحديثات — يجب استخدام network-first strategy
+  - migration 004 يجب أن تكون متوافقة مع CI (SQLite)
+
+---
+
 ### الدفعة: 2026-04-17T00:00 — Mobile Responsiveness + SMTP Hardening
 
 **قبل البدء:**

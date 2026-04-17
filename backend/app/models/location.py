@@ -14,6 +14,8 @@ class Area(Base):
     code = Column(String(20), unique=True, nullable=False)
     description = Column(Text, nullable=True)
     geometry = Column(Geometry('POLYGON', srid=4326), nullable=True)
+    boundary_polygon = Column(Text, nullable=True)  # JSON array of [lat, lng] pairs
+    color = Column(String(20), nullable=True)  # hex color for map display
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

@@ -7,6 +7,15 @@ import { ErrorFallback } from './ErrorFallback.tsx'
 import "./main.css"
 import "./index.css"
 
+// Register service worker for PWA offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Service worker registration failed — app continues working normally
+    });
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary FallbackComponent={ErrorFallback}>
     <App />
