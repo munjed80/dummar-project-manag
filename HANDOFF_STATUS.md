@@ -1,11 +1,118 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T13:30
+## آخر تحديث: 2026-04-17T13:50
 
 ---
 
-## الدفعة الحالية: 2026-04-17T12:34 — Contract Intelligence Operational Completion
+## الدفعة الحالية: 2026-04-17T13:27 — Intelligence Export, Filters, Extraction & Production Readiness
+
+### الملفات المُعدّلة/الجديدة في هذه الدفعة:
+| الملف | التغيير |
+|---|---|
+| `backend/app/api/contract_intelligence.py` | إضافة: 10 filter params لـ reports, CSV export, PDF export, time-series data, active_filters |
+| `backend/app/services/extraction_service.py` | تحسين: OCR noise cleanup, dotted dates, mixed labels, contract number patterns, value parsing |
+| `backend/app/services/ocr_service.py` | تحسين: get_ocr_status() يعرض version + languages info |
+| `backend/tests/test_contract_intelligence.py` | 23 اختبار جديد (extraction edge cases, filters, CSV/PDF export, RBAC) |
+| `src/pages/IntelligenceReportsPage.tsx` | إضافة: filter panel, export buttons (CSV/PDF), time-series charts |
+| `src/services/api.ts` | إضافة: getIntelligenceReports(params), downloadIntelligenceCsv(), downloadIntelligencePdf() |
+| `PRODUCTION_DEPLOYMENT_GUIDE.md` | إضافة: Tesseract OCR Setup section كامل مع verification steps |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
+| `HANDOFF_STATUS.md` | هذا التحديث |
+
+---
+
+## الحالة الحقيقية المُتحقق منها
+
+### ✅ مكتمل ومُتحقق منه:
+
+**A) Data Export from Intelligence Reports:**
+- ✅ GET /contract-intelligence/reports/export/csv — CSV export مع section selection (all/documents/risks/duplicates/batches)
+- ✅ GET /contract-intelligence/reports/export/pdf — PDF export عبر reportlab مع:
+  - ملخص إحصائي (documents, risks, duplicates)
+  - تفصيل حالة المعالجة
+  - قائمة المستندات (أول 50)
+  - الفلاتر النشطة في التقرير
+- ✅ كلا التصديرين يحترمان الفلاتر النشطة
+- ✅ Audit logging لكل عملية تصدير
+- ✅ RBAC: contracts_manager + project_director فقط
+- ✅ 6 اختبارات تغطي: CSV all, CSV documents, CSV risks, CSV with filter, PDF export, RBAC
+
+**B) Filters and Search in Intelligence Reports:**
+- ✅ 10 معاملات فلترة في GET /contract-intelligence/reports:
+  - date_from, date_to (نطاق زمني YYYY-MM-DD)
+  - ocr_status (complete/pending/failed)
+  - review_status (أي قيمة DocumentProcessingStatus)
+  - classification_type (maintenance/construction/etc)
+  - risk_severity (critical/high/medium/low)
+  - risk_type (نوع المخاطرة)
+  - duplicate_status (pending/confirmed_same/confirmed_different)
+  - import_source (upload/bulk_scan/spreadsheet)
+  - search (keyword بحث في الملفات والحقول والملخصات)
+- ✅ جميع أقسام التقرير (12) تُفلتر حسب المعاملات النشطة
+- ✅ active_filters في الاستجابة يُظهر الفلاتر المُطبّقة
+- ✅ Frontend filter panel مع 8 حقول فلترة + بحث + مسح الكل
+- ✅ 4 اختبارات: date filter, review_status, search, import_source
+
+**C) Production-Ready Tesseract Verification Path:**
+- ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: قسم Tesseract كامل مع:
+  - Docker vs Bare Metal setup
+  - Production verification steps (API, admin UI, Docker exec)
+  - Graceful fallback behavior documentation
+  - Troubleshooting table
+- ✅ get_ocr_status() محسّن: يعرض tesseract_version + tesseract_languages
+- ✅ Frontend يعرض حالة المحرك (✅ متوفر / ❌ غير متوفر)
+- ✅ Dockerfile مُثبّت: tesseract-ocr + tesseract-ocr-ara + tesseract-ocr-eng + poppler-utils
+- ✅ CI لا يتعطل بدون Tesseract binary
+
+**D) Extraction Pattern Refinement:**
+- ✅ _clean_ocr_noise(): تنظيف تشكيل، مسافات متعددة، حروف ضوضائية
+- ✅ Dotted dates (dd.mm.yyyy, yyyy.mm.dd)
+- ✅ Two-digit years (15-03-24 → 2024-03-15)
+- ✅ Spaces inside currency values (5 000 000 → 5000000)
+- ✅ Reversed currency patterns (ل.س 2,500,000)
+- ✅ Year-prefix contract numbers (2024-MAINT-001)
+- ✅ Company prefix patterns (شركة/مؤسسة/مكتب as standalone patterns)
+- ✅ Week duration support (4 أسابيع → 28 days)
+- ✅ Mixed Arabic/English label patterns (Contract No., contractor, vendor, supplier)
+- ✅ 11 اختبار لحالات الحد
+
+**E) Time-Series Reporting:**
+- ✅ documents_over_time: عدد المستندات المُعالجة يومياً (آخر 90 يوم)
+- ✅ risks_over_time: عدد المخاطر المكتشفة يومياً (آخر 90 يوم)
+- ✅ SQLite-compatible date aggregation (sql_func.substr for cross-DB)
+- ✅ Frontend TimeSeriesChart مع أعمدة بيانية + تسميات تاريخ
+- ✅ يحترم الفلاتر النشطة
+
+**F) Operational Trust:**
+- ✅ RBAC سليم: contracts_manager + project_director لجميع النقاط الجديدة
+- ✅ Audit logging: intelligence_report_export_csv, intelligence_report_export_pdf
+- ✅ Code في English، UI عربي RTL
+- ✅ لا توجد placeholders مزيفة
+
+### المقاييس:
+- **اختبارات الخلفية:** 201 ناجح (178 سابق + 23 جديد)
+- **بناء الواجهة:** ناجح
+- **ملفات مُعدّلة:** 9
+- **نقاط نهاية API جديدة:** 2 (reports/export/csv, reports/export/pdf)
+- **معاملات فلترة جديدة:** 10
+
+### ⚠️ جزئي:
+- **Tesseract في CI:** Binary غير متوفر — المحرك يكتشف ذلك ويعود لـ BasicTextExtractor. في Docker production يعمل بالكامل.
+- **PDF export عربي:** reportlab لا يدعم خطوط عربية embedded بشكل native — PDF يستخدم خطوط Helvetica مع بيانات وصفية. المحتوى العربي يظهر في ملفات CSV بشكل كامل.
+
+---
+
+## الدفعة التالية المُقترحة:
+1. خط عربي مخصص في PDF export (يتطلب خط TTF عربي + تسجيل في reportlab)
+2. تصدير بيانات مفصلة للمستندات الفردية
+3. نشر فعلي على خادم إنتاج — اختبار Tesseract OCR الحقيقي
+4. تحسين extraction باستخدام ML (اختياري، يتطلب training data)
+5. تكامل مع أنظمة خارجية (إن وُجدت)
+
+---
+
+## الدفعة السابقة: 2026-04-17T12:34 — Contract Intelligence Operational Completion
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |

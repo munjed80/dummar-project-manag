@@ -43,6 +43,29 @@
   - Tesseract binary not available in CI — tests must handle gracefully
   - Time-series requires created_at data aggregation — may be limited with test data
 
+**بعد الانتهاء:**
+- **الحالة:** ✅ مكتمل بالكامل
+- **الاختبارات:** 201 ناجح (178 سابق + 23 جديد)
+- **بناء الواجهة:** ناجح
+- **الملفات المُعدّلة فعلياً:**
+  - `backend/app/api/contract_intelligence.py` — 10 filter params, CSV/PDF export, time-series
+  - `backend/app/services/extraction_service.py` — OCR noise cleanup, edge case patterns
+  - `backend/app/services/ocr_service.py` — enhanced get_ocr_status()
+  - `backend/tests/test_contract_intelligence.py` — 23 new tests
+  - `src/pages/IntelligenceReportsPage.tsx` — filters, exports, time-series
+  - `src/services/api.ts` — 3 API methods (getIntelligenceReports params, CSV, PDF)
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — Tesseract OCR section
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — full update
+- **القرارات الهندسية:**
+  - Used sql_func.substr for SQLite-compatible date aggregation (vs cast to Date which fails in SQLite)
+  - PDF export uses Helvetica font (Arabic display limitation noted as Partial)
+  - Filters applied via intermediate filtered_ids list for clean SQL composition
+  - _clean_ocr_noise() applied before all field extraction for consistent behavior
+- **الفجوات المتبقية:**
+  - PDF export doesn't render Arabic text natively (requires custom TTF font registration)
+  - Tesseract binary not available in CI — tests use is_tesseract_available() detection
+
 ---
 
 ### الدفعة: 2026-04-17T12:34 — Contract Intelligence Operational Completion
