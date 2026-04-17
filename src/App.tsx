@@ -19,6 +19,12 @@ const TasksListPage = lazy(() => import('@/pages/TasksListPage'));
 const TaskDetailsPage = lazy(() => import('@/pages/TaskDetailsPage'));
 const ContractsListPage = lazy(() => import('@/pages/ContractsListPage'));
 const ContractDetailsPage = lazy(() => import('@/pages/ContractDetailsPage'));
+const ContractIntelligencePage = lazy(() => import('@/pages/ContractIntelligencePage'));
+const ProcessingQueuePage = lazy(() => import('@/pages/ProcessingQueuePage'));
+const DocumentReviewPage = lazy(() => import('@/pages/DocumentReviewPage'));
+const BulkImportPage = lazy(() => import('@/pages/BulkImportPage'));
+const RiskInsightsPage = lazy(() => import('@/pages/RiskInsightsPage'));
+const DuplicateReviewPage = lazy(() => import('@/pages/DuplicateReviewPage'));
 const LocationsListPage = lazy(() => import('@/pages/LocationsListPage'));
 const UsersPage = lazy(() => import('@/pages/UsersPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
@@ -72,6 +78,11 @@ const REPORT_ROLES: UserRole[] = [
   'complaints_officer', 'area_supervisor',
 ];
 
+// Roles that can access contract intelligence
+const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager',
+];
+
 function App() {
   return (
     <BrowserRouter>
@@ -93,6 +104,12 @@ function App() {
           <Route path="/tasks/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contracts" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
           <Route path="/contracts/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
+          <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
+          <Route path="/contract-intelligence/documents/:id" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DocumentReviewPage /></RoleProtectedRoute>} />
+          <Route path="/contract-intelligence/bulk-import" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><BulkImportPage /></RoleProtectedRoute>} />
+          <Route path="/contract-intelligence/risks" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><RiskInsightsPage /></RoleProtectedRoute>} />
+          <Route path="/contract-intelligence/duplicates" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DuplicateReviewPage /></RoleProtectedRoute>} />
           <Route path="/locations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
           <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
