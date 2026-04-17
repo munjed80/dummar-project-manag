@@ -1,21 +1,18 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T22:00
+## آخر تحديث: 2026-04-17T22:30
 
 ---
 
-## الدفعة الحالية: 2026-04-17T21:45 — UI/UX Improvements, Load Test Enhancement, Deploy Hardening, OCR Verification
+## الدفعة الحالية: 2026-04-17T22:15 — VPS Deploy Hardening & SSL Auto-Configuration
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `src/pages/DashboardPage.tsx` | تحسين: Arabic status labels, progress bars, quick navigation buttons, spinner loading |
-| `src/pages/LoginPage.tsx` | تحسين: removed hardcoded credentials, help toggle, input placeholders, validation |
-| `src/pages/SettingsPage.tsx` | إضافة: system health panel for admin roles (DB, SMTP, overall status) |
-| `backend/tests/load_test.py` | إضافة: 3 contract intelligence endpoints (documents, reports, risks) |
-| `deploy.sh` | إصلاح: Node.js 20+ version check, SSL setup hint |
-| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث سجل الدفعات |
+| `docker-compose.yml` | أمان: إزالة تعريض منفذ PostgreSQL 5432 خارجياً |
+| `ssl-setup.sh` | إضافة: --auto flag for automatic nginx/docker-compose/.env configuration after cert |
+| `deploy.sh` | إضافة: --domain flag for CORS_ORIGINS auto-configuration + seed password warnings |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
 ---
@@ -24,55 +21,71 @@
 
 ### ✅ مكتمل ومُتحقق منه:
 
-**UI/UX Improvements:**
-- ✅ Dashboard: Arabic status labels (جديدة، قيد المراجعة، مُعينة، etc.) instead of English keys
-- ✅ Dashboard: Color-coded progress bars showing percentage distribution for complaints and tasks
-- ✅ Dashboard: Quick navigation buttons (الشكاوى / المهام) with ArrowRight icons
-- ✅ Dashboard: Proper spinner loading state instead of plain text
-- ✅ Login page: Removed hardcoded default credentials (director, contracts_mgr, password123)
-- ✅ Login page: Added "contact admin" help toggle for login assistance
-- ✅ Login page: Added input placeholders and autocomplete attributes
-- ✅ Login page: Client-side validation for empty fields
-- ✅ Settings page: System health panel showing DB, SMTP, and overall status
-- ✅ Settings page: Health panel only visible to project_director and contracts_manager
-- ✅ Settings page: Automatic health check fetch on page load for admin roles
+**VPS Deploy Hardening:**
+- ✅ docker-compose.yml: PostgreSQL port 5432 NO LONGER exposed externally (security fix)
+- ✅ deploy.sh: Added `--domain=example.com` flag to auto-set CORS_ORIGINS
+- ✅ deploy.sh: Seed data step now prints password-change warnings with verification command
+- ✅ deploy.sh: Auto-detects https when SSL certs exist
+- ✅ All scripts syntax-validated (bash -n)
 
-**Load Test Enhancement:**
-- ✅ Added 3 contract intelligence endpoints: documents, reports, risks
-- ✅ Total endpoints tested: 10 (7 core + 3 contract intelligence) + login + complaints + workflow
-- ✅ Contract intelligence endpoints properly test RBAC (403 expected for non-authorized users)
+**SSL Auto-Configuration:**
+- ✅ ssl-setup.sh: Added `--auto` flag that performs ALL post-cert steps automatically:
+  1. Copies nginx-ssl.conf → nginx.conf with domain replaced
+  2. Uncomments letsencrypt volumes in docker-compose.yml
+  3. Updates CORS_ORIGINS in .env to https://
+  4. Restarts nginx container
+- ✅ Without `--auto`, displays clear manual instructions (backward compatible)
+- ✅ Usage: `sudo ./ssl-setup.sh dummar.example.com --auto`
 
-**Deploy Hardening:**
-- ✅ deploy.sh: Node.js version check fixed to require v20+ (Vite 8 + Tailwind CSS 4 requirement)
-- ✅ deploy.sh: SSL setup hint after deployment if certs directory doesn't exist
-- ✅ deploy.sh: Prerequisites documentation updated
-
-**OCR Verification:**
-- ✅ Tesseract 5.3.4 with ara+eng+osd languages verified
-- ✅ Arabic contract image OCR: 5/5 key tokens extracted (عقد، شركة، قيمة، ليرة، تاريخ)
-- ✅ Confidence: 0.99 on generated Arabic contract image
-- ✅ Text file extraction: 7/7 key tokens (عقد، شركة، قيمة، ليرة، تاريخ، دمّر، البنية التحتية)
+**Previous Batch Improvements (carried forward):**
+- ✅ Dashboard: Arabic status labels, progress bars, quick navigation
+- ✅ Login page: No hardcoded credentials, help toggle
+- ✅ Settings page: System health panel for admins
+- ✅ Load test: 10 endpoints including contract intelligence
+- ✅ 207 backend tests pass
+- ✅ Frontend builds clean
 
 ### المقاييس:
 - **اختبارات الخلفية:** 207 ناجح (بدون تغيير)
 - **بناء الواجهة:** ناجح
-- **ملفات مُعدّلة:** 7
+- **ملفات مُعدّلة:** 4
 
-### ⚠️ جزئي (مرحّل من الدفعة السابقة):
-- **SSL/TLS:** Complete setup path implemented (scripts, config, docs). Cannot issue real certificate without real domain + DNS.
-- **SMTP:** Complete verification path implemented. Cannot test with real SMTP server in CI.
+### ⚠️ جزئي (يتطلب خادم حقيقي):
+- **SSL/TLS:** Full automation path ready (ssl-setup.sh --auto). Cannot issue cert without real domain + DNS.
+- **SMTP:** Verification path complete. Cannot test without real SMTP server.
 - **Docker deployment:** Scripts and config complete. Cannot run `docker compose up` in CI.
-- **Real scanned documents:** Verified with generated images, not with actual scanner output.
 
 ---
 
-## الدفعة التالية المُقترحة:
-1. نشر فعلي على VPS حقيقي — تشغيل deploy.sh --seed + ssl-setup.sh
-2. اختبار SMTP مع خادم بريد حقيقي
-3. اختبار OCR مع وثائق مسحوبة ضوئياً حقيقية (عقود عربية مسحوبة بالماسح الضوئي)
-4. اختبار أداء على الخادم الحقيقي
-5. تحسينات إضافية بناءً على ملاحظات المستخدمين الفعلية
-6. تكامل مع أنظمة خارجية (إن وُجدت)
+## خطوات النشر الفعلي على VPS:
+
+```bash
+# 1. Clone the repository on VPS
+git clone <repo-url> /var/www/dummar
+cd /var/www/dummar
+
+# 2. First deployment with seed data
+./deploy.sh --seed --domain=dummar.example.com
+
+# 3. Change all default passwords immediately!
+docker compose exec backend python -c "
+from app.scripts.seed_data import check_default_passwords
+from app.core.database import SessionLocal
+db = SessionLocal()
+check_default_passwords(db)
+"
+
+# 4. Set up SSL (requires domain DNS pointing to server)
+sudo apt install -y certbot
+sudo ./ssl-setup.sh dummar.example.com --auto
+
+# 5. Verify deployment
+curl https://dummar.example.com/api/health/ready
+curl https://dummar.example.com/api/health/detailed
+
+# 6. Run load test
+cd backend && python -m tests.load_test --base-url https://dummar.example.com
+```
 
 ---
 

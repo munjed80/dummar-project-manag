@@ -6,6 +6,7 @@
 #
 # Usage:
 #   ./ssl-setup.sh example.com
+#   ./ssl-setup.sh example.com --auto      # Auto-configure nginx + .env after cert
 #   ./ssl-setup.sh example.com --webroot   # Use webroot mode (nginx stays up)
 #
 # Prerequisites:
@@ -14,9 +15,11 @@
 #   3. certbot installed  (apt install certbot)
 #   4. Run as root or with sudo.
 #
-# After running this script:
-#   - Replace nginx.conf with nginx-ssl.conf (update DOMAIN_PLACEHOLDER).
-#   - Restart the nginx service.
+# When --auto is used, the script will:
+#   - Copy nginx-ssl.conf → nginx.conf with domain replaced
+#   - Uncomment /etc/letsencrypt volume in docker-compose.yml
+#   - Update CORS_ORIGINS in .env to https://
+#   - Restart the nginx container
 # =============================================================================
 
 set -euo pipefail
@@ -41,8 +44,9 @@ step()    { echo -e "\n${CYAN}▸ $*${NC}"; }
 # Parse arguments
 # ---------------------------------------------------------------------------
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <domain> [--webroot]"
+    echo "Usage: $0 <domain> [--auto] [--webroot]"
     echo "  domain    Your fully-qualified domain name (e.g. dummar.example.com)"
+    echo "  --auto    Auto-configure nginx, docker-compose.yml, and .env for SSL"
     echo "  --webroot Use webroot plugin instead of standalone (keeps nginx running)"
     exit 1
 fi
@@ -50,10 +54,12 @@ fi
 DOMAIN="$1"
 MODE="standalone"
 WEBROOT_PATH="/var/www/certbot"
+AUTO_CONFIGURE=false
 
 for arg in "${@:2}"; do
     case "$arg" in
         --webroot) MODE="webroot" ;;
+        --auto)    AUTO_CONFIGURE=true ;;
         *)
             error "Unknown argument: $arg"
             exit 1
@@ -63,6 +69,7 @@ done
 
 info "Domain:  $DOMAIN"
 info "Mode:    $MODE"
+info "Auto:    $AUTO_CONFIGURE"
 
 # ---------------------------------------------------------------------------
 # Pre-flight checks
@@ -244,28 +251,81 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Next steps
+# Auto-configure nginx + .env (when --auto is used)
 # ---------------------------------------------------------------------------
-echo ""
-echo "=========================================="
-echo -e "  ${GREEN}✓ SSL setup complete${NC}"
-echo "=========================================="
-echo ""
-echo "  Next steps:"
-echo ""
-echo "  1. Copy the SSL nginx config into place:"
-echo "     cp nginx-ssl.conf nginx.conf"
-echo ""
-echo "  2. Replace DOMAIN_PLACEHOLDER with your domain:"
-echo "     sed -i 's/DOMAIN_PLACEHOLDER/$DOMAIN/g' nginx.conf"
-echo ""
-echo "  3. Update docker-compose.yml nginx ports to include 443:"
-echo "     ports:"
-echo "       - \"80:80\""
-echo "       - \"443:443\""
-echo "     volumes:"
-echo "       - /etc/letsencrypt:/etc/letsencrypt:ro"
-echo ""
-echo "  4. Restart the stack:"
-echo "     docker compose up -d --build nginx"
-echo ""
+if [ "$AUTO_CONFIGURE" = true ]; then
+    step "Auto-configuring nginx for SSL"
+
+    # 1. Copy SSL config and replace domain placeholder
+    cp nginx-ssl.conf nginx.conf
+    sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" nginx.conf
+    success "nginx.conf updated with SSL config for $DOMAIN."
+
+    # 2. Uncomment letsencrypt volumes in docker-compose.yml
+    if grep -q '# - /etc/letsencrypt:/etc/letsencrypt:ro' docker-compose.yml; then
+        sed -i 's|# - /etc/letsencrypt:/etc/letsencrypt:ro|- /etc/letsencrypt:/etc/letsencrypt:ro|' docker-compose.yml
+        sed -i 's|# - /var/www/certbot:/var/www/certbot:ro|- /var/www/certbot:/var/www/certbot:ro|' docker-compose.yml
+        success "docker-compose.yml: letsencrypt volumes enabled."
+    else
+        info "docker-compose.yml: letsencrypt volumes already configured."
+    fi
+
+    # 3. Update CORS_ORIGINS in .env to use HTTPS
+    if [ -f .env ]; then
+        if grep -q "^CORS_ORIGINS=http://" .env; then
+            sed -i "s|^CORS_ORIGINS=http://.*|CORS_ORIGINS=https://$DOMAIN|" .env
+            success ".env: CORS_ORIGINS updated to https://$DOMAIN."
+        elif grep -q "^CORS_ORIGINS=https://" .env; then
+            info ".env: CORS_ORIGINS already uses HTTPS."
+        else
+            echo "CORS_ORIGINS=https://$DOMAIN" >> .env
+            success ".env: CORS_ORIGINS added as https://$DOMAIN."
+        fi
+    fi
+
+    # 4. Restart nginx container
+    step "Restarting nginx with SSL"
+    if [ -f docker-compose.yml ]; then
+        docker compose up -d --build nginx 2>/dev/null && success "nginx restarted with SSL." || warn "Failed to restart nginx. Run: docker compose up -d --build nginx"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Next steps (when --auto was NOT used)
+# ---------------------------------------------------------------------------
+if [ "$AUTO_CONFIGURE" = false ]; then
+    echo ""
+    echo "=========================================="
+    echo -e "  ${GREEN}✓ SSL setup complete${NC}"
+    echo "=========================================="
+    echo ""
+    echo "  Next steps (or re-run with --auto to do these automatically):"
+    echo ""
+    echo "  1. Copy the SSL nginx config into place:"
+    echo "     cp nginx-ssl.conf nginx.conf"
+    echo ""
+    echo "  2. Replace DOMAIN_PLACEHOLDER with your domain:"
+    echo "     sed -i 's/DOMAIN_PLACEHOLDER/$DOMAIN/g' nginx.conf"
+    echo ""
+    echo "  3. Update docker-compose.yml nginx volumes — uncomment letsencrypt lines:"
+    echo "     volumes:"
+    echo "       - /etc/letsencrypt:/etc/letsencrypt:ro"
+    echo "       - /var/www/certbot:/var/www/certbot:ro"
+    echo ""
+    echo "  4. Update CORS_ORIGINS in .env to use HTTPS:"
+    echo "     CORS_ORIGINS=https://$DOMAIN"
+    echo ""
+    echo "  5. Restart the stack:"
+    echo "     docker compose up -d --build nginx"
+    echo ""
+else
+    echo ""
+    echo "=========================================="
+    echo -e "  ${GREEN}✓ SSL fully configured${NC}"
+    echo "=========================================="
+    echo ""
+    info "HTTPS is now active at https://$DOMAIN"
+    info "Certificates auto-renew daily at 03:00."
+    info "Verify: curl -sI https://$DOMAIN | head -5"
+    echo ""
+fi

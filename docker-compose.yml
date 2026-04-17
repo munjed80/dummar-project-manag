@@ -5,8 +5,11 @@ services:
       POSTGRES_USER: dummar
       POSTGRES_PASSWORD: ${DB_PASSWORD:-dummar_password}
       POSTGRES_DB: dummar_db
-    ports:
-      - "5432:5432"
+    # Port NOT exposed externally for security.
+    # To access DB from the host, use: docker compose exec db psql -U dummar dummar_db
+    # Uncomment only for local development:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

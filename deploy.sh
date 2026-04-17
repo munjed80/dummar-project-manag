@@ -5,9 +5,10 @@
 # Automates building and deploying the Dummar application stack on a VPS.
 #
 # Usage:
-#   ./deploy.sh              # Deploy or update the application
-#   ./deploy.sh --seed       # Deploy and load seed data (first-time only)
-#   ./deploy.sh --rebuild    # Force rebuild of all Docker images
+#   ./deploy.sh                         # Deploy or update the application
+#   ./deploy.sh --seed                  # Deploy and load seed data (first-time only)
+#   ./deploy.sh --rebuild               # Force rebuild of all Docker images
+#   ./deploy.sh --domain=example.com    # Set CORS_ORIGINS for your domain
 #
 # Prerequisites:
 #   - Docker and Docker Compose (v2) installed
@@ -39,11 +40,15 @@ step()    { echo -e "\n${CYAN}▸ $*${NC}"; }
 # ---------------------------------------------------------------------------
 SEED_DATA=false
 FORCE_REBUILD=false
+DOMAIN=""
 
 for arg in "$@"; do
     case "$arg" in
         --seed)    SEED_DATA=true ;;
         --rebuild) FORCE_REBUILD=true ;;
+        --domain=*)
+            DOMAIN="${arg#--domain=}"
+            ;;
         --help|-h)
             head -17 "$0" | tail -14
             exit 0
@@ -164,6 +169,20 @@ else
     success ".env file present."
 fi
 
+# If --domain was specified, update CORS_ORIGINS in .env
+if [ -n "$DOMAIN" ]; then
+    if [ -f .env ]; then
+        # Determine scheme (https if certs exist, http otherwise)
+        if [ -d certs ] || [ -d /etc/letsencrypt/live/"$DOMAIN" ]; then
+            SCHEME="https"
+        else
+            SCHEME="http"
+        fi
+        sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=${SCHEME}://${DOMAIN}|" .env
+        success "CORS_ORIGINS set to ${SCHEME}://${DOMAIN}"
+    fi
+fi
+
 # Source .env for local use (read only needed vars, not sensitive ones)
 HTTP_PORT=$(grep '^HTTP_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "80")
 
@@ -244,6 +263,9 @@ if [ "$SEED_DATA" = true ]; then
         info "Running seed script inside backend container…"
         $COMPOSE exec -T backend python -m app.scripts.seed_data 2>&1 | tail -5
         success "Seed data loaded."
+        warn "IMPORTANT: Change all default seed passwords before going live!"
+        warn "Seed accounts use password 'password123'. Run:"
+        warn "  $COMPOSE exec backend python -c \"from app.scripts.seed_data import check_default_passwords; from app.core.database import SessionLocal; db=SessionLocal(); check_default_passwords(db)\""
     else
         warn "Skipping seed data — not a first-time deployment. Use --rebuild to force."
     fi
