@@ -50,9 +50,10 @@ from app.services.audit import write_audit_log
 from app.services.classification_service import classify_contract
 from app.services.duplicate_service import find_duplicates, save_duplicate_records
 from app.services.extraction_service import extract_fields, fields_from_json, fields_to_json
-from app.services.ocr_service import process_ocr
+from app.services.ocr_service import process_ocr, get_ocr_status
 from app.services.risk_service import analyze_contract_risks, save_risk_flags
 from app.services.summary_service import generate_summary
+from app.services.notification_service import notify_intelligence_processing_complete
 
 router = APIRouter(prefix="/contract-intelligence", tags=["contract-intelligence"])
 logger = logging.getLogger("dummar.contract_intelligence")
@@ -295,6 +296,31 @@ def _process_document(
             description=f"Document processed: OCR={doc.ocr_confidence}, extraction={doc.extraction_confidence}",
             request=request,
         )
+
+        # Send processing-completion notifications
+        try:
+            notify_intelligence_processing_complete(
+                db, event="extraction_review_ready",
+                document_id=doc.id,
+                details=f"ثقة OCR: {doc.ocr_confidence}, ثقة الاستخراج: {doc.extraction_confidence}",
+            )
+            # If high/critical risks found, send risk notification
+            high_risk_count = sum(1 for f in risk_flags if f.get("severity") in ("high", "critical"))
+            if high_risk_count > 0:
+                notify_intelligence_processing_complete(
+                    db, event="risk_review_needed",
+                    document_id=doc.id,
+                    details=f"{high_risk_count} مخاطر مرتفعة/حرجة",
+                )
+            # If duplicates found, notify
+            if matches:
+                notify_intelligence_processing_complete(
+                    db, event="duplicate_review_needed",
+                    document_id=doc.id,
+                    details=f"{len(matches)} تكرارات محتملة",
+                )
+        except Exception:
+            logger.exception("Notification failed for doc %s (non-fatal)", doc.id)
 
     except Exception as e:
         logger.exception("Document processing failed for doc %s", doc.id)
@@ -913,6 +939,24 @@ async def execute_csv_import(
         request=request,
     )
 
+    # Send batch completion notification
+    try:
+        failed_count = len(documents) - successful
+        if failed_count > len(documents) * 0.5 and len(documents) > 0:
+            notify_intelligence_processing_complete(
+                db, event="batch_import_failed",
+                batch_id=batch_id,
+                details=f"ناجح: {successful}, فاشل: {failed_count} من {len(documents)}",
+            )
+        else:
+            notify_intelligence_processing_complete(
+                db, event="batch_import_complete",
+                batch_id=batch_id,
+                details=f"ناجح: {successful}, فاشل: {failed_count} من {len(documents)}",
+            )
+    except Exception:
+        logger.exception("Batch notification failed (non-fatal)")
+
     return BulkImportResult(
         total_processed=len(documents),
         successful=successful,
@@ -996,6 +1040,24 @@ async def bulk_scan_import(
         description=f"Bulk scan import: {len(documents)} files, batch={batch_id}",
         request=request,
     )
+
+    # Send batch completion notification
+    try:
+        total_failed = len(documents) - successful + len(errors)
+        if total_failed > len(documents) * 0.5 and len(documents) > 0:
+            notify_intelligence_processing_complete(
+                db, event="batch_import_failed",
+                batch_id=batch_id,
+                details=f"ناجح: {successful}, فاشل: {total_failed}",
+            )
+        else:
+            notify_intelligence_processing_complete(
+                db, event="batch_import_complete",
+                batch_id=batch_id,
+                details=f"ناجح: {successful}, فاشل: {total_failed}",
+            )
+    except Exception:
+        logger.exception("Batch scan notification failed (non-fatal)")
 
     return BulkImportResult(
         total_processed=len(documents),
@@ -1163,3 +1225,414 @@ def _safe_float(value) -> Optional[float]:
         return float(str(value).replace(",", ""))
     except (ValueError, TypeError):
         return None
+
+
+# Column name mapping shared between CSV and Excel
+_COL_MAP = {
+    "contract_number": ["contract_number", "رقم العقد", "contract_no", "number", "رقم"],
+    "title": ["title", "العنوان", "عنوان العقد", "name"],
+    "contractor_name": ["contractor_name", "المقاول", "اسم المقاول", "contractor", "الشركة"],
+    "contract_type": ["contract_type", "النوع", "نوع العقد", "type"],
+    "contract_value": ["contract_value", "القيمة", "قيمة العقد", "value", "amount"],
+    "start_date": ["start_date", "تاريخ البدء", "start", "بداية"],
+    "end_date": ["end_date", "تاريخ الانتهاء", "end", "نهاية"],
+    "scope_description": ["scope_description", "النطاق", "نطاق العمل", "scope", "الوصف"],
+}
+
+
+def _parse_excel_rows(content: bytes) -> tuple:
+    """
+    Parse Excel (.xlsx) file into list of row dicts + warnings.
+    Returns (rows, headers, warnings).
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    warnings = []
+
+    if ws is None:
+        return [], [], ["الملف لا يحتوي على أوراق عمل"]
+
+    rows_iter = ws.iter_rows(values_only=False)
+
+    # First row is header
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        return [], [], ["الملف فارغ"]
+
+    headers = []
+    for cell in header_row:
+        val = str(cell.value).strip() if cell.value is not None else ""
+        headers.append(val)
+
+    if not any(headers):
+        return [], headers, ["لم يتم العثور على عناوين أعمدة"]
+
+    rows = []
+    for i, row in enumerate(rows_iter, start=1):
+        if i > 500:
+            warnings.append("تم الاقتصار على 500 صف")
+            break
+        row_dict = {}
+        for j, cell in enumerate(row):
+            if j < len(headers) and headers[j]:
+                val = cell.value
+                if val is not None:
+                    # Handle date objects from Excel
+                    if hasattr(val, 'strftime'):
+                        val = val.strftime('%Y-%m-%d')
+                    row_dict[headers[j]] = str(val).strip()
+        if any(row_dict.values()):
+            rows.append(row_dict)
+
+    wb.close()
+    return rows, headers, warnings
+
+
+# ─────────────────────────────────────────────────────────────
+# Excel Import
+# ─────────────────────────────────────────────────────────────
+
+@router.post("/bulk-import/preview-excel", response_model=BulkImportPreview)
+async def preview_excel_import(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_contracts_manager),
+    db: Session = Depends(get_db),
+):
+    """
+    Preview an Excel (.xlsx) file for bulk import.
+    Returns parsed rows with validation status.
+    """
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel (.xlsx)")
+
+    content = await file.read()
+    if len(content) > MAX_DOC_SIZE:
+        raise HTTPException(status_code=400, detail="حجم الملف كبير جداً")
+
+    try:
+        excel_rows, headers, warnings = _parse_excel_rows(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"فشل قراءة ملف Excel: {str(e)}")
+
+    rows = []
+    for i, row in enumerate(excel_rows, start=1):
+        parsed = _map_csv_row(row, _COL_MAP)
+        errors = _validate_import_row(parsed)
+
+        rows.append(BulkImportRow(
+            row_number=i,
+            contract_number=parsed.get("contract_number"),
+            title=parsed.get("title"),
+            contractor_name=parsed.get("contractor_name"),
+            contract_type=parsed.get("contract_type"),
+            contract_value=_safe_float(parsed.get("contract_value")),
+            start_date=parsed.get("start_date"),
+            end_date=parsed.get("end_date"),
+            is_valid=len(errors) == 0,
+            validation_errors=errors if errors else None,
+        ))
+
+    valid_rows = sum(1 for r in rows if r.is_valid)
+
+    return BulkImportPreview(
+        total_rows=len(rows),
+        valid_rows=valid_rows,
+        invalid_rows=len(rows) - valid_rows,
+        rows=rows,
+        warnings=warnings if warnings else None,
+    )
+
+
+@router.post("/bulk-import/execute-excel", response_model=BulkImportResult)
+async def execute_excel_import(
+    file: UploadFile = File(...),
+    request: Request = None,
+    current_user: User = Depends(get_current_contracts_manager),
+    db: Session = Depends(get_db),
+):
+    """
+    Execute an Excel bulk import. Creates contract document records from Excel rows.
+    """
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel (.xlsx)")
+
+    content = await file.read()
+    if len(content) > MAX_DOC_SIZE:
+        raise HTTPException(status_code=400, detail="حجم الملف كبير جداً")
+
+    try:
+        excel_rows, headers, parse_warnings = _parse_excel_rows(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"فشل قراءة ملف Excel: {str(e)}")
+
+    batch_id = uuid.uuid4().hex[:16]
+
+    # Save the Excel file
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "contract_intelligence")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{batch_id}.xlsx"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    documents = []
+    errors = list(parse_warnings) if parse_warnings else []
+    successful = 0
+
+    for i, row in enumerate(excel_rows, start=1):
+        parsed = _map_csv_row(row, _COL_MAP)
+        validation_errors = _validate_import_row(parsed)
+
+        doc = ContractDocument(
+            original_filename=file.filename or f"excel_row_{i}",
+            stored_path=f"/uploads/contract_intelligence/{filename}",
+            file_type="xlsx",
+            processing_status=DocumentProcessingStatus.EXTRACTED,
+            extracted_fields=fields_to_json(parsed),
+            extraction_confidence=1.0 if not validation_errors else 0.5,
+            extraction_notes="; ".join(validation_errors) if validation_errors else "Excel import",
+            uploaded_by_id=current_user.id,
+            import_batch_id=batch_id,
+            import_source="spreadsheet",
+        )
+
+        # Classify from extracted data
+        classification = classify_contract(extracted_fields=parsed)
+        doc.suggested_type = classification.suggested_type
+        doc.classification_confidence = classification.confidence
+        doc.classification_reason = classification.reason
+
+        # Generate summary
+        doc.auto_summary = generate_summary(extracted_fields=parsed, contract_type=classification.suggested_type)
+
+        if validation_errors:
+            doc.processing_status = DocumentProcessingStatus.REVIEW
+            doc.error_message = "; ".join(validation_errors)
+        else:
+            doc.processing_status = DocumentProcessingStatus.REVIEW
+            successful += 1
+
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+
+        # Risk analysis
+        risk_flags = analyze_contract_risks(extracted_fields=parsed)
+        if risk_flags:
+            save_risk_flags(db, risk_flags, document_id=doc.id)
+
+        documents.append(doc)
+
+    write_audit_log(
+        db,
+        action="bulk_import_excel",
+        entity_type="contract_document",
+        user_id=current_user.id,
+        description=f"Excel bulk import: {len(documents)} rows, batch={batch_id}",
+        request=request,
+    )
+
+    # Send batch completion notification
+    try:
+        failed_count = len(documents) - successful
+        if failed_count > len(documents) * 0.5 and len(documents) > 0:
+            notify_intelligence_processing_complete(
+                db, event="batch_import_failed",
+                batch_id=batch_id,
+                details=f"Excel — ناجح: {successful}, فاشل: {failed_count} من {len(documents)}",
+            )
+        else:
+            notify_intelligence_processing_complete(
+                db, event="batch_import_complete",
+                batch_id=batch_id,
+                details=f"Excel — ناجح: {successful}, فاشل: {failed_count} من {len(documents)}",
+            )
+    except Exception:
+        logger.exception("Excel batch notification failed (non-fatal)")
+
+    return BulkImportResult(
+        total_processed=len(documents),
+        successful=successful,
+        failed=len(documents) - successful,
+        import_batch_id=batch_id,
+        documents=documents,
+        errors=errors if errors else None,
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# OCR Status
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/ocr-status")
+def get_ocr_system_status(
+    current_user: User = Depends(get_current_contracts_manager),
+):
+    """Return the current OCR engine status and capabilities."""
+    return get_ocr_status()
+
+
+# ─────────────────────────────────────────────────────────────
+# Intelligence Reports
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/reports")
+def get_intelligence_reports(
+    current_user: User = Depends(get_current_contracts_manager),
+    db: Session = Depends(get_db),
+):
+    """
+    Comprehensive intelligence reports using real backend data.
+    Returns structured data for dashboard charts and tables.
+    """
+    # 1. Processing pipeline status counts
+    status_counts = {}
+    for s in DocumentProcessingStatus:
+        count = db.query(sql_func.count(ContractDocument.id)).filter(
+            ContractDocument.processing_status == s
+        ).scalar() or 0
+        status_counts[s.value] = count
+
+    total_documents = sum(status_counts.values())
+
+    # 2. Import source breakdown
+    source_counts = {}
+    for source in ["upload", "bulk_scan", "spreadsheet"]:
+        count = db.query(sql_func.count(ContractDocument.id)).filter(
+            ContractDocument.import_source == source
+        ).scalar() or 0
+        source_counts[source] = count
+
+    # 3. Classification distribution
+    classification_rows = db.query(
+        ContractDocument.suggested_type,
+        sql_func.count(ContractDocument.id),
+    ).filter(
+        ContractDocument.suggested_type.isnot(None),
+    ).group_by(ContractDocument.suggested_type).all()
+
+    classification_dist = {row[0]: row[1] for row in classification_rows}
+
+    # 4. Risk flags by severity
+    risk_severity_rows = db.query(
+        ContractRiskFlag.severity,
+        sql_func.count(ContractRiskFlag.id),
+    ).group_by(ContractRiskFlag.severity).all()
+
+    risk_by_severity = {row[0].value if hasattr(row[0], 'value') else str(row[0]): row[1] for row in risk_severity_rows}
+
+    # 5. Risk flags by type (top 10)
+    risk_type_rows = db.query(
+        ContractRiskFlag.risk_type,
+        sql_func.count(ContractRiskFlag.id),
+    ).group_by(ContractRiskFlag.risk_type).order_by(
+        sql_func.count(ContractRiskFlag.id).desc()
+    ).limit(10).all()
+
+    risk_by_type = {row[0]: row[1] for row in risk_type_rows}
+
+    # 6. Unresolved vs resolved risks
+    resolved_risks = db.query(sql_func.count(ContractRiskFlag.id)).filter(
+        ContractRiskFlag.is_resolved == True
+    ).scalar() or 0
+    unresolved_risks = db.query(sql_func.count(ContractRiskFlag.id)).filter(
+        ContractRiskFlag.is_resolved == False
+    ).scalar() or 0
+
+    # 7. Duplicate candidates
+    total_dups = db.query(sql_func.count(ContractDuplicate.id)).scalar() or 0
+    pending_dups = db.query(sql_func.count(ContractDuplicate.id)).filter(
+        ContractDuplicate.status == DuplicateStatus.PENDING
+    ).scalar() or 0
+    confirmed_same = db.query(sql_func.count(ContractDuplicate.id)).filter(
+        ContractDuplicate.status == DuplicateStatus.CONFIRMED_SAME
+    ).scalar() or 0
+    confirmed_diff = db.query(sql_func.count(ContractDuplicate.id)).filter(
+        ContractDuplicate.status == DuplicateStatus.CONFIRMED_DIFFERENT
+    ).scalar() or 0
+
+    # 8. OCR confidence distribution
+    ocr_high = db.query(sql_func.count(ContractDocument.id)).filter(
+        ContractDocument.ocr_confidence >= 0.7
+    ).scalar() or 0
+    ocr_medium = db.query(sql_func.count(ContractDocument.id)).filter(
+        ContractDocument.ocr_confidence >= 0.3,
+        ContractDocument.ocr_confidence < 0.7,
+    ).scalar() or 0
+    ocr_low = db.query(sql_func.count(ContractDocument.id)).filter(
+        ContractDocument.ocr_confidence.isnot(None),
+        ContractDocument.ocr_confidence < 0.3,
+    ).scalar() or 0
+
+    avg_ocr = db.query(sql_func.avg(ContractDocument.ocr_confidence)).filter(
+        ContractDocument.ocr_confidence.isnot(None)
+    ).scalar()
+
+    # 9. Review queue size
+    review_queue = db.query(sql_func.count(ContractDocument.id)).filter(
+        ContractDocument.processing_status == DocumentProcessingStatus.REVIEW
+    ).scalar() or 0
+
+    # 10. Batch import results
+    batch_rows = db.query(
+        ContractDocument.import_batch_id,
+        ContractDocument.import_source,
+        sql_func.count(ContractDocument.id),
+        sql_func.min(ContractDocument.created_at),
+    ).filter(
+        ContractDocument.import_batch_id.isnot(None),
+    ).group_by(
+        ContractDocument.import_batch_id,
+        ContractDocument.import_source,
+    ).order_by(sql_func.min(ContractDocument.created_at).desc()).limit(20).all()
+
+    batch_results = []
+    for batch_id, source, count, created in batch_rows:
+        failed_in_batch = db.query(sql_func.count(ContractDocument.id)).filter(
+            ContractDocument.import_batch_id == batch_id,
+            ContractDocument.processing_status == DocumentProcessingStatus.FAILED,
+        ).scalar() or 0
+        batch_results.append({
+            "batch_id": batch_id,
+            "source": source,
+            "total": count,
+            "failed": failed_in_batch,
+            "successful": count - failed_in_batch,
+            "created_at": created.isoformat() if created else None,
+        })
+
+    # 11. Contracts digitized (documents converted to contracts)
+    digitized = db.query(sql_func.count(ContractDocument.id)).filter(
+        ContractDocument.contract_id.isnot(None)
+    ).scalar() or 0
+
+    # 12. OCR engine info
+    ocr_status = get_ocr_status()
+
+    return {
+        "total_documents": total_documents,
+        "status_breakdown": status_counts,
+        "import_sources": source_counts,
+        "classification_distribution": classification_dist,
+        "risk_by_severity": risk_by_severity,
+        "risk_by_type": risk_by_type,
+        "risks_resolved": resolved_risks,
+        "risks_unresolved": unresolved_risks,
+        "duplicates_total": total_dups,
+        "duplicates_pending": pending_dups,
+        "duplicates_confirmed_same": confirmed_same,
+        "duplicates_confirmed_different": confirmed_diff,
+        "ocr_confidence": {
+            "high": ocr_high,
+            "medium": ocr_medium,
+            "low": ocr_low,
+            "average": round(avg_ocr, 3) if avg_ocr is not None else None,
+        },
+        "review_queue_size": review_queue,
+        "batch_results": batch_results,
+        "contracts_digitized": digitized,
+        "ocr_engine": ocr_status,
+    }

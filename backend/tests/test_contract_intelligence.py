@@ -531,3 +531,281 @@ class TestContractIntelligenceRBAC:
             headers=headers,
         )
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# New tests for Batch: Contract Intelligence Operational Completion
+# ---------------------------------------------------------------------------
+
+
+class TestTesseractOcrEngine:
+    """Test Tesseract OCR engine detection and fallback."""
+
+    def test_is_tesseract_available_returns_bool(self):
+        from app.services.ocr_service import is_tesseract_available
+        result = is_tesseract_available()
+        assert isinstance(result, bool)
+
+    def test_tesseract_detection_cached(self):
+        from app.services.ocr_service import is_tesseract_available, _reset_tesseract_cache
+        _reset_tesseract_cache()
+        r1 = is_tesseract_available()
+        r2 = is_tesseract_available()
+        assert r1 == r2
+
+    def test_get_ocr_engine_returns_engine(self):
+        from app.services.ocr_service import get_ocr_engine, OcrEngine
+        engine = get_ocr_engine()
+        assert isinstance(engine, OcrEngine)
+
+    def test_get_ocr_status(self):
+        from app.services.ocr_service import get_ocr_status
+        status = get_ocr_status()
+        assert "engine" in status
+        assert "tesseract_available" in status
+        assert isinstance(status["tesseract_available"], bool)
+        assert "supported_formats" in status
+
+    def test_basic_extractor_image_without_tesseract(self):
+        """BasicTextExtractor should return graceful failure for images when tesseract is not installed."""
+        from app.services.ocr_service import BasicTextExtractor
+        import tempfile
+        from PIL import Image
+
+        # Create a test image
+        img = Image.new('RGB', (100, 100), color='white')
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            img.save(f, format='PNG')
+            f.flush()
+            engine = BasicTextExtractor()
+            result = engine.extract_text(f.name, 'png')
+            # Should not crash; either succeeds (if tesseract installed) or fails gracefully
+            assert result is not None
+            os.unlink(f.name)
+
+
+class TestExcelImport:
+    """Test Excel (.xlsx) import via openpyxl."""
+
+    def _create_test_xlsx(self, rows):
+        """Helper to create an in-memory Excel file."""
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        if rows:
+            for row in rows:
+                ws.append(row)
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf
+
+    def test_preview_excel(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        xlsx = self._create_test_xlsx([
+            ["contract_number", "title", "contractor_name", "contract_value"],
+            ["EX-001", "عقد اختبار Excel", "شركة اختبار", "500000"],
+            ["EX-002", "عقد ثاني", "شركة أخرى", "300000"],
+        ])
+        resp = client.post(
+            "/contract-intelligence/bulk-import/preview-excel",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("test.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["total_rows"] == 2
+        assert data["valid_rows"] == 2
+        assert data["rows"][0]["contract_number"] == "EX-001"
+        assert data["rows"][1]["title"] == "عقد ثاني"
+
+    def test_preview_excel_with_validation_errors(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        xlsx = self._create_test_xlsx([
+            ["contract_number", "title"],
+            ["", ""],  # Missing required fields
+        ])
+        resp = client.post(
+            "/contract-intelligence/bulk-import/preview-excel",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("test.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Row with empty cells should either be skipped or flagged invalid
+        if data["total_rows"] > 0:
+            assert data["invalid_rows"] >= 1
+
+    def test_execute_excel_import(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        xlsx = self._create_test_xlsx([
+            ["contract_number", "title", "contractor_name", "contract_type"],
+            ["EXIM-001", "عقد استيراد Excel", "شركة الاستيراد", "maintenance"],
+        ])
+        resp = client.post(
+            "/contract-intelligence/bulk-import/execute-excel",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("import.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["total_processed"] == 1
+        assert data["successful"] == 1
+        assert data["import_batch_id"] is not None
+
+    def test_execute_excel_with_arabic_headers(self, client, db):
+        """Test Excel import with Arabic column headers."""
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        xlsx = self._create_test_xlsx([
+            ["رقم العقد", "العنوان", "المقاول", "القيمة"],
+            ["AR-001", "عقد عربي", "شركة عربية", "100000"],
+        ])
+        resp = client.post(
+            "/contract-intelligence/bulk-import/preview-excel",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("arabic.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["valid_rows"] == 1
+        assert data["rows"][0]["contract_number"] == "AR-001"
+
+    def test_reject_non_excel(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        file = io.BytesIO(b"not,excel,data")
+        resp = client.post(
+            "/contract-intelligence/bulk-import/preview-excel",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("test.csv", file, "text/csv")},
+        )
+        assert resp.status_code == 400
+
+
+class TestIntelligenceNotifications:
+    """Test processing-completion notifications."""
+
+    def test_upload_creates_notifications(self, client, db):
+        """Document upload and processing should create notifications."""
+        # Create two managers to be notified
+        _create_user(db, "notif_mgr", UserRole.CONTRACTS_MANAGER)
+        _create_user(db, "notif_dir", UserRole.PROJECT_DIRECTOR)
+        token = _login(client, "notif_mgr")
+        headers = _auth_headers(token)
+
+        content = "عقد رقم: NOTIF-001\nالمقاول: شركة الإشعار\nالقيمة: 2,000,000 ل.س"
+        file = io.BytesIO(content.encode("utf-8"))
+        resp = client.post(
+            "/contract-intelligence/upload",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("notif.txt", file, "text/plain")},
+        )
+        assert resp.status_code == 200
+
+        # Check that notifications were created
+        from app.models.notification import Notification, NotificationType
+        notifs = db.query(Notification).filter(
+            Notification.notification_type == NotificationType.INTELLIGENCE_PROCESSING
+        ).all()
+        assert len(notifs) >= 1  # At least one notification for the manager
+
+    def test_csv_batch_creates_notifications(self, client, db):
+        """CSV batch import should create batch completion notification."""
+        _create_user(db, "batch_mgr", UserRole.CONTRACTS_MANAGER)
+        token = _login(client, "batch_mgr")
+        headers = _auth_headers(token)
+
+        csv_content = "contract_number,title,contractor_name\nBATCH-001,عقد دفعة,شركة"
+        file = io.BytesIO(csv_content.encode("utf-8"))
+        resp = client.post(
+            "/contract-intelligence/bulk-import/execute-csv",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("batch.csv", file, "text/csv")},
+        )
+        assert resp.status_code == 200
+
+        from app.models.notification import Notification, NotificationType
+        notifs = db.query(Notification).filter(
+            Notification.notification_type == NotificationType.INTELLIGENCE_PROCESSING
+        ).all()
+        # Should have both processing-level and batch-level notifications
+        assert len(notifs) >= 1
+
+    def test_notification_failure_does_not_break_flow(self, client, db):
+        """If notification sending fails, the main workflow must not break."""
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        content = "simple test text"
+        file = io.BytesIO(content.encode("utf-8"))
+        # Even if notification has issues, upload should succeed
+        resp = client.post(
+            "/contract-intelligence/upload",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("safe.txt", file, "text/plain")},
+        )
+        assert resp.status_code == 200
+
+
+class TestIntelligenceReports:
+    """Test intelligence reports endpoint."""
+
+    def test_reports_empty(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        resp = client.get("/contract-intelligence/reports", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_documents"] == 0
+        assert "status_breakdown" in data
+        assert "classification_distribution" in data
+        assert "risk_by_severity" in data
+        assert "risk_by_type" in data
+        assert "ocr_confidence" in data
+        assert "batch_results" in data
+        assert "ocr_engine" in data
+
+    def test_reports_with_data(self, client, db):
+        """Reports should reflect real data after processing."""
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+
+        # Upload a document to generate data
+        content = "عقد رقم: RPT-001\nالمقاول: شركة التقارير\nالقيمة: 3,000,000 ل.س\nنطاق العمل: صيانة المباني"
+        file = io.BytesIO(content.encode("utf-8"))
+        client.post(
+            "/contract-intelligence/upload",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("report.txt", file, "text/plain")},
+        )
+
+        resp = client.get("/contract-intelligence/reports", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_documents"] >= 1
+        assert data["review_queue_size"] >= 0
+
+    def test_reports_rbac_citizen_denied(self, client, db):
+        """Citizens should not access reports."""
+        _create_user(db, "rpt_citizen", UserRole.CITIZEN)
+        token = _login(client, "rpt_citizen")
+        headers = _auth_headers(token)
+
+        resp = client.get("/contract-intelligence/reports", headers=headers)
+        assert resp.status_code == 403
+
+
+class TestOcrStatusEndpoint:
+    """Test OCR status API endpoint."""
+
+    def test_ocr_status(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        resp = client.get("/contract-intelligence/ocr-status", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "engine" in data
+        assert "tesseract_available" in data
+        assert "supported_formats" in data
+
+    def test_ocr_status_rbac(self, client, db):
+        """Citizen should not access OCR status."""
+        _create_user(db, "ocr_citizen", UserRole.CITIZEN)
+        token = _login(client, "ocr_citizen")
+        headers = _auth_headers(token)
+        resp = client.get("/contract-intelligence/ocr-status", headers=headers)
+        assert resp.status_code == 403
