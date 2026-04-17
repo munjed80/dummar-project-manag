@@ -48,6 +48,37 @@
   - Service Worker caching قد يسبب مشاكل في عرض التحديثات — يجب استخدام network-first strategy
   - migration 004 يجب أن تكون متوافقة مع CI (SQLite)
 
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ PWA manifest — `public/manifest.json` مع RTL + Arabic meta
+  2. ✅ Service Worker — `public/sw.js` بإستراتيجية network-first للتنقل و stale-while-revalidate للأصول الثابتة
+  3. ✅ SW Registration — `src/main.tsx` يسجل SW عند التحميل (fail-safe)
+  4. ✅ PWA Icons — `icon-192.png` و `icon-512.png` مُولّدة
+  5. ✅ PWA meta tags — theme-color، apple-mobile-web-app، manifest link في `index.html`
+  6. ✅ Migration 004 — boundary_polygon (Text/JSON) + color (String) مضافة لجدول areas
+  7. ✅ Area model — الأعمدة الجديدة مضافة لنموذج `location.py`
+  8. ✅ Seed data — boundaries تُخزّن في DB مع backfill للبيانات الموجودة
+  9. ✅ GIS API — `area-boundaries` يقرأ من DB بدل hardcoded dict
+  10. ✅ PUT `/gis/area-boundaries/{id}` — endpoint لتحديث الحدود (project_director فقط)
+  11. ✅ Health detailed — `/health/detailed` يتحقق من DB + SMTP (public)
+  12. ✅ SMTP test — `/health/smtp` يختبر اتصال SMTP (يتطلب auth)
+  13. ✅ 60 اختبار ناجح (52 سابق + 3 health + 5 area boundary)
+  14. ✅ بناء الواجهة ناجح مع PWA files في dist/
+  15. ✅ AREA_BOUNDARIES hardcoded dict أُزيل بالكامل من gis.py
+
+- **القرارات الهندسية:**
+  - SW strategy: network-first للتنقل (ضمان حداثة البيانات) + stale-while-revalidate للأصول (سرعة)
+  - API requests لا تُخزّن مؤقتاً أبداً — البيانات المتغيرة يجب أن تأتي من الخادم دائماً
+  - boundary_polygon يُخزّن كـ JSON Text وليس PostGIS geometry — أبسط وأسرع
+  - /health/detailed عام (بدون auth) ليعمل مع أدوات المراقبة
+  - /health/smtp يتطلب auth لأنه يحاول login على SMTP
+
+- **الفجوات المتبقية:**
+  - SMTP لم يُختبر مع خادم SMTP حقيقي (connection test endpoint جاهز)
+  - PWA install prompt لم يُضف (المتصفح يعرض prompt تلقائياً)
+  - PostGIS geometry column لا يزال غير مُستخدم (boundary_polygon JSON كافٍ)
+
 ---
 
 ### الدفعة: 2026-04-17T00:00 — Mobile Responsiveness + SMTP Hardening

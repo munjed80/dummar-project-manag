@@ -54,7 +54,6 @@ self.addEventListener('fetch', (event) => {
   if (
     url.pathname.startsWith('/api') ||
     url.pathname.startsWith('/auth') ||
-    url.pathname.startsWith('/complaints') && url.pathname.includes('/api') ||
     url.pathname.startsWith('/uploads') ||
     url.pathname.startsWith('/health') ||
     url.hostname !== self.location.hostname
