@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     postgresql-client \
@@ -13,27 +14,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python dependencies (cached layer)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
+# Copy application code
 COPY . .
 
+# Create non-root user and set up directories
 RUN mkdir -p /app/uploads && \
     useradd --system --no-create-home appuser && \
-    chown -R appuser:appuser /app/uploads
+    chown -R appuser:appuser /app/uploads && \
+    chmod +x /app/entrypoint.sh
 
 USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health/ready || exit 1
 
-# Production: use gunicorn with uvicorn workers
-CMD ["gunicorn", "app.main:app", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--timeout", "120"]
+# Use entrypoint for auto-migration + gunicorn startup
+ENTRYPOINT ["/app/entrypoint.sh"]

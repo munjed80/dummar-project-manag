@@ -4,6 +4,7 @@ Health check endpoints — detailed system health monitoring.
 Endpoints:
   GET /health/detailed  — checks DB connectivity, SMTP reachability
   GET /health/smtp      — tests SMTP connection only (admin)
+  POST /health/smtp/test-send — sends a real test email (admin, requires SMTP enabled)
 """
 import logging
 import smtplib
@@ -11,8 +12,8 @@ import ssl
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -182,4 +183,62 @@ def smtp_health_check(
             host=settings.SMTP_HOST,
             port=settings.SMTP_PORT,
             message=str(e)[:300],
+        )
+
+
+class SmtpTestSendRequest(BaseModel):
+    to_email: EmailStr
+
+
+class SmtpTestSendResult(BaseModel):
+    status: str  # "sent" | "error" | "disabled"
+    to_email: str
+    message: str
+
+
+@router.post("/smtp/test-send", response_model=SmtpTestSendResult)
+def smtp_test_send(
+    request_body: SmtpTestSendRequest,
+    current_user: User = Depends(get_current_internal_user),
+):
+    """
+    Send a real test email to verify SMTP configuration end-to-end.
+    Requires internal staff authentication and SMTP to be enabled.
+    This is an operational verification tool, not for regular use.
+    """
+    from app.services.email_service import send_email, _render_html
+
+    if not settings.SMTP_ENABLED:
+        return SmtpTestSendResult(
+            status="disabled",
+            to_email=request_body.to_email,
+            message="SMTP is disabled. Set SMTP_ENABLED=true to enable.",
+        )
+
+    content = (
+        "<p>هذا بريد اختباري من منصة إدارة مشروع دمّر.</p>"
+        "<p>إذا تلقيت هذا البريد، فإن إعدادات SMTP تعمل بشكل صحيح.</p>"
+        "<p>This is a test email from Dummar Project Management Platform. "
+        "If you received this email, SMTP configuration is working correctly.</p>"
+    )
+    html_body = _render_html("اختبار البريد الإلكتروني — Email Test", content)
+
+    success = send_email(
+        to_email=request_body.to_email,
+        subject="Dummar Platform — SMTP Test / اختبار البريد",
+        body_html=html_body,
+    )
+
+    if success:
+        logger.info("SMTP test email sent successfully to %s by user %s", request_body.to_email, current_user.username)
+        return SmtpTestSendResult(
+            status="sent",
+            to_email=request_body.to_email,
+            message="Test email sent successfully. Check inbox (and spam folder).",
+        )
+    else:
+        return SmtpTestSendResult(
+            status="error",
+            to_email=request_body.to_email,
+            message="Failed to send test email. Check application logs for details.",
         )

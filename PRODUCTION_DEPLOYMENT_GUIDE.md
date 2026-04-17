@@ -422,15 +422,40 @@ SMTP_FROM_EMAIL=noreply@dummar.gov.sy
 ### Verifying SMTP after configuration
 
 ```bash
-# 1. Test connection (requires internal staff auth)
+# 1. Test SMTP connection (requires internal staff auth)
 curl -H "Authorization: Bearer <TOKEN>" https://api.dummar.example.com/health/smtp
 
 # 2. Check SMTP in detailed health
 curl https://api.dummar.example.com/health/detailed
 
-# 3. Watch logs for email send results
+# 3. Send a real test email (requires auth + SMTP_ENABLED=true)
+curl -X POST -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"to_email": "admin@your-domain.com"}' \
+  https://api.dummar.example.com/health/smtp/test-send
+
+# 4. Watch logs for email send results
 journalctl -u dummar-api -f | grep -i email
 ```
+
+### SMTP Production Verification Checklist
+
+Before considering SMTP fully operational in production, verify all of the following:
+
+- [ ] `SMTP_ENABLED=true` in environment
+- [ ] `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` are configured
+- [ ] `GET /health/smtp` returns `status: "ok"` with acceptable latency
+- [ ] `GET /health/detailed` shows SMTP status as `"ok"` (not `"error"` or `"disabled"`)
+- [ ] `POST /health/smtp/test-send` successfully delivers an email to a test mailbox
+- [ ] Check spam/junk folder if test email is not in inbox
+- [ ] Trigger a real workflow that sends email:
+  - Change a complaint status → verify email reaches complaints officer
+  - Assign a task → verify email reaches assigned user
+  - Approve a contract → verify email reaches contracts managers
+- [ ] Confirm emails are rendered correctly (Arabic RTL, proper formatting)
+- [ ] Confirm duplicate suppression works (repeat same action within 5 min, verify only 1 email sent)
+- [ ] Review application logs for any SMTP errors: `journalctl -u dummar-api | grep -i smtp`
+- [ ] Verify that SMTP failures do NOT block core operations (temporarily misconfigure SMTP and confirm complaints/tasks/contracts still work)
 
 ### Disable email
 
@@ -756,30 +781,101 @@ npm run build
 
 ---
 
-## Docker Deployment (Alternative)
+## Docker Deployment (Primary)
 
-For Docker-based deployment, use the included `docker-compose.yml`:
+The recommended production deployment uses `docker-compose.yml` with three services: **db** (PostgreSQL), **backend** (FastAPI), and **nginx** (reverse proxy):
 
 ```bash
-# Build and start
-docker compose up -d
+# 1. Clone and configure
+git clone <repo-url> /var/www/dummar
+cd /var/www/dummar
 
-# Run migrations
-docker compose exec backend alembic upgrade head
+# 2. Create production .env
+cat > .env <<EOF
+DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+CORS_ORIGINS=https://dummar.example.com
+SMTP_ENABLED=false
+LOG_LEVEL=info
+GUNICORN_WORKERS=4
+EOF
 
-# Load seed data
+# 3. Build frontend (dist/ directory)
+npm install
+VITE_API_BASE_URL=/api npm run build
+
+# 4. Build and start all services
+docker compose up -d --build
+
+# 5. Load seed data (first deployment only)
 docker compose exec backend python -m app.scripts.seed_data
 
-# Check health
-docker compose exec backend curl -f http://localhost:8000/health/ready
+# 6. Verify
+curl http://localhost/api/health/ready
+curl http://localhost/api/health/detailed
 
-# View logs
+# 7. View logs
 docker compose logs -f backend
 ```
 
-**For production Docker deployment:**
-- Override environment variables with production values via `.env` file
+**The `docker-compose.yml` includes:**
+- PostgreSQL with PostGIS (persistent volume)
+- Backend with auto-migration on startup (entrypoint.sh)
+- nginx reverse proxy with rate limiting, security headers, SPA routing
+- Health checks for all services
+- Automatic restart on failure
+- Non-root container user for backend
+
+**Important Docker notes:**
+- Backend entrypoint auto-runs `alembic upgrade head` on every start
+- nginx serves frontend from `dist/` and proxies API to backend
+- Override environment variables via `.env` file
 - Use Docker secrets or external secret management for sensitive values
-- Mount persistent volumes for database and uploads
-- Configure a reverse proxy (nginx/Traefik) in front of the containers
-- The Dockerfile runs as non-root user (`appuser`) with health checks built in
+- `GUNICORN_WORKERS` configures backend concurrency (default 4)
+
+---
+
+## Load / Performance Testing
+
+A lightweight load testing tool is included for verifying system performance.
+
+### Running load tests
+
+```bash
+cd backend
+
+# Against local Docker deployment
+python -m tests.load_test --base-url http://localhost:8000
+
+# Against production (behind nginx)
+python -m tests.load_test --base-url https://api.dummar.example.com --username admin --password <password>
+
+# With more concurrency and report output
+python -m tests.load_test --base-url http://localhost:8000 --concurrency 20 --requests-per-endpoint 100 --report-file results.json
+```
+
+### What it tests
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| GET /health | No | Liveness probe latency |
+| GET /health/ready | No | Readiness probe latency |
+| GET /metrics | No | Metrics endpoint latency |
+| POST /auth/login | No | Authentication throughput |
+| GET /complaints/ | Yes | Main data listing |
+| GET /tasks/ | Yes | Task listing |
+| GET /contracts/ | Yes | Contract listing |
+| GET /dashboard/stats | Yes | Dashboard aggregation |
+
+### Output
+
+The tool outputs a table with avg/p95/min/max response times, error counts, and requests-per-second for each endpoint. Optionally writes a JSON report for tracking over time.
+
+### Key performance expectations
+
+- Health/metrics endpoints: < 10ms average
+- Login: < 100ms average
+- List endpoints: < 200ms average (with < 1000 records)
+- Dashboard stats: < 300ms average (aggregation queries)
+
+If any endpoint exceeds 500ms average, investigate database query performance and consider adding indexes.
