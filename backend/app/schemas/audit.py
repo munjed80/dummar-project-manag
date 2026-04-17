@@ -11,6 +11,7 @@ class AuditLogResponse(BaseModel):
     entity_id: Optional[int] = None
     description: Optional[str] = None
     ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:

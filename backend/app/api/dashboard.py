@@ -18,23 +18,37 @@ def get_dashboard_stats(
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
-    total_complaints = db.query(func.count(Complaint.id)).scalar()
-    
-    complaints_by_status = {}
-    for status in ComplaintStatus:
-        count = db.query(func.count(Complaint.id)).filter(Complaint.status == status).scalar()
-        complaints_by_status[status.value] = count
-    
-    total_tasks = db.query(func.count(Task.id)).scalar()
-    
-    tasks_by_status = {}
-    for status in TaskStatus:
-        count = db.query(func.count(Task.id)).filter(Task.status == status).scalar()
-        tasks_by_status[status.value] = count
-    
-    total_contracts = db.query(func.count(Contract.id)).scalar()
-    active_contracts = db.query(func.count(Contract.id)).filter(Contract.status == ContractStatus.ACTIVE).scalar()
-    
+    # Complaints: single GROUP BY instead of per-status queries
+    complaint_counts = dict(
+        db.query(Complaint.status, func.count(Complaint.id))
+        .group_by(Complaint.status)
+        .all()
+    )
+    total_complaints = sum(complaint_counts.values())
+    complaints_by_status = {
+        s.value: complaint_counts.get(s, 0) for s in ComplaintStatus
+    }
+
+    # Tasks: single GROUP BY
+    task_counts = dict(
+        db.query(Task.status, func.count(Task.id))
+        .group_by(Task.status)
+        .all()
+    )
+    total_tasks = sum(task_counts.values())
+    tasks_by_status = {
+        s.value: task_counts.get(s, 0) for s in TaskStatus
+    }
+
+    # Contracts: count totals in fewer queries
+    contract_counts = dict(
+        db.query(Contract.status, func.count(Contract.id))
+        .group_by(Contract.status)
+        .all()
+    )
+    total_contracts = sum(contract_counts.values())
+    active_contracts = contract_counts.get(ContractStatus.ACTIVE, 0)
+
     threshold_date = date.today() + timedelta(days=30)
     contracts_nearing_expiry = db.query(func.count(Contract.id)).filter(
         Contract.status == ContractStatus.ACTIVE,

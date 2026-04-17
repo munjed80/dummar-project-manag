@@ -93,7 +93,7 @@ def _check_smtp() -> ComponentHealth:
 def detailed_health_check(db: Session = Depends(get_db)):
     """
     Detailed health check — tests DB and SMTP connectivity.
-    Public endpoint (no auth) for monitoring tools.
+    Public endpoint (no auth) for monitoring tools / load balancers.
     """
     db_health = _check_db(db)
     smtp_health = _check_smtp()
@@ -111,6 +111,22 @@ def detailed_health_check(db: Session = Depends(get_db)):
         database=db_health,
         smtp=smtp_health,
     )
+
+
+@router.get("/ready")
+def readiness_check(db: Session = Depends(get_db)):
+    """
+    Readiness probe — returns 200 only when the database is reachable.
+    Used by container orchestrators to determine if traffic can be routed.
+    """
+    db_health = _check_db(db)
+    if db_health.status != "ok":
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "database": db_health.model_dump()},
+        )
+    return {"status": "ready", "database": db_health.model_dump()}
 
 
 @router.get("/smtp", response_model=SmtpTestResult)

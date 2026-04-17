@@ -44,6 +44,137 @@
 
 ---
 
+### الدفعة: 2026-04-17T07:12 — Production Readiness Batch (Deployment + SMTP + Monitoring + Audit + Performance)
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T07:12
+- **فهم النظام الحالي:**
+  - 66 اختبار ناجح، بناء الواجهة ناجح
+  - منصة قوية مع: شكاوى، مهام، عقود، GIS، PWA، RBAC، إشعارات، health checks
+  - SMTP integration موجود لكن لم يُختبر مع خادم حقيقي
+  - Audit logging موجود لكن يغطي فقط: complaint_update, task_update, contract_create/update/approve/delete, user_create/update/deactivate, login
+  - لا يوجد: audit لتغيير status بشكل منفصل، audit لتغيير assignment، audit لـ task_create/delete، structured logging، request logging middleware، metrics endpoint، readiness probe
+  - Dashboard queries تستخدم N+1 pattern (query لكل status)
+  - Notification service تستخدم N+1 pattern (query لكل user)
+  - Dockerfile يستخدم Python 3.11 ويعمل كـ root
+  - docker-compose.yml يحتوي credentials مكشوفة ولا يدعم env vars
+
+- **أهداف هذه الدفعة:**
+  1. Production deployment readiness: Dockerfile, docker-compose, deployment guide
+  2. SMTP hardening: better error logging, return values
+  3. Monitoring foundation: structured logging, request logging middleware, metrics endpoint, readiness probe
+  4. Detailed audit logging: status changes, assignments, task creation/deletion, user management with Request
+  5. Query optimization: dashboard N+1, notification N+1
+  6. Keep all 66 existing tests passing
+
+- **الملفات المخطط تعديلها:**
+  - `backend/Dockerfile` — Python 3.12, non-root user, healthcheck, gunicorn
+  - `docker-compose.yml` — env var support, healthchecks, restart policies
+  - `backend/app/main.py` — structured logging, lifespan, metrics, request logging middleware
+  - `backend/app/middleware/request_logging.py` — new: structured request logging
+  - `backend/app/services/audit.py` — exception safety, structured logging
+  - `backend/app/services/email_service.py` — return bool, better logging
+  - `backend/app/api/complaints.py` — audit for status change, assignment change
+  - `backend/app/api/tasks.py` — audit for create, delete, status change, assignment
+  - `backend/app/api/contracts.py` — log notification failures
+  - `backend/app/api/users.py` — Request param, better audit descriptions
+  - `backend/app/api/auth.py` — Request param for login audit
+  - `backend/app/api/health.py` — readiness probe
+  - `backend/app/api/dashboard.py` — GROUP BY optimization
+  - `backend/app/services/notification_service.py` — batch user lookups
+  - `backend/app/core/config.py` — LOG_LEVEL setting
+  - `backend/app/schemas/audit.py` — add user_agent field
+  - `backend/.env.example` — updated defaults
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — comprehensive rewrite
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — status update
+  - `backend/tests/test_api.py` — 10 new tests
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+
+  **1. Production Deployment Readiness:**
+  - ✅ Dockerfile: Python 3.12, non-root `appuser`, HEALTHCHECK directive, gunicorn with uvicorn workers, unbuffered output
+  - ✅ docker-compose.yml: env var overrides via `.env`, healthchecks for both DB and backend, restart policies, all SMTP vars exposed, LOG_LEVEL support, reduced token expiry (480 min)
+  - ✅ PRODUCTION_DEPLOYMENT_GUIDE.md: comprehensive rewrite with Quick Start, Monitoring & Observability, Audit Trail, Troubleshooting sections
+  - ✅ nginx config includes security headers, PWA sw.js cache control, proxy timeout
+
+  **2. SMTP Hardening:**
+  - ✅ `send_email()` returns `bool` (True=sent, False=failed/skipped) instead of None
+  - ✅ All notification failures logged with `logger.exception()` instead of `pass`
+  - ✅ Notification N+1 fixed: batch user lookups with `User.id.in_(user_ids)` 
+  - ⚠️ Real SMTP test: not possible in CI environment — no real SMTP server available. The integration is hardened and ready to test with a real server. Steps to verify documented in deployment guide.
+
+  **3. Monitoring & Observability:**
+  - ✅ Structured logging: `basicConfig` with timestamp + level + logger name format
+  - ✅ Request logging middleware: structured key=value format (method, path, status, duration_ms, client)
+  - ✅ Health check paths excluded from request logging to reduce noise
+  - ✅ `GET /metrics` endpoint: uptime_seconds, total_requests, error_requests, version
+  - ✅ `GET /health/ready` endpoint: readiness probe returns 503 when DB unreachable
+  - ✅ LOG_LEVEL configurable via environment variable
+  - ✅ Deprecated `@app.on_event("startup")` replaced with modern `lifespan` context manager
+
+  **4. Detailed Audit Logging:**
+  - ✅ `login` — now captures IP + user_agent via Request
+  - ✅ `complaint_status_change` — separate audit entry for status transitions
+  - ✅ `complaint_assignment` — separate audit entry when assigned_to changes
+  - ✅ `task_create` — new audit event
+  - ✅ `task_status_change` — new audit event
+  - ✅ `task_assignment` — new audit event
+  - ✅ `task_delete` — new audit event (with Request)
+  - ✅ `user_create` — now includes role in description
+  - ✅ `user_update` — now includes changed fields diff in description
+  - ✅ `user_deactivate` — now includes role, passes Request
+  - ✅ `write_audit_log()` — exception-safe (never raises), structured log output
+  - ✅ `AuditLogResponse` schema — now includes `user_agent` field
+
+  **5. Query Optimization:**
+  - ✅ Dashboard stats: replaced 3+N individual COUNT queries with 3 GROUP BY queries (complaint/task/contract counts by status in single queries)
+  - ✅ Notification service: replaced N+1 user lookups with batch `User.id.in_()` queries for both complaint and contract notifications
+
+  **6. Stability:**
+  - ✅ 76 tests pass (66 existing + 10 new)
+  - ✅ Frontend build passes
+  - ✅ Arabic RTL UI preserved
+  - ✅ All existing functionality preserved
+
+  **New tests added (10):**
+  - `test_metrics_endpoint` — metrics returns uptime and version
+  - `test_readiness_endpoint` — readiness probe returns ready
+  - `test_health_basic` — basic health check
+  - `test_task_create_audit` — task creation audit
+  - `test_user_create_audit` — user creation audit with role
+  - `test_user_deactivate_audit` — user deactivation audit
+  - `test_complaint_status_change_audit` — status change audit
+  - `test_contract_approve_audit` — contract approval audit
+  - `test_audit_log_response_includes_user_agent` — user_agent in response
+  - `test_dashboard_stats_with_data` — optimized dashboard correctness
+
+  **Exact files changed:** 20 files
+  - `backend/Dockerfile`
+  - `docker-compose.yml`
+  - `backend/app/main.py`
+  - `backend/app/middleware/__init__.py` (new)
+  - `backend/app/middleware/request_logging.py` (new)
+  - `backend/app/core/config.py`
+  - `backend/app/services/audit.py`
+  - `backend/app/services/email_service.py`
+  - `backend/app/services/notification_service.py`
+  - `backend/app/api/auth.py`
+  - `backend/app/api/complaints.py`
+  - `backend/app/api/tasks.py`
+  - `backend/app/api/contracts.py`
+  - `backend/app/api/users.py`
+  - `backend/app/api/dashboard.py`
+  - `backend/app/api/health.py`
+  - `backend/app/schemas/audit.py`
+  - `backend/.env.example`
+  - `backend/tests/test_api.py`
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md`
+
+---
+
 ### الدفعة: 2026-04-17T00:01 — PWA + Area Boundaries Migration + Health Monitoring
 
 **قبل البدء:**

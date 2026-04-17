@@ -2,6 +2,9 @@ from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
 from typing import Optional
 from fastapi import Request
+import logging
+
+logger = logging.getLogger("dummar.audit")
 
 
 def write_audit_log(
@@ -15,22 +18,37 @@ def write_audit_log(
     user_agent: Optional[str] = None,
     request: Optional[Request] = None,
 ):
-    # Auto-extract IP and user_agent from Request if provided
-    if request is not None:
-        if ip_address is None:
-            ip_address = request.client.host if request.client else None
-        if user_agent is None:
-            user_agent = request.headers.get("user-agent", "")[:500]
+    """Write an audit log entry. Safe to call — never raises."""
+    try:
+        # Auto-extract IP and user_agent from Request if provided
+        if request is not None:
+            if ip_address is None:
+                ip_address = request.client.host if request.client else None
+            if user_agent is None:
+                user_agent = request.headers.get("user-agent", "")[:500]
 
-    log = AuditLog(
-        user_id=user_id,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        description=description,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-    db.add(log)
-    db.commit()
-    return log
+        log = AuditLog(
+            user_id=user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            description=description,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        db.add(log)
+        db.commit()
+
+        logger.info(
+            'audit action=%s entity_type=%s entity_id=%s user_id=%s desc="%s"',
+            action, entity_type, entity_id, user_id,
+            (description or "")[:100],
+        )
+        return log
+    except Exception:
+        logger.exception("Failed to write audit log: action=%s entity_type=%s", action, entity_type)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None

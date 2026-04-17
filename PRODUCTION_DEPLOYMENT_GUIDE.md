@@ -7,19 +7,22 @@
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [PostgreSQL / PostGIS Setup](#postgresql--postgis-setup)
-3. [Environment Variables](#environment-variables)
-4. [Backend Setup](#backend-setup)
-5. [Database Migrations](#database-migrations)
-6. [Seed Data Strategy](#seed-data-strategy)
-7. [Frontend Build & Serve](#frontend-build--serve)
-8. [SMTP Email Configuration](#smtp-email-configuration)
-9. [CORS Configuration](#cors-configuration)
-10. [File Upload / Storage](#file-upload--storage)
-11. [Security Checklist](#security-checklist)
-12. [CI/CD Pipeline](#cicd-pipeline)
-13. [Rollback & Migration Caution](#rollback--migration-caution)
-14. [Monitoring & Logging](#monitoring--logging)
+2. [Quick Start (Docker)](#quick-start-docker)
+3. [PostgreSQL / PostGIS Setup](#postgresql--postgis-setup)
+4. [Environment Variables](#environment-variables)
+5. [Backend Setup](#backend-setup)
+6. [Database Migrations](#database-migrations)
+7. [Seed Data Strategy](#seed-data-strategy)
+8. [Frontend Build & Serve](#frontend-build--serve)
+9. [SMTP Email Configuration](#smtp-email-configuration)
+10. [CORS Configuration](#cors-configuration)
+11. [File Upload / Storage](#file-upload--storage)
+12. [Security Checklist](#security-checklist)
+13. [CI/CD Pipeline](#cicd-pipeline)
+14. [Rollback & Migration Caution](#rollback--migration-caution)
+15. [Monitoring & Observability](#monitoring--observability)
+16. [Audit Trail](#audit-trail)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -28,10 +31,56 @@
 | Component       | Minimum Version | Notes                                      |
 |-----------------|-----------------|---------------------------------------------|
 | Python          | 3.12+           | Required for backend                        |
-| Node.js         | 18+             | Required for frontend build                 |
+| Node.js         | 20+             | Required for frontend build (Vite 8 + Tailwind 4) |
 | PostgreSQL      | 15+             | Primary database                            |
 | PostGIS         | 3.3+            | Extension for spatial/GIS data              |
 | nginx (or similar) | latest      | Reverse proxy for production serving        |
+| Docker (optional) | 20+           | For containerized deployment                |
+
+---
+
+## Quick Start (Docker)
+
+The fastest way to deploy uses Docker Compose:
+
+```bash
+# 1. Clone the repository
+git clone <repo-url> /var/www/dummar
+cd /var/www/dummar
+
+# 2. Create a production .env file (critical: change defaults!)
+cat > .env <<EOF
+DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+CORS_ORIGINS=https://dummar.example.com
+SMTP_ENABLED=false
+LOG_LEVEL=info
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+EOF
+
+# 3. Build and start
+docker compose up -d
+
+# 4. Run migrations
+docker compose exec backend alembic upgrade head
+
+# 5. Load initial seed data (first deployment only)
+docker compose exec backend python -m app.scripts.seed_data
+
+# 6. Verify health
+curl http://localhost:8000/health
+curl http://localhost:8000/health/detailed
+curl http://localhost:8000/health/ready
+
+# 7. IMPORTANT: Change default passwords immediately!
+```
+
+The `docker-compose.yml` includes:
+- Health checks for both PostgreSQL and backend
+- Automatic restart on failure
+- Environment variable overrides via `.env` file
+- Persistent volumes for database and uploads
+- Non-root container user for backend
 
 ---
 
@@ -91,6 +140,9 @@ UPLOAD_DIR=/var/www/dummar/uploads
 # ── CORS ──
 CORS_ORIGINS=https://dummar.example.com
 
+# ── Logging ──
+LOG_LEVEL=info  # debug, info, warning, error
+
 # ── SMTP (optional — set SMTP_ENABLED=true to activate email) ──
 SMTP_ENABLED=false
 SMTP_HOST=smtp.example.com
@@ -136,6 +188,7 @@ source venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
+pip install gunicorn
 ```
 
 > **Note:** `bcrypt==3.2.2` is pinned for `passlib==1.7.4` compatibility. Do not upgrade bcrypt without testing.
@@ -152,14 +205,13 @@ cp .env.example .env
 For production, use Gunicorn with Uvicorn workers:
 
 ```bash
-pip install gunicorn
-
 gunicorn app.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000 \
-  --access-logfile /var/log/dummar/access.log \
-  --error-logfile /var/log/dummar/error.log
+  --access-logfile - \
+  --error-logfile - \
+  --timeout 120
 ```
 
 ### 6. Create a systemd service (recommended)
@@ -180,8 +232,12 @@ EnvironmentFile=/var/www/dummar/backend/.env
 ExecStart=/var/www/dummar/backend/venv/bin/gunicorn app.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
-  --bind 127.0.0.1:8000
+  --bind 127.0.0.1:8000 \
+  --access-logfile - \
+  --error-logfile - \
+  --timeout 120
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
@@ -217,6 +273,9 @@ alembic current
 
 - `001_initial.py` — Core tables (users, areas, buildings, complaints, tasks, contracts, audit)
 - `002_add_notifications.py` — Notifications table
+- `003_add_task_coordinates.py` — Task lat/lng columns for GIS
+- `004_add_area_boundary_data.py` — Area boundary polygon data
+- `005_add_audit_log_indexes.py` — Performance indexes on audit_logs
 
 ### Creating new migrations
 
@@ -284,6 +343,11 @@ server {
     ssl_certificate /etc/letsencrypt/live/dummar.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/dummar.example.com/privkey.pem;
 
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     # Frontend (SPA)
     root /var/www/dummar/dist;
     index index.html;
@@ -299,6 +363,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
     }
 
     # File uploads
@@ -306,6 +371,11 @@ server {
         alias /var/www/dummar/uploads/;
         expires 30d;
         add_header Cache-Control "public, immutable";
+    }
+
+    # PWA service worker — no caching
+    location /sw.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 }
 
@@ -349,6 +419,19 @@ SMTP_FROM_EMAIL=noreply@dummar.gov.sy
 | Task assignment          | Assigned user                           |
 | Contract status change   | Contracts managers + project director   |
 
+### Verifying SMTP after configuration
+
+```bash
+# 1. Test connection (requires internal staff auth)
+curl -H "Authorization: Bearer <TOKEN>" https://api.dummar.example.com/health/smtp
+
+# 2. Check SMTP in detailed health
+curl https://api.dummar.example.com/health/detailed
+
+# 3. Watch logs for email send results
+journalctl -u dummar-api -f | grep -i email
+```
+
 ### Disable email
 
 Set `SMTP_ENABLED=false` (default). The system will continue to create in-app notifications but skip email sending.
@@ -361,6 +444,7 @@ Set `SMTP_ENABLED=false` (default). The system will continue to create in-app no
 - **Deduplication**: Same email (same recipient + subject) is suppressed within a 5-minute window to prevent noisy duplicate notifications
 - **TLS handling**: Port 587 uses STARTTLS, port 465 uses direct SSL — automatic based on configured port
 - **Timeout**: All SMTP connections timeout after 30 seconds
+- **Return value**: `send_email()` returns `True`/`False` for programmatic verification
 
 ---
 
@@ -423,6 +507,7 @@ uploads/
 - [ ] **Run as non-root** — use a dedicated system user (e.g., `www-data`)
 - [ ] **Back up database** — set up automated PostgreSQL backups (pg_dump)
 - [ ] **Monitor logs** — set up log rotation and alerting
+- [ ] **Review audit logs** — check `/audit-logs/` regularly for suspicious activity
 
 ---
 
@@ -436,7 +521,7 @@ The project includes a GitHub Actions CI pipeline (`.github/workflows/ci.yml`) t
 - Runs `pytest` with SQLite in-memory (no PostgreSQL needed)
 
 ### Frontend job
-- Installs Node.js 18
+- Installs Node.js 20 (required for Vite 8 + Tailwind CSS 4)
 - Runs `npm install` and `npm run build`
 
 ### Pipeline behavior
@@ -491,58 +576,210 @@ alembic history
 
 ---
 
-## Monitoring & Logging
+## Monitoring & Observability
+
+### Health Endpoints
+
+| Endpoint            | Auth Required | Purpose                                         |
+|---------------------|---------------|--------------------------------------------------|
+| `GET /health`       | No            | Basic liveness probe (returns `{"status":"healthy"}`) |
+| `GET /health/detailed` | No         | Checks DB + SMTP connectivity with latency      |
+| `GET /health/ready` | No            | Readiness probe — returns 503 if DB unreachable  |
+| `GET /health/smtp`  | Yes (staff)   | Tests SMTP connection + authentication           |
+| `GET /metrics`      | No            | Uptime, request counts, version info             |
+
+### Structured Request Logging
+
+All API requests are logged with structured key=value format:
+
+```
+method=GET path="/complaints/" status=200 duration_ms=12.3 client=192.168.1.1
+```
+
+- Health check paths (`/health`, `/health/detailed`, `/docs`) are excluded to reduce noise
+- 4xx and 5xx responses are logged at WARNING level
+- Audit events are logged at INFO level with action details
 
 ### Log locations (systemd setup)
 
 ```bash
-# Application logs
+# Application logs (structured format)
 journalctl -u dummar-api -f
 
-# Gunicorn access/error logs
-/var/log/dummar/access.log
-/var/log/dummar/error.log
+# Filter by component
+journalctl -u dummar-api | grep "dummar.audit"      # Audit events
+journalctl -u dummar-api | grep "dummar.requests"    # Request logs
+journalctl -u dummar-api | grep "email"              # Email send results
 
 # nginx logs
 /var/log/nginx/access.log
 /var/log/nginx/error.log
 ```
 
-### Health check endpoint
+### Setting up external monitoring
 
 ```bash
-curl https://api.dummar.example.com/health
-# Expected: {"status": "healthy"}
+# Example: Simple cron-based health check with alerting
+*/5 * * * * curl -sf http://localhost:8000/health/ready || echo "ALERT: Dummar API not ready" | mail -s "Dummar Health Alert" admin@example.com
+
+# Example: Prometheus-compatible scraping (metrics endpoint)
+curl http://localhost:8000/metrics
+# Returns: {"uptime_seconds": 3600.5, "total_requests": 1234, "error_requests": 2, "version": "1.0.0"}
 ```
 
 ### Key things to monitor
 
-- API response times
-- Error rate (5xx responses)
-- Database connection pool
+- API response times (from request logs)
+- Error rate (5xx responses — logged at WARNING level)
+- Database connectivity (via `/health/ready`)
+- SMTP connectivity (via `/health/detailed`)
 - Disk space (especially upload directory)
-- Email delivery failures (check application logs)
-- SMTP connectivity
+- Email delivery failures (check application logs for "Failed to send email")
+- Audit log for unusual activity (`/audit-logs/` endpoint)
+- Application uptime (`/metrics` endpoint)
+
+### Log level configuration
+
+Set `LOG_LEVEL` environment variable:
+- `debug` — verbose output, useful for development
+- `info` — normal production level (default)
+- `warning` — only warnings and errors
+- `error` — errors only
+
+---
+
+## Audit Trail
+
+The platform maintains a comprehensive audit trail for operational accountability.
+
+### Audited events
+
+| Action                     | Entity Type | Description                           |
+|----------------------------|-------------|---------------------------------------|
+| `login`                    | user        | User authentication (with IP/UA)      |
+| `user_create`              | user        | New user created (includes role)       |
+| `user_update`              | user        | User profile/role updated (with diff)  |
+| `user_deactivate`          | user        | User account deactivated               |
+| `complaint_update`         | complaint   | Complaint modified                     |
+| `complaint_status_change`  | complaint   | Status transition (old → new)          |
+| `complaint_assignment`     | complaint   | Assignment changed (officer → officer) |
+| `task_create`              | task        | Task created                           |
+| `task_update`              | task        | Task modified                          |
+| `task_status_change`       | task        | Status transition                      |
+| `task_assignment`          | task        | Assignment changed                     |
+| `task_delete`              | task        | Task deleted                           |
+| `contract_create`          | contract    | Contract created                       |
+| `contract_update`          | contract    | Contract modified                      |
+| `contract_approve`         | contract    | Contract approved                      |
+| `contract_activate`        | contract    | Contract activated                     |
+| `contract_suspend`         | contract    | Contract suspended                     |
+| `contract_cancel`          | contract    | Contract cancelled                     |
+| `contract_delete`          | contract    | Contract deleted                       |
+
+### Reviewing audit logs
+
+```bash
+# Via API (requires project_director auth)
+curl -H "Authorization: Bearer <TOKEN>" \
+  "https://api.dummar.example.com/audit-logs/?limit=50&entity_type=user"
+
+# Filter options: action, entity_type, user_id
+# Pagination: skip, limit (max 200)
+```
+
+### Each audit record includes:
+- **user_id** — who performed the action
+- **action** — what was done
+- **entity_type** + **entity_id** — which record was affected
+- **description** — human-readable summary
+- **ip_address** — source IP of the request
+- **user_agent** — browser/client info
+- **created_at** — timestamp
+
+---
+
+## Troubleshooting
+
+### Backend won't start
+
+```bash
+# Check logs
+journalctl -u dummar-api -n 50 --no-pager
+
+# Common issues:
+# 1. DATABASE_URL incorrect → check connection string
+# 2. SECRET_KEY not set → add to .env
+# 3. Port 8000 already in use → check with: ss -tlnp | grep 8000
+# 4. Python dependencies missing → pip install -r requirements.txt
+```
+
+### Database connection fails
+
+```bash
+# Test connection
+psql postgresql://dummar:<password>@localhost:5432/dummar_db -c "SELECT 1"
+
+# Check readiness endpoint
+curl http://localhost:8000/health/ready
+```
+
+### Emails not sending
+
+```bash
+# 1. Check if SMTP is enabled
+curl http://localhost:8000/health/detailed | python3 -m json.tool
+
+# 2. Test SMTP connection (requires auth)
+curl -H "Authorization: Bearer <TOKEN>" http://localhost:8000/health/smtp
+
+# 3. Check logs for send failures
+journalctl -u dummar-api | grep -i "email\|smtp" | tail -20
+
+# Common issues:
+# - SMTP_ENABLED=false (default — must explicitly enable)
+# - SMTP credentials incorrect
+# - Firewall blocking outbound port 587/465
+# - TLS/SSL certificate issues
+```
+
+### Frontend build fails
+
+```bash
+# Ensure Node.js 20+
+node --version
+
+# Clean install
+rm -rf node_modules package-lock.json
+npm install
+npm run build
+```
 
 ---
 
 ## Docker Deployment (Alternative)
 
-For Docker-based deployment, use the included `docker-compose.yml` as a starting point:
+For Docker-based deployment, use the included `docker-compose.yml`:
 
 ```bash
 # Build and start
-docker-compose up -d
+docker compose up -d
 
 # Run migrations
-docker-compose exec backend alembic upgrade head
+docker compose exec backend alembic upgrade head
 
 # Load seed data
-docker-compose exec backend python -m app.scripts.seed_data
+docker compose exec backend python -m app.scripts.seed_data
+
+# Check health
+docker compose exec backend curl -f http://localhost:8000/health/ready
+
+# View logs
+docker compose logs -f backend
 ```
 
 **For production Docker deployment:**
-- Override environment variables with production values
+- Override environment variables with production values via `.env` file
 - Use Docker secrets or external secret management for sensitive values
 - Mount persistent volumes for database and uploads
 - Configure a reverse proxy (nginx/Traefik) in front of the containers
+- The Dockerfile runs as non-root user (`appuser`) with health checks built in

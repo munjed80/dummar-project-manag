@@ -94,19 +94,23 @@ def notify_complaint_status_change(
             entity_id=complaint_id,
         )
 
-    # Send email notifications to users with email addresses
-    for uid in notify_user_ids:
-        try:
-            user = db.query(User).filter(User.id == uid).first()
-            if user and user.email:
+    # Send email notifications to users with email addresses (batch lookup)
+    if notify_user_ids:
+        email_users = db.query(User).filter(
+            User.id.in_(notify_user_ids),
+            User.email.isnot(None),
+            User.email != "",
+        ).all()
+        for user in email_users:
+            try:
                 send_complaint_status_email(
                     to_email=user.email,
                     tracking_number=tracking_number,
                     old_status=old_status,
                     new_status=new_status,
                 )
-        except Exception:
-            logger.exception("Failed to send complaint email to user %d", uid)
+            except Exception:
+                logger.exception("Failed to send complaint email to user %d", user.id)
 
     logger.info(
         "Sent %d notifications for complaint %s status change",
@@ -184,18 +188,23 @@ def notify_contract_status_change(
             entity_id=contract_id,
         )
 
-    # Send email notifications to managers with email addresses
-    for (uid,) in managers:
-        try:
-            user = db.query(User).filter(User.id == uid).first()
-            if user and user.email:
+    # Send email notifications to managers with email addresses (batch lookup)
+    manager_ids = [uid for (uid,) in managers]
+    if manager_ids:
+        email_users = db.query(User).filter(
+            User.id.in_(manager_ids),
+            User.email.isnot(None),
+            User.email != "",
+        ).all()
+        for user in email_users:
+            try:
                 send_contract_status_email(
                     to_email=user.email,
                     contract_number=contract_number,
                     action=action,
                 )
-        except Exception:
-            logger.exception("Failed to send contract email to user %d", uid)
+            except Exception:
+                logger.exception("Failed to send contract email to user %d", user.id)
 
     logger.info(
         "Sent %d notifications for contract %s action=%s",
