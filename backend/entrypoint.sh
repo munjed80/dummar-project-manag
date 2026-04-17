@@ -39,6 +39,20 @@ else
     echo "Arabic PDF font (DejaVu Sans): NOT FOUND — PDF export will use Helvetica fallback"
 fi
 
+# Verify SMTP configuration
+echo "=== SMTP Configuration Check ==="
+if [ "${SMTP_ENABLED:-false}" = "true" ]; then
+    if [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_USER:-}" ]; then
+        echo "SMTP: ENABLED — host=${SMTP_HOST} port=${SMTP_PORT:-587} user=${SMTP_USER}"
+        echo "SMTP: Email notifications will be sent for complaint/task/contract events"
+    else
+        echo "SMTP: ENABLED but MISCONFIGURED — SMTP_HOST or SMTP_USER is empty"
+        echo "SMTP: Email sending will fail. Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD"
+    fi
+else
+    echo "SMTP: DISABLED — in-app notifications only (set SMTP_ENABLED=true to enable)"
+fi
+
 echo "Starting Dummar API server..."
 exec gunicorn app.main:app \
     --workers "${GUNICORN_WORKERS:-4}" \

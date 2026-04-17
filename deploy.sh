@@ -274,7 +274,7 @@ check_endpoint() {
 
 check_endpoint "Frontend (SPA)"     "$BASE_URL/"
 check_endpoint "API health/ready"   "$BASE_URL/api/health/ready"  200
-check_endpoint "API health/live"    "$BASE_URL/api/health/live"   200
+check_endpoint "API root"            "$BASE_URL/api/"              200
 
 # ---------------------------------------------------------------------------
 # Summary
