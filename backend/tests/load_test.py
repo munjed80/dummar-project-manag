@@ -9,8 +9,9 @@ Usage:
   # Against local development server
   python -m tests.load_test --base-url http://localhost:8000
 
-  # Against production
-  python -m tests.load_test --base-url https://api.dummar.example.com --username admin --password <real-password>
+  # Against production (prefer env vars for credentials)
+  export LOAD_TEST_PASSWORD='<real-password>'
+  python -m tests.load_test --base-url https://api.dummar.example.com --username admin --password "$LOAD_TEST_PASSWORD"
 
   # With report output
   python -m tests.load_test --report-file load_test_results.json
@@ -254,21 +255,7 @@ def run_sequential_workflow(
             )
             last_status = create_result.status_code
         else:
-            # Try to extract complaint id from response for the update step
             complaint_id: Optional[int] = None
-            try:
-                create_resp_url = f"{base_url}/complaints/"
-                create_req = urllib.request.Request(
-                    create_resp_url,
-                    data=json.dumps(complaint_body).encode(),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                # We already created above; try to parse the first response.
-                # Since we can't replay, we'll just list and pick the latest.
-                pass
-            except Exception:
-                pass
 
             # Step 2 – List complaints (auth required)
             list_result = _make_request(
@@ -390,7 +377,7 @@ def print_report(
     base_url: str,
     concurrency: int,
 ) -> None:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    now = datetime.now(timezone.utc).isoformat()
 
     print()
     print("=== Dummar Platform Load Test Results ===")
@@ -508,12 +495,6 @@ def main(argv: Optional[List[str]] = None) -> None:
         {"label": "GET /health/ready", "url": f"{base_url}/health/ready", "method": "GET"},
         {"label": "GET /metrics", "url": f"{base_url}/metrics", "method": "GET"},
         {
-            "label": "POST /auth/login",
-            "url": f"{base_url}/auth/login",
-            "method": "POST",
-            "body": {"username": args.username, "password": args.password},
-        },
-        {
             "label": "GET /complaints/",
             "url": f"{base_url}/complaints/",
             "method": "GET",
@@ -555,6 +536,20 @@ def main(argv: Optional[List[str]] = None) -> None:
         report.path = label.split(" ", 1)[1]
         report.method = label.split(" ", 1)[0]
         reports.append(report)
+
+    # POST /auth/login – tested separately to keep credentials out of the
+    # generic endpoint list and avoid accidental logging.
+    print(f"Testing POST /auth/login ({num_requests} requests, {concurrency} threads) ...")
+    login_report = run_endpoint_load_test(
+        url=f"{base_url}/auth/login",
+        method="POST",
+        body={"username": args.username, "password": args.password},
+        concurrency=concurrency,
+        num_requests=num_requests,
+    )
+    login_report.method = "POST"
+    login_report.path = "/auth/login"
+    reports.append(login_report)
 
     # POST /complaints/ – rate-limited (5/min), so use fewer requests
     complaint_requests = min(num_requests, 5)
