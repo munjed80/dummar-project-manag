@@ -37,6 +37,7 @@ class Task(Base):
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
     assigned_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     area_id = Column(Integer, ForeignKey("areas.id"), nullable=True)
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
     location_text = Column(Text, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -54,6 +55,7 @@ class Task(Base):
     contract = relationship("Contract", back_populates="tasks")
     assigned_to_user = relationship("User", back_populates="created_tasks", foreign_keys=[assigned_to_id])
     area = relationship("Area", back_populates="tasks")
+    location = relationship("Location", back_populates="tasks", foreign_keys=[location_id])
     activities = relationship("TaskActivity", back_populates="task")
 
 

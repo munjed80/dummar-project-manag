@@ -1,18 +1,32 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T22:30
+## آخر تحديث: 2026-04-17T23:45
 
 ---
 
-## الدفعة الحالية: 2026-04-17T22:15 — VPS Deploy Hardening & SSL Auto-Configuration
+## الدفعة الحالية: 2026-04-17T22:59 — Locations Operational Geography Engine
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `docker-compose.yml` | أمان: إزالة تعريض منفذ PostgreSQL 5432 خارجياً |
-| `ssl-setup.sh` | إضافة: --auto flag for automatic nginx/docker-compose/.env configuration after cert |
-| `deploy.sh` | إضافة: --domain flag for CORS_ORIGINS auto-configuration + seed password warnings |
+| `backend/app/models/location.py` | إضافة: نموذج Location الموحّد مع تسلسل هرمي + ContractLocation + LocationType/LocationStatus enums |
+| `backend/app/models/complaint.py` | إضافة: location_id FK على الشكاوى |
+| `backend/app/models/task.py` | إضافة: location_id FK على المهام |
+| `backend/app/models/contract.py` | إضافة: location_links relationship |
+| `backend/app/models/__init__.py` | تصدير النماذج الجديدة |
+| `backend/app/schemas/location.py` | إضافة: مخططات شاملة (Location CRUD, TreeNode, Detail, Stats, Reports) |
+| `backend/app/api/locations.py` | إعادة كتابة: واجهة API شاملة للجغرافيا التشغيلية |
+| `backend/alembic/versions/007_add_locations_hierarchy.py` | جديد: هجرة لجداول locations + contract_locations + FKs |
+| `backend/tests/conftest.py` | إضافة: fixtures للمواقع (sample_location, sample_location_tree) |
+| `backend/tests/test_locations.py` | جديد: 37 اختبار للمواقع |
+| `src/services/api.ts` | إضافة: 12 method جديدة لـ API المواقع |
+| `src/pages/LocationsListPage.tsx` | إعادة كتابة: عرض شجري + جدول + بحث + فلاتر |
+| `src/pages/LocationDetailPage.tsx` | جديد: صفحة ملف الموقع التشغيلي |
+| `src/pages/LocationReportsPage.tsx` | جديد: تقارير المواقع الإدارية |
+| `src/App.tsx` | إضافة: مسارات جديدة (/locations/:id, /locations/reports) |
+| `package.json` | إضافة: @radix-ui/react-progress |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث: سجل الدفعة |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
 ---
@@ -21,23 +35,81 @@
 
 ### ✅ مكتمل ومُتحقق منه:
 
-**VPS Deploy Hardening:**
-- ✅ docker-compose.yml: PostgreSQL port 5432 NO LONGER exposed externally (security fix)
-- ✅ deploy.sh: Added `--domain=example.com` flag to auto-set CORS_ORIGINS
-- ✅ deploy.sh: Seed data step now prints password-change warnings with verification command
-- ✅ deploy.sh: Auto-detects https when SSL certs exist
-- ✅ All scripts syntax-validated (bash -n)
+**نموذج البيانات الموحّد للمواقع:**
+- ✅ جدول `locations` مع تسلسل هرمي (parent_id FK ذاتي المرجع)
+- ✅ أنواع المواقع: island, sector, block, building, tower, street, service_point, other
+- ✅ حقول: name, code, location_type, parent_id, status, description, latitude, longitude, boundary_path, metadata_json, is_active
+- ✅ منع الحلقات الدائرية في التسلسل الهرمي
+- ✅ التحقق من تفرد code
 
-**SSL Auto-Configuration:**
-- ✅ ssl-setup.sh: Added `--auto` flag that performs ALL post-cert steps automatically:
-  1. Copies nginx-ssl.conf → nginx.conf with domain replaced
-  2. Uncomments letsencrypt volumes in docker-compose.yml
-  3. Updates CORS_ORIGINS in .env to https://
-  4. Restarts nginx container
-- ✅ Without `--auto`, displays clear manual instructions (backward compatible)
-- ✅ Usage: `sudo ./ssl-setup.sh dummar.example.com --auto`
+**ربط المواقع بالعمليات:**
+- ✅ Complaint.location_id — FK مباشر للمواقع (nullable للتوافقية)
+- ✅ Task.location_id — FK مباشر للمواقع (nullable للتوافقية)
+- ✅ ContractLocation — جدول ربط many-to-many للعقود والمواقع
+- ✅ الحفاظ على area_id الحالي للتوافقية
 
-**Previous Batch Improvements (carried forward):**
+**واجهة API شاملة (19 endpoint):**
+- ✅ POST /locations/ — إنشاء موقع
+- ✅ GET /locations/list — قائمة مع بحث وفلاتر متعددة
+- ✅ GET /locations/tree — عرض شجري كامل مع عدّادات
+- ✅ GET /locations/detail/{id} — ملف الموقع التشغيلي
+- ✅ GET /locations/detail/{id}/complaints — شكاوى الموقع
+- ✅ GET /locations/detail/{id}/tasks — مهام الموقع
+- ✅ GET /locations/detail/{id}/contracts — عقود الموقع
+- ✅ GET /locations/detail/{id}/activity — النشاط الأخير
+- ✅ PUT /locations/{id} — تحديث موقع
+- ✅ DELETE /locations/{id} — حذف ناعم (director فقط)
+- ✅ GET /locations/stats/all — إحصائيات تشغيلية
+- ✅ GET /locations/reports/summary — تقرير إداري
+- ✅ POST /locations/contracts/link — ربط عقد بموقع
+- ✅ DELETE /locations/contracts/link — فك ربط
+- ✅ الحفاظ على endpoints القديمة (areas, buildings, streets)
+
+**واجهة المستخدم:**
+- ✅ LocationsListPage — عرض شجري + عرض جدول + بحث + فلاتر + بطاقات ملخص
+- ✅ LocationDetailPage — ملف تشغيلي: breadcrumb + مواقع فرعية + شكاوى + مهام + عقود + نشاط
+- ✅ LocationReportsPage — نقاط ساخنة + كثافة الشكاوى + تأخيرات + تغطية عقدية
+
+**المؤشرات التشغيلية:**
+- ✅ عدد الشكاوى (إجمالي + مفتوح)
+- ✅ عدد المهام (إجمالي + مفتوح + متأخر)
+- ✅ عدد العقود (إجمالي + نشط)
+- ✅ مؤشر النقطة الساخنة (≥5 شكاوى مفتوحة)
+
+**الجودة والأمان:**
+- ✅ RBAC: internal staff only, citizen ممنوع, director فقط للحذف
+- ✅ تسجيل التدقيق على جميع عمليات الموقع
+- ✅ واجهة RTL عربية أولاً
+- ✅ كود إنجليزي
+- ✅ بيانات حقيقية من الخلفية، بدون بيانات وهمية
+- ✅ 244 اختبار ناجح
+- ✅ بناء الواجهة ناجح
+
+### الاختبارات:
+| مجموعة | العدد | الحالة |
+|---|---|---|
+| API + E2E | 121 | ✅ ناجح |
+| Contract Intelligence | 86 | ✅ ناجح |
+| Locations | 37 | ✅ ناجح |
+| **المجموع** | **244** | **✅ ناجح** |
+
+### الفجوات المتبقية:
+- [ ] هجرة البيانات من Area إلى Location (يمكن تنفيذها عند الترقية)
+- [ ] واجهة إنشاء/تحرير المواقع من الأمام (CRUD forms)
+- [ ] خريطة تفاعلية على صفحة تفاصيل الموقع (Leaflet integration)
+- [ ] ربط إحداثيات الشكاوى/المهام تلقائياً بأقرب موقع
+- [ ] تصدير CSV لتقارير المواقع
+
+### الدفعة التالية المُوصى بها:
+1. واجهة إنشاء/تحرير المواقع (CRUD forms)
+2. هجرة بيانات Area → Location
+3. خريطة تفاعلية على صفحة الموقع
+4. ربط تلقائي بأقرب موقع عند إنشاء شكوى/مهمة
+5. تصدير CSV لتقارير المواقع
+
+---
+
+## ما قبل هذه الدفعة (Previous Batch Context):
 - ✅ Dashboard: Arabic status labels, progress bars, quick navigation
 - ✅ Login page: No hardcoded credentials, help toggle
 - ✅ Settings page: System health panel for admins

@@ -4,12 +4,122 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة الخامسة - مركز ذكاء العقود  
+**المرحلة الحالية:** المرحلة السادسة - الجغرافيا التشغيلية للمواقع  
 **آخر تحديث:** 2026-04-17
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-17T22:59 — Locations Operational Geography Engine
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T22:59
+- **فهم النظام الحالي:**
+  - 207 اختبار ناجح (121 API+E2E + 86 contract intelligence)، بناء الواجهة ناجح
+  - Location model has separate Area/Building/Street tables with basic CRUD
+  - Complaints and Tasks link to areas via area_id FK
+  - Contracts use free-text related_areas field
+  - Frontend has a basic LocationsListPage showing area cards with building tables
+  - No unified location hierarchy, no location detail page, no location-based stats/reports
+- **أهداف الدفعة:**
+  1. Add unified Location model with parent-child hierarchy (island, sector, block, building, tower, street, service_point, other)
+  2. Add location_id FK on complaints and tasks for structured location linking
+  3. Add ContractLocation many-to-many link table for contract coverage tracking
+  4. Build comprehensive Locations API: CRUD, tree view, detail dossier, stats, reports, search/filters
+  5. Build LocationsListPage with tree view + table view, search, filters, operational indicators
+  6. Build LocationDetailPage with dossier (complaints, tasks, contracts, activity timeline, indicators)
+  7. Build LocationReportsPage with hotspots, delays, complaint density, contract coverage
+  8. Maintain backward compatibility with existing Area/Building/Street endpoints
+  9. Add audit logging for all location operations
+  10. Write comprehensive backend tests (37 new tests)
+- **الملفات المتأثرة:**
+  - backend/app/models/location.py — unified Location model + ContractLocation
+  - backend/app/models/complaint.py — add location_id FK
+  - backend/app/models/task.py — add location_id FK
+  - backend/app/models/contract.py — add location_links relationship
+  - backend/app/models/__init__.py — export new models
+  - backend/app/schemas/location.py — comprehensive schemas
+  - backend/app/api/locations.py — full operational geography API
+  - backend/alembic/versions/007_add_locations_hierarchy.py — migration
+  - backend/tests/conftest.py — add location fixtures
+  - backend/tests/test_locations.py — 37 new tests
+  - src/services/api.ts — add 12 new location API methods
+  - src/pages/LocationsListPage.tsx — complete rewrite with tree view + table
+  - src/pages/LocationDetailPage.tsx — new location dossier page
+  - src/pages/LocationReportsPage.tsx — new location reports page
+  - src/App.tsx — add new routes
+  - package.json — @radix-ui/react-progress dependency
+- **مخاطر/عوائق:**
+  - Must keep existing Area/Building/Street endpoints for backward compatibility
+  - SQLite test environment needs careful handling of enums and JSON
+
+**بعد الإنتهاء:**
+- **الحالة:** ✅ Done
+- **الاختبارات:** 244 passed (121 API+E2E + 86 contract intelligence + 37 new locations)
+- **البناء:** Frontend build passes clean
+- **التغييرات المنجزة:**
+  A) ✅ Location model strengthened: Unified `Location` table with hierarchy support
+     - LocationType enum: island, sector, block, building, tower, street, service_point, other
+     - LocationStatus enum: active, inactive, under_construction, demolished
+     - Fields: name, code, location_type, parent_id (self-referential FK), status, description, latitude, longitude, boundary_path, metadata_json, is_active
+     - Parent-child relationships with SQLAlchemy self-referential relationship
+  B) ✅ Locations central to operations:
+     - Complaint.location_id FK added (nullable for backward compatibility)
+     - Task.location_id FK added (nullable for backward compatibility)
+     - ContractLocation many-to-many link table for contract coverage
+     - Existing area_id kept on complaints/tasks for backward compatibility
+  C) ✅ Serious locations UI:
+     - Tree view with expandable hierarchy, operational counters per node
+     - Table/list view with search and filters (type, status, parent)
+     - Summary cards showing total locations, active, open complaints, delayed tasks, hotspots
+  D) ✅ Location detail page (dossier):
+     - Core location info with breadcrumb navigation
+     - Parent/child hierarchy display
+     - Active complaints tab with table
+     - Active tasks tab with table
+     - Related contracts tab with table
+     - Recent activity timeline (complaints + tasks merged and sorted)
+     - Operational summary indicators (7 cards)
+  E) ✅ Filtering and search:
+     - Location type filter
+     - Active/inactive filter
+     - Parent-based filter (root or specific parent)
+     - Keyword search (name, code, description)
+     - has_open_complaints, has_active_tasks, has_contract_coverage operational filters
+  F) ✅ Operational indicators:
+     - Complaint count (total + open)
+     - Task count (total + open)
+     - Delayed task count
+     - Contract count (total + active)
+     - Hotspot flag (≥5 open complaints)
+  G) ✅ Reports by location:
+     - LocationReportsPage with management-level intelligence
+     - Hotspot locations (most open complaints)
+     - Highest complaint density (with progress bars)
+     - Most delayed locations
+     - Contract coverage overview
+     - Distribution by location type
+  H) ✅ Trust and quality:
+     - RBAC enforced (internal staff only, citizen excluded)
+     - Director-only for deletion
+     - Audit logging on create, update, delete, contract link/unlink
+     - Arabic-first RTL UI
+     - Code in English
+     - All data from real backend queries, no placeholders
+     - Circular parent reference prevention
+     - Code uniqueness validation
+- **التحقق:**
+  1. ✅ Frontend build passes
+  2. ✅ Backend tests pass (244/244)
+  3. ✅ Location hierarchy works (tree view, parent-child, breadcrumb, prevent circular)
+  4. ✅ Complaints/tasks/contracts meaningfully linked via location_id and ContractLocation
+  5. ✅ Location detail page uses real backend data
+  6. ✅ Filters/search work correctly
+  7. ✅ Operational indicators/reports work as intended
+  8. ✅ PROJECT_REVIEW_AND_PROGRESS.md and HANDOFF_STATUS.md updated
+
+---
 
 ### الدفعة: 2026-04-17T21:45 — UI/UX Improvements, Load Test Enhancement, Deploy Hardening, OCR Verification
 

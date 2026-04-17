@@ -274,6 +274,103 @@ class ApiService {
     return response.json();
   }
 
+  // ── Unified Locations ──
+  async getLocations(params?: {
+    location_type?: string; status?: string; parent_id?: number;
+    is_active?: number; search?: string;
+    has_open_complaints?: boolean; has_active_tasks?: boolean; has_contract_coverage?: boolean;
+    skip?: number; limit?: number;
+  }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.location_type) qp.append('location_type', params.location_type);
+    if (params?.status) qp.append('status', params.status);
+    if (params?.parent_id !== undefined) qp.append('parent_id', params.parent_id.toString());
+    if (params?.is_active !== undefined) qp.append('is_active', params.is_active.toString());
+    if (params?.search) qp.append('search', params.search);
+    if (params?.has_open_complaints) qp.append('has_open_complaints', 'true');
+    if (params?.has_active_tasks) qp.append('has_active_tasks', 'true');
+    if (params?.has_contract_coverage) qp.append('has_contract_coverage', 'true');
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/locations/list?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch locations');
+    return response.json();
+  }
+
+  async getLocationTree(): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/locations/tree`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location tree');
+    return response.json();
+  }
+
+  async getLocationDetail(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location detail');
+    return response.json();
+  }
+
+  async getLocationComplaints(id: number, statusFilter?: string): Promise<any> {
+    const qp = new URLSearchParams();
+    if (statusFilter) qp.append('status_filter', statusFilter);
+    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/complaints?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location complaints');
+    return response.json();
+  }
+
+  async getLocationTasks(id: number, statusFilter?: string): Promise<any> {
+    const qp = new URLSearchParams();
+    if (statusFilter) qp.append('status_filter', statusFilter);
+    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/tasks?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location tasks');
+    return response.json();
+  }
+
+  async getLocationContracts(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/contracts`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location contracts');
+    return response.json();
+  }
+
+  async getLocationActivity(id: number): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/activity`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location activity');
+    return response.json();
+  }
+
+  async getLocationStats(locationType?: string): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (locationType) qp.append('location_type', locationType);
+    const response = await fetch(`${API_BASE_URL}/locations/stats/all?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location stats');
+    return response.json();
+  }
+
+  async getLocationReportSummary(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/reports/summary`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location report');
+    return response.json();
+  }
+
+  async createLocation(data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create location');
+    return response.json();
+  }
+
+  async updateLocation(id: number, data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update location');
+    return response.json();
+  }
+
   // ── Users ──
   async getUsers(params?: { search?: string; role_filter?: string; is_active?: boolean; skip?: number; limit?: number }): Promise<PaginatedResponse<User>> {
     const qp = new URLSearchParams();

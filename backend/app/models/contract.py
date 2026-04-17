@@ -56,6 +56,7 @@ class Contract(Base):
     approved_by_user = relationship("User", back_populates="approved_contracts", foreign_keys=[approved_by_id])
     tasks = relationship("Task", back_populates="contract")
     approval_trail = relationship("ContractApproval", back_populates="contract")
+    location_links = relationship("ContractLocation", back_populates="contract")
 
 
 class ContractApproval(Base):
