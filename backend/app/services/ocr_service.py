@@ -463,15 +463,31 @@ def set_ocr_engine(engine: OcrEngine):
 def get_ocr_status() -> dict:
     """Return operational status of OCR subsystem."""
     engine = get_ocr_engine()
-    return {
+    tess_available = is_tesseract_available()
+
+    # Gather additional production-useful info
+    status: dict = {
         "engine": engine.name(),
-        "tesseract_available": is_tesseract_available(),
+        "tesseract_available": tess_available,
         "supported_formats": {
             "always": ["pdf (text-layer)", "txt", "csv"],
             "with_tesseract": ["jpg", "jpeg", "png", "tiff", "tif", "bmp"],
             "with_pdf2image": ["pdf (scanned/image-only)"],
         },
     }
+
+    if tess_available:
+        try:
+            import pytesseract
+            version = pytesseract.get_tesseract_version()
+            status["tesseract_version"] = str(version)
+            langs = pytesseract.get_languages()
+            status["tesseract_languages"] = langs
+        except Exception:
+            status["tesseract_version"] = "unknown"
+            status["tesseract_languages"] = []
+
+    return status
 
 
 def process_ocr(file_path: str, file_type: str) -> OcrResult:

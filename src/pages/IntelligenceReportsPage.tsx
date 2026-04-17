@@ -9,7 +9,8 @@ import {
 } from '@/components/ui/table';
 import {
   Spinner, Warning, ChartBar, FileText, ShieldWarning, CopySimple,
-  CheckCircle, XCircle, Clock, Eye, ArrowClockwise,
+  CheckCircle, Clock, ArrowClockwise, DownloadSimple, FunnelSimple,
+  MagnifyingGlass, X,
 } from '@phosphor-icons/react';
 
 const typeLabels: Record<string, string> = {
@@ -92,6 +93,40 @@ function BarChart({ data, labelMap }: { data: Record<string, number>; labelMap?:
   );
 }
 
+const TS_BAR_MIN_HEIGHT = 4;
+const TS_BAR_MAX_HEIGHT = 80;
+const TS_LABEL_THRESHOLD = 15;
+
+function TimeSeriesChart({ data, label }: { data: { date: string; count: number }[]; label: string }) {
+  if (!data || data.length === 0) return <p className="text-sm text-muted-foreground">لا توجد بيانات زمنية</p>;
+  const max = Math.max(...data.map(d => d.count), 1);
+
+  return (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
+      <div className="flex items-end gap-1 h-24 overflow-x-auto">
+        {data.map((d, i) => (
+          <div key={i} className="flex flex-col items-center min-w-[20px]" title={`${d.date}: ${d.count}`}>
+            <div
+              className="w-4 bg-primary rounded-t transition-all"
+              style={{ height: `${Math.max(TS_BAR_MIN_HEIGHT, (d.count / max) * TS_BAR_MAX_HEIGHT)}px` }}
+            />
+            {data.length <= TS_LABEL_THRESHOLD && (
+              <span className="text-[9px] text-muted-foreground mt-0.5 rotate-[-45deg] origin-top-right w-12 truncate">
+                {d.date?.slice(5) || ''}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+        <span>{data[0]?.date || ''}</span>
+        <span>{data[data.length - 1]?.date || ''}</span>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ label, value, icon: Icon, color = 'text-primary' }: {
   label: string; value: number | string; icon: any; color?: string;
 }) {
@@ -108,35 +143,244 @@ function StatCard({ label, value, icon: Icon, color = 'text-primary' }: {
   );
 }
 
+interface Filters {
+  date_from: string;
+  date_to: string;
+  ocr_status: string;
+  review_status: string;
+  classification_type: string;
+  risk_severity: string;
+  import_source: string;
+  search: string;
+}
+
+const emptyFilters: Filters = {
+  date_from: '', date_to: '', ocr_status: '', review_status: '',
+  classification_type: '', risk_severity: '', import_source: '', search: '',
+};
+
 export default function IntelligenceReportsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const activeFilterParams = useCallback(() => {
+    const params: Record<string, string> = {};
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v) params[k] = v;
+    });
+    return params;
+  }, [filters]);
+
+  const hasActiveFilters = Object.values(filters).some(v => v !== '');
 
   const fetchData = useCallback(() => {
     setLoading(true);
     setError('');
-    apiService.getIntelligenceReports()
+    apiService.getIntelligenceReports(activeFilterParams())
       .then(setData)
       .catch(() => setError('فشل تحميل التقارير'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeFilterParams]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      await apiService.downloadIntelligenceCsv({ section: 'all', ...activeFilterParams() });
+    } catch { setError('فشل تصدير CSV'); }
+    setExportingCsv(false);
+  };
+
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      await apiService.downloadIntelligencePdf(activeFilterParams());
+    } catch { setError('فشل تصدير PDF'); }
+    setExportingPdf(false);
+  };
+
+  const clearFilters = () => {
+    setFilters(emptyFilters);
+  };
+
+  const updateFilter = (key: keyof Filters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Header with actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold mb-1">تقارير ذكاء العقود</h1>
             <p className="text-muted-foreground">نظرة شاملة على حالة المعالجة والمخاطر والتصنيف</p>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchData} className="flex items-center gap-1">
-            <ArrowClockwise size={16} />
-            تحديث
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-1">
+              <FunnelSimple size={16} />
+              فلاتر
+              {hasActiveFilters && <Badge variant="secondary" className="text-xs ms-1">{Object.values(filters).filter(v => v).length}</Badge>}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exportingCsv} className="flex items-center gap-1">
+              <DownloadSimple size={16} />
+              {exportingCsv ? 'جاري...' : 'CSV'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={exportingPdf} className="flex items-center gap-1">
+              <DownloadSimple size={16} />
+              {exportingPdf ? 'جاري...' : 'PDF'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={fetchData} className="flex items-center gap-1">
+              <ArrowClockwise size={16} />
+              تحديث
+            </Button>
+          </div>
         </div>
+
+        {/* Filters panel */}
+        {showFilters && (
+          <Card>
+            <CardContent className="py-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold flex items-center gap-1">
+                  <FunnelSimple size={18} />
+                  تصفية التقارير
+                </h3>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="flex items-center gap-1 text-xs">
+                    <X size={14} />
+                    مسح الكل
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Date range */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">من تاريخ</label>
+                  <input
+                    type="date" value={filters.date_from}
+                    onChange={e => updateFilter('date_from', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">إلى تاريخ</label>
+                  <input
+                    type="date" value={filters.date_to}
+                    onChange={e => updateFilter('date_to', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  />
+                </div>
+
+                {/* OCR Status */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">حالة OCR</label>
+                  <select
+                    value={filters.ocr_status}
+                    onChange={e => updateFilter('ocr_status', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">الكل</option>
+                    <option value="complete">مكتمل</option>
+                    <option value="pending">قيد الانتظار</option>
+                    <option value="failed">فشل</option>
+                  </select>
+                </div>
+
+                {/* Review Status */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">حالة المراجعة</label>
+                  <select
+                    value={filters.review_status}
+                    onChange={e => updateFilter('review_status', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">الكل</option>
+                    <option value="queued">في الانتظار</option>
+                    <option value="processing">جاري المعالجة</option>
+                    <option value="ocr_complete">OCR مكتمل</option>
+                    <option value="extracted">مستخرج</option>
+                    <option value="review">قيد المراجعة</option>
+                    <option value="approved">مُعتمد</option>
+                    <option value="rejected">مرفوض</option>
+                    <option value="failed">فشل</option>
+                  </select>
+                </div>
+
+                {/* Classification */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">التصنيف</label>
+                  <select
+                    value={filters.classification_type}
+                    onChange={e => updateFilter('classification_type', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">الكل</option>
+                    {Object.entries(typeLabels).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Risk Severity */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">خطورة المخاطر</label>
+                  <select
+                    value={filters.risk_severity}
+                    onChange={e => updateFilter('risk_severity', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">الكل</option>
+                    {Object.entries(severityLabels).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Import Source */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">مصدر الاستيراد</label>
+                  <select
+                    value={filters.import_source}
+                    onChange={e => updateFilter('import_source', e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                  >
+                    <option value="">الكل</option>
+                    {Object.entries(sourceLabels).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Keyword Search */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">بحث بالكلمة</label>
+                  <div className="relative">
+                    <MagnifyingGlass size={14} className="absolute start-2 top-2 text-muted-foreground" />
+                    <input
+                      type="text" value={filters.search} placeholder="اسم ملف، رقم دفعة..."
+                      onChange={e => updateFilter('search', e.target.value)}
+                      className="w-full border rounded ps-7 pe-2 py-1.5 text-sm bg-background"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button size="sm" onClick={fetchData}>
+                  تطبيق الفلاتر
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {error && (
           <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
@@ -160,6 +404,38 @@ export default function IntelligenceReportsPage() {
               <StatCard label="مخاطر غير محلولة" value={data.risks_unresolved} icon={ShieldWarning} color="text-red-600" />
               <StatCard label="تكرارات معلقة" value={data.duplicates_pending} icon={CopySimple} color="text-purple-600" />
             </div>
+
+            {/* Time-series charts */}
+            {(data.documents_over_time?.length > 0 || data.risks_over_time?.length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {data.documents_over_time?.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <ChartBar size={20} />
+                        المستندات المُعالجة بمرور الوقت
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <TimeSeriesChart data={data.documents_over_time} label="" />
+                    </CardContent>
+                  </Card>
+                )}
+                {data.risks_over_time?.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <ShieldWarning size={20} />
+                        المخاطر المكتشفة بمرور الوقت
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <TimeSeriesChart data={data.risks_over_time} label="" />
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
 
             {/* Pipeline status + Import sources */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

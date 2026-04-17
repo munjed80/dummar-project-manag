@@ -17,12 +17,13 @@
 9. [SMTP Email Configuration](#smtp-email-configuration)
 10. [CORS Configuration](#cors-configuration)
 11. [File Upload / Storage](#file-upload--storage)
-12. [Security Checklist](#security-checklist)
-13. [CI/CD Pipeline](#cicd-pipeline)
-14. [Rollback & Migration Caution](#rollback--migration-caution)
-15. [Monitoring & Observability](#monitoring--observability)
-16. [Audit Trail](#audit-trail)
-17. [Troubleshooting](#troubleshooting)
+12. [Tesseract OCR Setup (Contract Intelligence)](#tesseract-ocr-setup-contract-intelligence)
+13. [Security Checklist](#security-checklist)
+14. [CI/CD Pipeline](#cicd-pipeline)
+15. [Rollback & Migration Caution](#rollback--migration-caution)
+16. [Monitoring & Observability](#monitoring--observability)
+17. [Audit Trail](#audit-trail)
+18. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -515,6 +516,95 @@ uploads/
 - **Allowed files:** `.jpg`, `.jpeg`, `.png`, `.gif`, `.pdf` — max 10MB per file.
 - **Public uploads:** The `/uploads/public` endpoint is rate-limited (10/min) and only accepts complaint images.
 - **Serving files:** Serve via nginx `alias` for better performance (see nginx config above).
+
+---
+
+## Tesseract OCR Setup (Contract Intelligence)
+
+The Contract Intelligence module includes OCR capabilities for processing scanned contract documents. The system supports two engines:
+
+### Engine Architecture
+
+| Engine | Description | Requirements |
+|--------|-------------|-------------|
+| **BasicTextExtractor** | Extracts text from PDFs (text layer), TXT, CSV files | Always available |
+| **TesseractEngine** | Full OCR for scanned images (JPG, PNG, TIFF, BMP) and image-only PDFs | `tesseract-ocr` binary + `pytesseract` Python package |
+
+The system **automatically detects** which engine is available at startup and falls back gracefully.
+
+### Docker Deployment (Recommended)
+
+The Dockerfile already installs Tesseract with Arabic and English language support:
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-ara \
+    tesseract-ocr-eng \
+    poppler-utils
+```
+
+**No additional configuration is needed** for Docker deployments.
+
+### Bare Metal / VM Deployment
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng poppler-utils
+
+# Verify installation
+tesseract --version
+tesseract --list-langs  # Should include: ara, eng
+
+# Python package (already in requirements.txt)
+pip install pytesseract
+```
+
+### Production Verification Steps
+
+1. **Check OCR status via API** (requires contracts_manager or project_director auth):
+   ```bash
+   curl -H "Authorization: Bearer <token>" \
+     https://your-domain/api/contract-intelligence/ocr-status
+   ```
+   Expected response when Tesseract is available:
+   ```json
+   {
+     "engine": "tesseract",
+     "tesseract_available": true,
+     "supported_formats": {
+       "always": ["pdf (text-layer)", "txt", "csv"],
+       "with_tesseract": ["jpg", "jpeg", "png", "tiff", "tif", "bmp"],
+       "with_pdf2image": ["pdf (scanned/image-only)"]
+     }
+   }
+   ```
+
+2. **Check health in admin UI**: The Intelligence Reports page shows OCR engine status with a ✅/❌ indicator.
+
+3. **Verify inside Docker container**:
+   ```bash
+   docker exec -it <backend-container> tesseract --version
+   docker exec -it <backend-container> python -c "from app.services.ocr_service import get_ocr_status; print(get_ocr_status())"
+   ```
+
+### Graceful Fallback Behavior
+
+- If Tesseract is **not installed**, the system uses BasicTextExtractor
+- Text-based documents (PDF with text layer, TXT, CSV) are always processed correctly
+- Image uploads will return a clear warning message but will not crash
+- CI tests pass without Tesseract installed (tests handle `is_tesseract_available()` check)
+- The frontend OCR status indicator shows "❌ غير متوفر" (Not available) clearly
+
+### Troubleshooting OCR
+
+| Issue | Solution |
+|-------|---------|
+| `tesseract_available: false` in Docker | Rebuild image: `docker-compose build --no-cache backend` |
+| Arabic text not recognized | Verify `tesseract-ocr-ara` is installed: `tesseract --list-langs` |
+| Image-only PDFs not OCR'd | Install `poppler-utils` for `pdf2image` support |
+| Low OCR confidence | Check scan quality — 300 DPI minimum recommended |
+| Memory issues with large PDFs | Increase `GUNICORN_TIMEOUT` and container memory limits |
 
 ---
 

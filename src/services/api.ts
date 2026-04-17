@@ -712,11 +712,54 @@ class ApiService {
     return response.json();
   }
 
-  // Intelligence reports
-  async getIntelligenceReports(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports`, { headers: this.getAuthHeaders() });
+  // --- Intelligence report helpers ---
+  private _buildQueryParams(params?: Record<string, any>): URLSearchParams {
+    const qp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
+      });
+    }
+    return qp;
+  }
+
+  // Intelligence reports (with filters)
+  async getIntelligenceReports(params?: Record<string, any>): Promise<any> {
+    const qp = this._buildQueryParams(params);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch intelligence reports');
     return response.json();
+  }
+
+  // Intelligence report exports
+  async downloadIntelligenceCsv(params?: Record<string, any>): Promise<void> {
+    const qp = this._buildQueryParams(params);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to download CSV');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'intelligence_report.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async downloadIntelligencePdf(params?: Record<string, any>): Promise<void> {
+    const qp = this._buildQueryParams(params);
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports/export/pdf?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to download PDF');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'intelligence_report.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   logout() {

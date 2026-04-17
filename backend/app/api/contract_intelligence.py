@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import func as sql_func
+from sqlalchemy import func as sql_func, String
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_contracts_manager, get_current_internal_user
@@ -1478,115 +1478,239 @@ def get_ocr_system_status(
 
 
 # ─────────────────────────────────────────────────────────────
-# Intelligence Reports
+# Intelligence Reports (with filters)
 # ─────────────────────────────────────────────────────────────
+
+def _apply_document_filters(
+    query,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    ocr_status: Optional[str] = None,
+    review_status: Optional[str] = None,
+    classification_type: Optional[str] = None,
+    import_source: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    """Apply common filter parameters to a ContractDocument query."""
+    if date_from:
+        try:
+            from_dt = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(ContractDocument.created_at >= from_dt)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            to_dt = datetime.strptime(date_to, "%Y-%m-%d")
+            # Include the whole day
+            to_dt = to_dt.replace(hour=23, minute=59, second=59)
+            query = query.filter(ContractDocument.created_at <= to_dt)
+        except ValueError:
+            pass
+    if ocr_status:
+        status_map = {
+            "complete": [DocumentProcessingStatus.OCR_COMPLETE, DocumentProcessingStatus.EXTRACTED,
+                         DocumentProcessingStatus.REVIEW, DocumentProcessingStatus.APPROVED],
+            "pending": [DocumentProcessingStatus.QUEUED, DocumentProcessingStatus.PROCESSING],
+            "failed": [DocumentProcessingStatus.FAILED],
+        }
+        if ocr_status in status_map:
+            query = query.filter(ContractDocument.processing_status.in_(status_map[ocr_status]))
+    if review_status:
+        try:
+            status_enum = DocumentProcessingStatus(review_status)
+            query = query.filter(ContractDocument.processing_status == status_enum)
+        except ValueError:
+            pass
+    if classification_type:
+        query = query.filter(ContractDocument.suggested_type == classification_type)
+    if import_source:
+        query = query.filter(ContractDocument.import_source == import_source)
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            (ContractDocument.original_filename.ilike(search_pattern)) |
+            (ContractDocument.extracted_fields.ilike(search_pattern)) |
+            (ContractDocument.auto_summary.ilike(search_pattern)) |
+            (ContractDocument.import_batch_id.ilike(search_pattern))
+        )
+    return query
+
 
 @router.get("/reports")
 def get_intelligence_reports(
+    date_from: Optional[str] = Query(None, description="Filter from date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter to date (YYYY-MM-DD)"),
+    ocr_status: Optional[str] = Query(None, description="Filter by OCR status: complete|pending|failed"),
+    review_status: Optional[str] = Query(None, description="Filter by review status enum value"),
+    classification_type: Optional[str] = Query(None, description="Filter by classification type"),
+    risk_severity: Optional[str] = Query(None, description="Filter risks by severity: critical|high|medium|low"),
+    risk_type: Optional[str] = Query(None, description="Filter risks by type"),
+    duplicate_status: Optional[str] = Query(None, description="Filter duplicates: pending|confirmed_same|confirmed_different"),
+    import_source: Optional[str] = Query(None, description="Filter by import source: upload|bulk_scan|spreadsheet"),
+    search: Optional[str] = Query(None, description="Keyword search across filenames, fields, summaries"),
     current_user: User = Depends(get_current_contracts_manager),
     db: Session = Depends(get_db),
 ):
     """
     Comprehensive intelligence reports using real backend data.
-    Returns structured data for dashboard charts and tables.
+    Supports filtering by date range, status, classification, risk, and keyword search.
     """
-    # 1. Processing pipeline status counts
+    # Base query with filters applied
+    base_query = db.query(ContractDocument.id)
+    base_query = _apply_document_filters(
+        base_query, date_from, date_to, ocr_status, review_status,
+        classification_type, import_source, search,
+    )
+    filtered_ids = [row[0] for row in base_query.all()]
+
+    # 1. Processing pipeline status counts (on filtered set)
     status_counts = {}
     for s in DocumentProcessingStatus:
-        count = db.query(sql_func.count(ContractDocument.id)).filter(
-            ContractDocument.processing_status == s
-        ).scalar() or 0
+        if filtered_ids:
+            count = db.query(sql_func.count(ContractDocument.id)).filter(
+                ContractDocument.id.in_(filtered_ids),
+                ContractDocument.processing_status == s
+            ).scalar() or 0
+        else:
+            count = 0
         status_counts[s.value] = count
 
     total_documents = sum(status_counts.values())
 
-    # 2. Import source breakdown
+    # 2. Import source breakdown (on filtered set)
     source_counts = {}
     for source in ["upload", "bulk_scan", "spreadsheet"]:
-        count = db.query(sql_func.count(ContractDocument.id)).filter(
-            ContractDocument.import_source == source
-        ).scalar() or 0
+        if filtered_ids:
+            count = db.query(sql_func.count(ContractDocument.id)).filter(
+                ContractDocument.id.in_(filtered_ids),
+                ContractDocument.import_source == source
+            ).scalar() or 0
+        else:
+            count = 0
         source_counts[source] = count
 
-    # 3. Classification distribution
-    classification_rows = db.query(
+    # 3. Classification distribution (on filtered set)
+    cls_q = db.query(
         ContractDocument.suggested_type,
         sql_func.count(ContractDocument.id),
     ).filter(
         ContractDocument.suggested_type.isnot(None),
-    ).group_by(ContractDocument.suggested_type).all()
+    )
+    if filtered_ids:
+        cls_q = cls_q.filter(ContractDocument.id.in_(filtered_ids))
+    classification_rows = cls_q.group_by(ContractDocument.suggested_type).all()
 
     classification_dist = {row[0]: row[1] for row in classification_rows}
 
-    # 4. Risk flags by severity
+    # 4. Risk flags by severity (filtered by document IDs if applicable)
+    risk_base = db.query(ContractRiskFlag)
+    if filtered_ids:
+        risk_base = risk_base.filter(ContractRiskFlag.document_id.in_(filtered_ids))
+    if risk_severity:
+        try:
+            sev_enum = RiskSeverity(risk_severity)
+            risk_base = risk_base.filter(ContractRiskFlag.severity == sev_enum)
+        except ValueError:
+            pass
+    if risk_type:
+        risk_base = risk_base.filter(ContractRiskFlag.risk_type == risk_type)
+
+    risk_ids = [r.id for r in risk_base.all()]
+
     risk_severity_rows = db.query(
         ContractRiskFlag.severity,
         sql_func.count(ContractRiskFlag.id),
-    ).group_by(ContractRiskFlag.severity).all()
+    )
+    if risk_ids:
+        risk_severity_rows = risk_severity_rows.filter(ContractRiskFlag.id.in_(risk_ids))
+    risk_severity_rows = risk_severity_rows.group_by(ContractRiskFlag.severity).all()
 
     risk_by_severity = {row[0].value if hasattr(row[0], 'value') else str(row[0]): row[1] for row in risk_severity_rows}
 
-    # 5. Risk flags by type (top 10)
-    risk_type_rows = db.query(
+    # 5. Risk flags by type (top 10, filtered)
+    risk_type_q = db.query(
         ContractRiskFlag.risk_type,
         sql_func.count(ContractRiskFlag.id),
-    ).group_by(ContractRiskFlag.risk_type).order_by(
+    )
+    if risk_ids:
+        risk_type_q = risk_type_q.filter(ContractRiskFlag.id.in_(risk_ids))
+    risk_type_rows = risk_type_q.group_by(ContractRiskFlag.risk_type).order_by(
         sql_func.count(ContractRiskFlag.id).desc()
     ).limit(10).all()
 
     risk_by_type = {row[0]: row[1] for row in risk_type_rows}
 
-    # 6. Unresolved vs resolved risks
-    resolved_risks = db.query(sql_func.count(ContractRiskFlag.id)).filter(
-        ContractRiskFlag.is_resolved == True
-    ).scalar() or 0
-    unresolved_risks = db.query(sql_func.count(ContractRiskFlag.id)).filter(
-        ContractRiskFlag.is_resolved == False
-    ).scalar() or 0
+    # 6. Unresolved vs resolved risks (filtered)
+    resolved_q = db.query(sql_func.count(ContractRiskFlag.id)).filter(ContractRiskFlag.is_resolved == True)
+    unresolved_q = db.query(sql_func.count(ContractRiskFlag.id)).filter(ContractRiskFlag.is_resolved == False)
+    if risk_ids:
+        resolved_q = resolved_q.filter(ContractRiskFlag.id.in_(risk_ids))
+        unresolved_q = unresolved_q.filter(ContractRiskFlag.id.in_(risk_ids))
+    resolved_risks = resolved_q.scalar() or 0
+    unresolved_risks = unresolved_q.scalar() or 0
 
-    # 7. Duplicate candidates
-    total_dups = db.query(sql_func.count(ContractDuplicate.id)).scalar() or 0
-    pending_dups = db.query(sql_func.count(ContractDuplicate.id)).filter(
-        ContractDuplicate.status == DuplicateStatus.PENDING
-    ).scalar() or 0
-    confirmed_same = db.query(sql_func.count(ContractDuplicate.id)).filter(
-        ContractDuplicate.status == DuplicateStatus.CONFIRMED_SAME
-    ).scalar() or 0
-    confirmed_diff = db.query(sql_func.count(ContractDuplicate.id)).filter(
-        ContractDuplicate.status == DuplicateStatus.CONFIRMED_DIFFERENT
-    ).scalar() or 0
+    # 7. Duplicate candidates (filtered)
+    dup_base = db.query(ContractDuplicate)
+    if filtered_ids:
+        dup_base = dup_base.filter(ContractDuplicate.document_id.in_(filtered_ids))
+    if duplicate_status:
+        try:
+            dup_enum = DuplicateStatus(duplicate_status)
+            dup_base = dup_base.filter(ContractDuplicate.status == dup_enum)
+        except ValueError:
+            pass
 
-    # 8. OCR confidence distribution
-    ocr_high = db.query(sql_func.count(ContractDocument.id)).filter(
+    total_dups = dup_base.count()
+    pending_dups = dup_base.filter(ContractDuplicate.status == DuplicateStatus.PENDING).count()
+    confirmed_same = dup_base.filter(ContractDuplicate.status == DuplicateStatus.CONFIRMED_SAME).count()
+    confirmed_diff = dup_base.filter(ContractDuplicate.status == DuplicateStatus.CONFIRMED_DIFFERENT).count()
+
+    # 8. OCR confidence distribution (filtered)
+    ocr_high_q = db.query(sql_func.count(ContractDocument.id)).filter(
         ContractDocument.ocr_confidence >= 0.7
-    ).scalar() or 0
-    ocr_medium = db.query(sql_func.count(ContractDocument.id)).filter(
+    )
+    ocr_medium_q = db.query(sql_func.count(ContractDocument.id)).filter(
         ContractDocument.ocr_confidence >= 0.3,
         ContractDocument.ocr_confidence < 0.7,
-    ).scalar() or 0
-    ocr_low = db.query(sql_func.count(ContractDocument.id)).filter(
+    )
+    ocr_low_q = db.query(sql_func.count(ContractDocument.id)).filter(
         ContractDocument.ocr_confidence.isnot(None),
         ContractDocument.ocr_confidence < 0.3,
-    ).scalar() or 0
-
-    avg_ocr = db.query(sql_func.avg(ContractDocument.ocr_confidence)).filter(
+    )
+    avg_ocr_q = db.query(sql_func.avg(ContractDocument.ocr_confidence)).filter(
         ContractDocument.ocr_confidence.isnot(None)
-    ).scalar()
+    )
+    if filtered_ids:
+        ocr_high_q = ocr_high_q.filter(ContractDocument.id.in_(filtered_ids))
+        ocr_medium_q = ocr_medium_q.filter(ContractDocument.id.in_(filtered_ids))
+        ocr_low_q = ocr_low_q.filter(ContractDocument.id.in_(filtered_ids))
+        avg_ocr_q = avg_ocr_q.filter(ContractDocument.id.in_(filtered_ids))
 
-    # 9. Review queue size
-    review_queue = db.query(sql_func.count(ContractDocument.id)).filter(
+    ocr_high = ocr_high_q.scalar() or 0
+    ocr_medium = ocr_medium_q.scalar() or 0
+    ocr_low = ocr_low_q.scalar() or 0
+    avg_ocr = avg_ocr_q.scalar()
+
+    # 9. Review queue size (filtered)
+    review_q = db.query(sql_func.count(ContractDocument.id)).filter(
         ContractDocument.processing_status == DocumentProcessingStatus.REVIEW
-    ).scalar() or 0
+    )
+    if filtered_ids:
+        review_q = review_q.filter(ContractDocument.id.in_(filtered_ids))
+    review_queue = review_q.scalar() or 0
 
-    # 10. Batch import results
-    batch_rows = db.query(
+    # 10. Batch import results (filtered)
+    batch_q = db.query(
         ContractDocument.import_batch_id,
         ContractDocument.import_source,
         sql_func.count(ContractDocument.id),
         sql_func.min(ContractDocument.created_at),
     ).filter(
         ContractDocument.import_batch_id.isnot(None),
-    ).group_by(
+    )
+    if filtered_ids:
+        batch_q = batch_q.filter(ContractDocument.id.in_(filtered_ids))
+    batch_rows = batch_q.group_by(
         ContractDocument.import_batch_id,
         ContractDocument.import_source,
     ).order_by(sql_func.min(ContractDocument.created_at).desc()).limit(20).all()
@@ -1606,13 +1730,74 @@ def get_intelligence_reports(
             "created_at": created.isoformat() if created else None,
         })
 
-    # 11. Contracts digitized (documents converted to contracts)
-    digitized = db.query(sql_func.count(ContractDocument.id)).filter(
+    # 11. Contracts digitized (filtered)
+    digitized_q = db.query(sql_func.count(ContractDocument.id)).filter(
         ContractDocument.contract_id.isnot(None)
-    ).scalar() or 0
+    )
+    if filtered_ids:
+        digitized_q = digitized_q.filter(ContractDocument.id.in_(filtered_ids))
+    digitized = digitized_q.scalar() or 0
 
     # 12. OCR engine info
-    ocr_status = get_ocr_status()
+    ocr_status_info = get_ocr_status()
+
+    # 13. Time-series data: documents processed per day (last 90 days)
+    # Use string-based date extraction for SQLite compatibility
+    _date_col = sql_func.substr(sql_func.cast(ContractDocument.created_at, String), 1, 10)
+    timeseries_rows = db.query(
+        _date_col.label("date"),
+        sql_func.count(ContractDocument.id).label("count"),
+    )
+    if filtered_ids:
+        timeseries_rows = timeseries_rows.filter(ContractDocument.id.in_(filtered_ids))
+    timeseries_rows = timeseries_rows.filter(
+        ContractDocument.created_at.isnot(None)
+    ).group_by(_date_col).order_by(_date_col).limit(90).all()
+
+    documents_over_time = [
+        {"date": str(row[0]) if row[0] else None, "count": row[1]}
+        for row in timeseries_rows
+    ]
+
+    # 14. Risk flags over time
+    _risk_date_col = sql_func.substr(sql_func.cast(ContractRiskFlag.created_at, String), 1, 10)
+    risk_ts_rows = db.query(
+        _risk_date_col.label("date"),
+        sql_func.count(ContractRiskFlag.id).label("count"),
+    )
+    if risk_ids:
+        risk_ts_rows = risk_ts_rows.filter(ContractRiskFlag.id.in_(risk_ids))
+    risk_ts_rows = risk_ts_rows.filter(
+        ContractRiskFlag.created_at.isnot(None)
+    ).group_by(_risk_date_col).order_by(_risk_date_col).limit(90).all()
+
+    risks_over_time = [
+        {"date": str(row[0]) if row[0] else None, "count": row[1]}
+        for row in risk_ts_rows
+    ]
+
+    # 15. Active filters summary
+    active_filters = {}
+    if date_from:
+        active_filters["date_from"] = date_from
+    if date_to:
+        active_filters["date_to"] = date_to
+    if ocr_status:
+        active_filters["ocr_status"] = ocr_status
+    if review_status:
+        active_filters["review_status"] = review_status
+    if classification_type:
+        active_filters["classification_type"] = classification_type
+    if risk_severity:
+        active_filters["risk_severity"] = risk_severity
+    if risk_type:
+        active_filters["risk_type"] = risk_type
+    if duplicate_status:
+        active_filters["duplicate_status"] = duplicate_status
+    if import_source:
+        active_filters["import_source"] = import_source
+    if search:
+        active_filters["search"] = search
 
     return {
         "total_documents": total_documents,
@@ -1636,5 +1821,307 @@ def get_intelligence_reports(
         "review_queue_size": review_queue,
         "batch_results": batch_results,
         "contracts_digitized": digitized,
-        "ocr_engine": ocr_status,
+        "ocr_engine": ocr_status_info,
+        "documents_over_time": documents_over_time,
+        "risks_over_time": risks_over_time,
+        "active_filters": active_filters,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# Data Export (CSV + PDF)
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/reports/export/csv")
+def export_intelligence_csv(
+    section: str = Query("all", description="Section: all|documents|risks|duplicates|batches"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ocr_status: Optional[str] = Query(None),
+    review_status: Optional[str] = Query(None),
+    classification_type: Optional[str] = Query(None),
+    risk_severity: Optional[str] = Query(None),
+    import_source: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    request: Request = None,
+    current_user: User = Depends(get_current_contracts_manager),
+    db: Session = Depends(get_db),
+):
+    """
+    Export intelligence report data as CSV.
+    Respects active filters.
+    """
+    from fastapi.responses import StreamingResponse
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Build filtered document query
+    doc_query = db.query(ContractDocument)
+    doc_query = _apply_document_filters(
+        doc_query, date_from, date_to, ocr_status, review_status,
+        classification_type, import_source, search,
+    )
+    documents = doc_query.order_by(ContractDocument.created_at.desc()).all()
+    doc_ids = [d.id for d in documents]
+
+    if section in ("all", "documents"):
+        writer.writerow([
+            "ID", "Filename", "Status", "OCR Engine", "OCR Confidence",
+            "Extraction Confidence", "Classification", "Classification Confidence",
+            "Import Source", "Batch ID", "Created At", "Summary",
+        ])
+        for doc in documents:
+            fields = fields_from_json(doc.extracted_fields) if doc.extracted_fields else {}
+            writer.writerow([
+                doc.id,
+                doc.original_filename,
+                doc.processing_status.value if doc.processing_status else "",
+                doc.ocr_engine or "",
+                round(doc.ocr_confidence, 3) if doc.ocr_confidence else "",
+                round(doc.extraction_confidence, 3) if doc.extraction_confidence else "",
+                doc.suggested_type or "",
+                round(doc.classification_confidence, 3) if doc.classification_confidence else "",
+                doc.import_source or "",
+                doc.import_batch_id or "",
+                doc.created_at.isoformat() if doc.created_at else "",
+                (doc.auto_summary or "")[:200],
+            ])
+        writer.writerow([])
+
+    if section in ("all", "risks"):
+        writer.writerow(["--- Risk Flags ---"])
+        writer.writerow([
+            "ID", "Document ID", "Risk Type", "Severity",
+            "Description", "Is Resolved", "Created At",
+        ])
+        risk_q = db.query(ContractRiskFlag)
+        if doc_ids:
+            risk_q = risk_q.filter(ContractRiskFlag.document_id.in_(doc_ids))
+        if risk_severity:
+            try:
+                risk_q = risk_q.filter(ContractRiskFlag.severity == RiskSeverity(risk_severity))
+            except ValueError:
+                pass
+        for risk in risk_q.order_by(ContractRiskFlag.created_at.desc()).all():
+            writer.writerow([
+                risk.id,
+                risk.document_id or "",
+                risk.risk_type,
+                risk.severity.value if risk.severity else "",
+                risk.description,
+                "Yes" if risk.is_resolved else "No",
+                risk.created_at.isoformat() if risk.created_at else "",
+            ])
+        writer.writerow([])
+
+    if section in ("all", "duplicates"):
+        writer.writerow(["--- Duplicate Candidates ---"])
+        writer.writerow([
+            "ID", "Document ID", "Contract A", "Contract B",
+            "Similarity Score", "Status", "Match Reasons", "Created At",
+        ])
+        dup_q = db.query(ContractDuplicate)
+        if doc_ids:
+            dup_q = dup_q.filter(ContractDuplicate.document_id.in_(doc_ids))
+        for dup in dup_q.order_by(ContractDuplicate.created_at.desc()).all():
+            writer.writerow([
+                dup.id,
+                dup.document_id or "",
+                dup.contract_id_a or "",
+                dup.contract_id_b or "",
+                round(dup.similarity_score, 3) if dup.similarity_score else "",
+                dup.status.value if dup.status else "",
+                dup.match_reasons or "",
+                dup.created_at.isoformat() if dup.created_at else "",
+            ])
+        writer.writerow([])
+
+    if section in ("all", "batches"):
+        writer.writerow(["--- Batch Import Results ---"])
+        writer.writerow(["Batch ID", "Source", "Total", "Failed", "Created At"])
+        batch_q = db.query(
+            ContractDocument.import_batch_id,
+            ContractDocument.import_source,
+            sql_func.count(ContractDocument.id),
+            sql_func.min(ContractDocument.created_at),
+        ).filter(
+            ContractDocument.import_batch_id.isnot(None),
+        )
+        if doc_ids:
+            batch_q = batch_q.filter(ContractDocument.id.in_(doc_ids))
+        for batch_id, source, count, created in batch_q.group_by(
+            ContractDocument.import_batch_id, ContractDocument.import_source
+        ).order_by(sql_func.min(ContractDocument.created_at).desc()).limit(50).all():
+            failed = db.query(sql_func.count(ContractDocument.id)).filter(
+                ContractDocument.import_batch_id == batch_id,
+                ContractDocument.processing_status == DocumentProcessingStatus.FAILED,
+            ).scalar() or 0
+            writer.writerow([
+                batch_id, source or "", count, failed,
+                created.isoformat() if created else "",
+            ])
+
+    write_audit_log(
+        db, action="intelligence_report_export_csv",
+        entity_type="intelligence_report",
+        user_id=current_user.id,
+        description=f"CSV export: section={section}",
+        request=request,
+    )
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=intelligence_report.csv"},
+    )
+
+
+@router.get("/reports/export/pdf")
+def export_intelligence_pdf(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    ocr_status: Optional[str] = Query(None),
+    review_status: Optional[str] = Query(None),
+    classification_type: Optional[str] = Query(None),
+    risk_severity: Optional[str] = Query(None),
+    import_source: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    request: Request = None,
+    current_user: User = Depends(get_current_contracts_manager),
+    db: Session = Depends(get_db),
+):
+    """
+    Export intelligence report summary as PDF.
+    Uses reportlab (already in requirements.txt).
+    """
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdf_canvas
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    # Build filtered document query
+    doc_query = db.query(ContractDocument)
+    doc_query = _apply_document_filters(
+        doc_query, date_from, date_to, ocr_status, review_status,
+        classification_type, import_source, search,
+    )
+    documents = doc_query.order_by(ContractDocument.created_at.desc()).all()
+    doc_ids = [d.id for d in documents]
+
+    # Compute stats
+    total_docs = len(documents)
+    status_breakdown = {}
+    for doc in documents:
+        s = doc.processing_status.value if doc.processing_status else "unknown"
+        status_breakdown[s] = status_breakdown.get(s, 0) + 1
+
+    risk_q = db.query(ContractRiskFlag)
+    if doc_ids:
+        risk_q = risk_q.filter(ContractRiskFlag.document_id.in_(doc_ids))
+    total_risks = risk_q.count()
+    unresolved = risk_q.filter(ContractRiskFlag.is_resolved == False).count()
+
+    dup_q = db.query(ContractDuplicate)
+    if doc_ids:
+        dup_q = dup_q.filter(ContractDuplicate.document_id.in_(doc_ids))
+    total_dups_pdf = dup_q.count()
+
+    # Build PDF
+    buffer = io.BytesIO()
+    c = pdf_canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 30 * mm
+
+    # Title
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(30 * mm, y, "Contract Intelligence Report")
+    y -= 10 * mm
+    c.setFont("Helvetica", 10)
+    c.drawString(30 * mm, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    y -= 6 * mm
+
+    # Active filters
+    filter_parts = []
+    if date_from:
+        filter_parts.append(f"From: {date_from}")
+    if date_to:
+        filter_parts.append(f"To: {date_to}")
+    if ocr_status:
+        filter_parts.append(f"OCR: {ocr_status}")
+    if review_status:
+        filter_parts.append(f"Review: {review_status}")
+    if classification_type:
+        filter_parts.append(f"Type: {classification_type}")
+    if risk_severity:
+        filter_parts.append(f"Risk: {risk_severity}")
+    if import_source:
+        filter_parts.append(f"Source: {import_source}")
+    if search:
+        filter_parts.append(f"Search: {search}")
+    if filter_parts:
+        c.drawString(30 * mm, y, f"Filters: {', '.join(filter_parts)}")
+        y -= 6 * mm
+
+    y -= 5 * mm
+
+    # Summary section
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(30 * mm, y, "Summary")
+    y -= 7 * mm
+    c.setFont("Helvetica", 10)
+
+    summary_items = [
+        f"Total Documents: {total_docs}",
+        f"Total Risk Flags: {total_risks} (Unresolved: {unresolved})",
+        f"Total Duplicate Candidates: {total_dups_pdf}",
+    ]
+    for item in summary_items:
+        c.drawString(35 * mm, y, item)
+        y -= 5 * mm
+
+    y -= 3 * mm
+
+    # Status breakdown
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(30 * mm, y, "Processing Status")
+    y -= 6 * mm
+    c.setFont("Helvetica", 10)
+    for status, count in sorted(status_breakdown.items()):
+        c.drawString(35 * mm, y, f"{status}: {count}")
+        y -= 5 * mm
+
+    y -= 3 * mm
+
+    # Document list (top 50)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(30 * mm, y, f"Documents (showing up to 50 of {total_docs})")
+    y -= 6 * mm
+    c.setFont("Helvetica", 8)
+    for doc in documents[:50]:
+        if y < 25 * mm:
+            c.showPage()
+            y = height - 20 * mm
+            c.setFont("Helvetica", 8)
+        line = f"#{doc.id} | {doc.original_filename[:40]} | {doc.processing_status.value if doc.processing_status else '?'} | {doc.suggested_type or '-'}"
+        c.drawString(30 * mm, y, line)
+        y -= 4 * mm
+
+    write_audit_log(
+        db, action="intelligence_report_export_pdf",
+        entity_type="intelligence_report",
+        user_id=current_user.id,
+        description="PDF export",
+        request=request,
+    )
+
+    c.save()
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=intelligence_report.pdf"},
+    )
