@@ -12,6 +12,7 @@ class ComplaintBase(BaseModel):
     description: str
     location_text: Optional[str] = None
     area_id: Optional[int] = None
+    location_id: Optional[int] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 

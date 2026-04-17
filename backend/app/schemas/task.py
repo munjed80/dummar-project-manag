@@ -13,6 +13,7 @@ class TaskBase(BaseModel):
     contract_id: Optional[int] = None
     assigned_to_id: Optional[int] = None
     area_id: Optional[int] = None
+    location_id: Optional[int] = None
     location_text: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None

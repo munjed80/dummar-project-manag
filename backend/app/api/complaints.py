@@ -18,6 +18,7 @@ from app.schemas.complaint import (
     ComplaintTrackRequest,
     ComplaintActivityResponse,
 )
+from app.services.location_service import infer_location_id
 from app.schemas.report import PaginatedComplaints
 from app.api.deps import get_current_user, require_role, get_current_internal_user
 from app.services.audit import write_audit_log
@@ -50,6 +51,15 @@ def generate_tracking_number(db: Session) -> str:
 def create_complaint(complaint: ComplaintCreate, request: Request, db: Session = Depends(get_db)):
     tracking_number = generate_tracking_number(db)
     
+    # Auto-assign location_id if not explicitly provided
+    resolved_location_id = infer_location_id(
+        db,
+        explicit_location_id=complaint.location_id,
+        area_id=complaint.area_id,
+        latitude=complaint.latitude,
+        longitude=complaint.longitude,
+    )
+    
     db_complaint = Complaint(
         tracking_number=tracking_number,
         full_name=complaint.full_name,
@@ -58,6 +68,7 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
         description=complaint.description,
         location_text=complaint.location_text,
         area_id=complaint.area_id,
+        location_id=resolved_location_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
         images=serialize_file_list(complaint.images),
