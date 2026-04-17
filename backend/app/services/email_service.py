@@ -4,10 +4,20 @@ Email service — sends SMTP email notifications for platform events.
 Uses Python's built-in smtplib and email.mime modules (no external deps).
 Controlled by SMTP_* environment variables via app.core.config.settings.
 All public functions are safe to call unconditionally — they never raise.
+
+Hardening:
+- TLS fallback: tries STARTTLS first, falls back to direct SSL if port 465
+- Connection timeout: 30s default
+- Deduplication guard: tracks recently sent emails to prevent duplicate sends
+- All exceptions caught and logged — never blocks core workflow
 """
 import html
 import logging
 import smtplib
+import ssl
+import threading
+import time
+from collections import OrderedDict
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Dict
@@ -15,6 +25,41 @@ from typing import Dict
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Deduplication guard — prevents sending the same email within a time window
+# ---------------------------------------------------------------------------
+
+_DEDUP_WINDOW_SECONDS = 300  # 5 minutes
+_DEDUP_MAX_ENTRIES = 500
+
+_dedup_lock = threading.Lock()
+_dedup_cache: OrderedDict[str, float] = OrderedDict()
+
+
+def _dedup_key(to_email: str, subject: str) -> str:
+    """Build a deduplication key from recipient + subject."""
+    return f"{to_email}::{subject}"
+
+
+def _is_duplicate(to_email: str, subject: str) -> bool:
+    """Return True if this email was already sent recently."""
+    key = _dedup_key(to_email, subject)
+    now = time.monotonic()
+    with _dedup_lock:
+        # Prune expired entries
+        expired = [k for k, t in _dedup_cache.items() if now - t > _DEDUP_WINDOW_SECONDS]
+        for k in expired:
+            del _dedup_cache[k]
+
+        if key in _dedup_cache:
+            return True
+
+        _dedup_cache[key] = now
+        # Enforce max size
+        while len(_dedup_cache) > _DEDUP_MAX_ENTRIES:
+            _dedup_cache.popitem(last=False)
+        return False
 
 # ---------------------------------------------------------------------------
 # Status label mappings (Arabic)
@@ -117,10 +162,20 @@ def send_email(to_email: str, subject: str, body_html: str) -> None:
 
     * Returns immediately (no-op) when ``SMTP_ENABLED`` is ``False``.
     * Never raises — all exceptions are caught and logged.
+    * Deduplicates: same (to, subject) within 5 minutes is silently skipped.
+    * TLS handling: uses STARTTLS on port 587 (default), direct SSL on port 465.
     """
     if not settings.SMTP_ENABLED:
         logger.debug(
             "SMTP disabled — skipping email to %s (subject: %s)", to_email, subject
+        )
+        return
+
+    if _is_duplicate(to_email, subject):
+        logger.info(
+            "Skipping duplicate email to %s (subject: %s) — sent recently",
+            to_email,
+            subject,
         )
         return
 
@@ -138,12 +193,25 @@ def send_email(to_email: str, subject: str, body_html: str) -> None:
         msg["Subject"] = subject
         msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
+        port = settings.SMTP_PORT
+        timeout = 30
+
+        if port == 465:
+            # Direct SSL connection
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(
+                settings.SMTP_HOST, port, timeout=timeout, context=context
+            ) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
+        else:
+            # STARTTLS connection (default for port 587 and others)
+            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=timeout) as server:
+                server.ehlo()
+                server.starttls(context=ssl.create_default_context())
+                server.ehlo()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
 
         logger.info("Email sent successfully to %s (subject: %s)", to_email, subject)
 

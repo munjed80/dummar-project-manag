@@ -85,8 +85,8 @@ export default function ComplaintsListPage() {
           <CardTitle className="text-2xl">الشكاوى</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
               <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <Input
                 placeholder="بحث برقم التتبع أو الاسم..."
@@ -95,24 +95,26 @@ export default function ComplaintsListPage() {
                 className="pr-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">جميع الحالات</SelectItem>
-                {Object.entries(statusLabels).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="المنطقة" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">جميع المناطق</SelectItem>
-                {areas.map((a: any) => (
-                  <SelectItem key={a.id} value={String(a.id)}>{a.name_ar || a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
+                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع الحالات</SelectItem>
+                  {Object.entries(statusLabels).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPage(0); }}>
+                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="المنطقة" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع المناطق</SelectItem>
+                  {areas.map((a: any) => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.name_ar || a.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {error && (
@@ -128,52 +130,93 @@ export default function ComplaintsListPage() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">رقم التتبع</TableHead>
-                    <TableHead className="text-right">مقدم الشكوى</TableHead>
-                    <TableHead className="text-right">النوع</TableHead>
-                    <TableHead className="text-right">الحالة</TableHead>
-                    <TableHead className="text-right">الأولوية</TableHead>
-                    <TableHead className="text-right">المنطقة</TableHead>
-                    <TableHead className="text-right">التاريخ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {complaints.length === 0 ? (
+              {/* Desktop table view */}
+              <div className="responsive-table-desktop">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        لا توجد شكاوى
-                      </TableCell>
+                      <TableHead className="text-right">رقم التتبع</TableHead>
+                      <TableHead className="text-right">مقدم الشكوى</TableHead>
+                      <TableHead className="text-right">النوع</TableHead>
+                      <TableHead className="text-right">الحالة</TableHead>
+                      <TableHead className="text-right">الأولوية</TableHead>
+                      <TableHead className="text-right">المنطقة</TableHead>
+                      <TableHead className="text-right">التاريخ</TableHead>
                     </TableRow>
-                  ) : (
-                    complaints.map((c) => (
-                      <TableRow
-                        key={c.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/complaints/${c.id}`)}
-                      >
-                        <TableCell className="font-mono">{c.tracking_number}</TableCell>
-                        <TableCell>{c.full_name}</TableCell>
-                        <TableCell>{typeLabels[c.complaint_type] || c.complaint_type}</TableCell>
-                        <TableCell>
-                          <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
-                            {statusLabels[c.status] || c.status}
-                          </Badge>
+                  </TableHeader>
+                  <TableBody>
+                    {complaints.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          لا توجد شكاوى
                         </TableCell>
-                        <TableCell>
-                          <Badge className={priorityColors[c.priority] || 'bg-gray-100 text-gray-800'}>
-                            {priorityLabels[c.priority] || c.priority}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
-                        <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      complaints.map((c) => (
+                        <TableRow
+                          key={c.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/complaints/${c.id}`)}
+                        >
+                          <TableCell className="font-mono">{c.tracking_number}</TableCell>
+                          <TableCell>{c.full_name}</TableCell>
+                          <TableCell>{typeLabels[c.complaint_type] || c.complaint_type}</TableCell>
+                          <TableCell>
+                            <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
+                              {statusLabels[c.status] || c.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={priorityColors[c.priority] || 'bg-gray-100 text-gray-800'}>
+                              {priorityLabels[c.priority] || c.priority}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
+                          <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card view */}
+              <div className="responsive-cards-mobile space-y-3">
+                {complaints.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">لا توجد شكاوى</p>
+                ) : (
+                  complaints.map((c) => (
+                    <div
+                      key={c.id}
+                      className="border rounded-lg p-3 cursor-pointer hover:bg-muted/50 active:bg-muted/70 transition-colors"
+                      onClick={() => navigate(`/complaints/${c.id}`)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-mono text-sm font-bold text-primary">{c.tracking_number}</span>
+                        <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
+                          {statusLabels[c.status] || c.status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium mb-1">{c.full_name}</p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{typeLabels[c.complaint_type] || c.complaint_type}</span>
+                        <span>•</span>
+                        <Badge className={`text-xs ${priorityColors[c.priority] || 'bg-gray-100 text-gray-800'}`}>
+                          {priorityLabels[c.priority] || c.priority}
+                        </Badge>
+                        {areaMap[c.area_id] && (
+                          <>
+                            <span>•</span>
+                            <span>{areaMap[c.area_id]}</span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 pt-4">
                   <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>السابق</Button>

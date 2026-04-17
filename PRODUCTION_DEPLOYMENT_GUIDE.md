@@ -358,6 +358,9 @@ Set `SMTP_ENABLED=false` (default). The system will continue to create in-app no
 - Email failures **never** block core operations
 - All failures are logged with full stack traces
 - If SMTP credentials are missing, the system logs an error and continues
+- **Deduplication**: Same email (same recipient + subject) is suppressed within a 5-minute window to prevent noisy duplicate notifications
+- **TLS handling**: Port 587 uses STARTTLS, port 465 uses direct SSL — automatic based on configured port
+- **Timeout**: All SMTP connections timeout after 30 seconds
 
 ---
 

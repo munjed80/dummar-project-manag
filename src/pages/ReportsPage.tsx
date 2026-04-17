@@ -182,19 +182,19 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-6">
-              <div className="space-y-1">
+            <div className="flex flex-wrap gap-2 md:gap-3 mb-6">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">من تاريخ</label>
-                <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setDetailPage(0); }} className="w-[160px]" />
+                <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setDetailPage(0); }} className="w-full sm:w-[160px]" />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">إلى تاريخ</label>
-                <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setDetailPage(0); }} className="w-[160px]" />
+                <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setDetailPage(0); }} className="w-full sm:w-[160px]" />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">المنطقة</label>
                 <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setDetailPage(0); }}>
-                  <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">جميع المناطق</SelectItem>
                     {areas.map((a: any) => (
@@ -203,10 +203,10 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">الحالة</label>
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setDetailPage(0); }}>
-                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">جميع الحالات</SelectItem>
                     {Object.entries(complaintStatusLabels).map(([k, v]) => (
@@ -215,10 +215,10 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">نوع الشكوى</label>
                 <Select value={complaintTypeFilter} onValueChange={(v) => { setComplaintTypeFilter(v); setDetailPage(0); }}>
-                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">جميع الأنواع</SelectItem>
                     {Object.entries(complaintTypeLabels).map(([k, v]) => (
@@ -227,10 +227,10 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">نوع العقد</label>
                 <Select value={contractTypeFilter} onValueChange={(v) => { setContractTypeFilter(v); setDetailPage(0); }}>
-                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">جميع الأنواع</SelectItem>
                     {Object.entries(contractTypeLabels).map(([k, v]) => (
@@ -239,10 +239,10 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-[calc(50%-0.25rem)] sm:w-auto">
                 <label className="text-xs text-muted-foreground">الأولوية</label>
                 <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setDetailPage(0); }}>
-                  <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[140px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">الكل</SelectItem>
                     {Object.entries(priorityLabels).map(([k, v]) => (
@@ -254,7 +254,7 @@ export default function ReportsPage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setDetailPage(0); setDetailSearch(''); }}>
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
                 <TabsTrigger value="summary">ملخص عام</TabsTrigger>
                 <TabsTrigger value="complaints">الشكاوى</TabsTrigger>
                 <TabsTrigger value="tasks">المهام</TabsTrigger>
@@ -332,6 +332,7 @@ export default function ReportsPage() {
                           تصدير CSV
                         </Button>
                       </div>
+                      <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -358,6 +359,7 @@ export default function ReportsPage() {
                           ))}
                         </TableBody>
                       </Table>
+                      </div>
                       {renderPagination(complaintsTotal)}
                     </div>
                   </TabsContent>
@@ -380,6 +382,7 @@ export default function ReportsPage() {
                           تصدير CSV
                         </Button>
                       </div>
+                      <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -406,6 +409,7 @@ export default function ReportsPage() {
                           ))}
                         </TableBody>
                       </Table>
+                      </div>
                       {renderPagination(tasksTotal)}
                     </div>
                   </TabsContent>
@@ -428,6 +432,7 @@ export default function ReportsPage() {
                           تصدير CSV
                         </Button>
                       </div>
+                      <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -456,6 +461,7 @@ export default function ReportsPage() {
                           ))}
                         </TableBody>
                       </Table>
+                      </div>
                       {renderPagination(contractsTotal)}
                     </div>
                   </TabsContent>

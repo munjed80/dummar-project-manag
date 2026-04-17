@@ -2,10 +2,12 @@
 GIS / Operations Map API — provides unified map data for the operations dashboard.
 
 Endpoints:
-  GET /gis/operations-map  — combined markers (complaints + tasks) with type distinction
-  GET /gis/area-boundaries — area polygon boundaries for overlay display
+  GET  /gis/operations-map   — combined markers (complaints + tasks) with type distinction
+  GET  /gis/area-boundaries  — area polygon boundaries for overlay display
+  PUT  /gis/area-boundaries/{area_id}  — update area boundary (admin)
 """
-from fastapi import APIRouter, Depends, Query
+import json
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 from pydantic import BaseModel
@@ -14,7 +16,7 @@ from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintStatus
 from app.models.task import Task, TaskStatus
 from app.models.location import Area
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.api.deps import get_current_internal_user
 
 router = APIRouter(prefix="/gis", tags=["gis"])
@@ -53,70 +55,10 @@ class AreaBoundary(BaseModel):
         from_attributes = True
 
 
-# ---------------------------------------------------------------------------
-# Dummar area boundary polygons (approximate real boundaries)
-# These are simplified polygons for the Dummar project zones.
-# In production, these would come from PostGIS geometry columns.
-# ---------------------------------------------------------------------------
-
-AREA_BOUNDARIES: Dict[str, Dict] = {
-    "ISL-1": {
-        "boundary": [
-            [33.5380, 36.2185], [33.5380, 36.2210],
-            [33.5365, 36.2210], [33.5365, 36.2185],
-        ],
-        "color": "#3B82F6",
-    },
-    "ISL-2": {
-        "boundary": [
-            [33.5365, 36.2185], [33.5365, 36.2210],
-            [33.5350, 36.2210], [33.5350, 36.2185],
-        ],
-        "color": "#8B5CF6",
-    },
-    "SEC-N": {
-        "boundary": [
-            [33.5390, 36.2165], [33.5390, 36.2195],
-            [33.5375, 36.2195], [33.5375, 36.2165],
-        ],
-        "color": "#10B981",
-    },
-    "SEC-S": {
-        "boundary": [
-            [33.5350, 36.2215], [33.5350, 36.2240],
-            [33.5335, 36.2240], [33.5335, 36.2215],
-        ],
-        "color": "#F59E0B",
-    },
-    "CCZ": {
-        "boundary": [
-            [33.5360, 36.2180], [33.5360, 36.2200],
-            [33.5350, 36.2200], [33.5350, 36.2180],
-        ],
-        "color": "#EF4444",
-    },
-    "SRV": {
-        "boundary": [
-            [33.5345, 36.2205], [33.5345, 36.2225],
-            [33.5335, 36.2225], [33.5335, 36.2205],
-        ],
-        "color": "#06B6D4",
-    },
-    "GRN": {
-        "boundary": [
-            [33.5395, 36.2195], [33.5395, 36.2220],
-            [33.5385, 36.2220], [33.5385, 36.2195],
-        ],
-        "color": "#22C55E",
-    },
-    "ADM": {
-        "boundary": [
-            [33.5340, 36.2170], [33.5340, 36.2190],
-            [33.5330, 36.2190], [33.5330, 36.2170],
-        ],
-        "color": "#6366F1",
-    },
-}
+class AreaBoundaryUpdate(BaseModel):
+    """Payload for updating an area's boundary polygon and color."""
+    boundary: Optional[List[List[float]]] = None
+    color: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -195,19 +137,69 @@ def get_area_boundaries(
 ):
     """
     Return area boundaries for map overlay display.
-    Uses pre-defined boundary polygons for Dummar project zones.
+    Reads boundary polygons from the database (boundary_polygon + color columns).
     """
     areas = db.query(Area).all()
     result = []
     for area in areas:
-        boundary_info = AREA_BOUNDARIES.get(area.code, {})
+        boundary = None
+        if area.boundary_polygon:
+            try:
+                boundary = json.loads(area.boundary_polygon)
+            except (json.JSONDecodeError, TypeError):
+                boundary = None
+
         result.append(AreaBoundary(
             id=area.id,
             name=area.name,
             name_ar=area.name_ar,
             code=area.code,
             description=area.description,
-            boundary=boundary_info.get("boundary"),
-            color=boundary_info.get("color"),
+            boundary=boundary,
+            color=area.color,
         ))
     return result
+
+
+@router.put("/area-boundaries/{area_id}", response_model=AreaBoundary)
+def update_area_boundary(
+    area_id: int,
+    payload: AreaBoundaryUpdate,
+    current_user: User = Depends(get_current_internal_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update the boundary polygon and/or color for a specific area.
+    Requires project_director role.
+    """
+    if current_user.role != UserRole.PROJECT_DIRECTOR:
+        raise HTTPException(status_code=403, detail="Only project director can update area boundaries")
+
+    area = db.query(Area).filter(Area.id == area_id).first()
+    if not area:
+        raise HTTPException(status_code=404, detail="Area not found")
+
+    if payload.boundary is not None:
+        area.boundary_polygon = json.dumps(payload.boundary)
+    if payload.color is not None:
+        area.color = payload.color
+
+    db.commit()
+    db.refresh(area)
+
+    boundary = None
+    if area.boundary_polygon:
+        try:
+            boundary = json.loads(area.boundary_polygon)
+        except (json.JSONDecodeError, TypeError):
+            boundary = None
+
+    return AreaBoundary(
+        id=area.id,
+        name=area.name,
+        name_ar=area.name_ar,
+        code=area.code,
+        description=area.description,
+        boundary=boundary,
+        color=area.color,
+    )

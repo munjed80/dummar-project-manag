@@ -149,14 +149,14 @@ export default function ContractDetailsPage() {
         {/* Contract Info */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl flex items-center justify-between flex-wrap gap-3">
+            <CardTitle className="text-xl md:text-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3 flex-wrap">
                 تفاصيل العقد
                 <Badge className={statusColors[contract.status] || 'bg-gray-100 text-gray-800'}>
                   {statusLabels[contract.status] || contract.status}
                 </Badge>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {canManageContracts && (
                 <Button onClick={handleGeneratePdf} disabled={generatingPdf} variant="outline">
                   {generatingPdf ? <Spinner className="animate-spin ml-2" size={16} /> : <FilePdf className="ml-2" size={18} />}

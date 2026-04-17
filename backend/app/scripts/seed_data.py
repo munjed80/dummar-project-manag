@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 
+import json
+
 from app.core.database import SessionLocal
 from app.core.security import get_password_hash, verify_password
 from app.models.user import User, UserRole
@@ -68,6 +70,43 @@ def check_default_passwords(db: Session):
 
 def seed_areas(db: Session):
     print("Seeding areas (Dummar project zones)...")
+
+    # Boundary polygons for map display (list of [lat, lng] pairs)
+    _BOUNDARIES = {
+        "ISL-1": {
+            "boundary": [[33.5380, 36.2185], [33.5380, 36.2210], [33.5365, 36.2210], [33.5365, 36.2185]],
+            "color": "#3B82F6",
+        },
+        "ISL-2": {
+            "boundary": [[33.5365, 36.2185], [33.5365, 36.2210], [33.5350, 36.2210], [33.5350, 36.2185]],
+            "color": "#8B5CF6",
+        },
+        "SEC-N": {
+            "boundary": [[33.5390, 36.2165], [33.5390, 36.2195], [33.5375, 36.2195], [33.5375, 36.2165]],
+            "color": "#10B981",
+        },
+        "SEC-S": {
+            "boundary": [[33.5350, 36.2215], [33.5350, 36.2240], [33.5335, 36.2240], [33.5335, 36.2215]],
+            "color": "#F59E0B",
+        },
+        "CCZ": {
+            "boundary": [[33.5360, 36.2180], [33.5360, 36.2200], [33.5350, 36.2200], [33.5350, 36.2180]],
+            "color": "#EF4444",
+        },
+        "SRV": {
+            "boundary": [[33.5345, 36.2205], [33.5345, 36.2225], [33.5335, 36.2225], [33.5335, 36.2205]],
+            "color": "#06B6D4",
+        },
+        "GRN": {
+            "boundary": [[33.5395, 36.2195], [33.5395, 36.2220], [33.5385, 36.2220], [33.5385, 36.2195]],
+            "color": "#22C55E",
+        },
+        "ADM": {
+            "boundary": [[33.5340, 36.2170], [33.5340, 36.2190], [33.5330, 36.2190], [33.5330, 36.2170]],
+            "color": "#6366F1",
+        },
+    }
+
     areas_data = [
         {"name": "Island 1", "name_ar": "الجزيرة 1", "code": "ISL-1", "description": "الجزيرة السكنية الأولى - بلوكات سكنية متعددة الطوابق"},
         {"name": "Island 2", "name_ar": "الجزيرة 2", "code": "ISL-2", "description": "الجزيرة السكنية الثانية - وحدات سكنية عائلية"},
@@ -80,13 +119,23 @@ def seed_areas(db: Session):
     ]
     
     for area_data in areas_data:
-        existing = db.query(Area).filter(Area.code == area_data["code"]).first()
+        code = area_data["code"]
+        boundary_info = _BOUNDARIES.get(code, {})
+        existing = db.query(Area).filter(Area.code == code).first()
         if not existing:
-            area = Area(**area_data)
+            area = Area(
+                **area_data,
+                boundary_polygon=json.dumps(boundary_info.get("boundary")) if boundary_info.get("boundary") else None,
+                color=boundary_info.get("color"),
+            )
             db.add(area)
+        elif not existing.boundary_polygon and boundary_info.get("boundary"):
+            # Backfill boundary data on existing areas
+            existing.boundary_polygon = json.dumps(boundary_info["boundary"])
+            existing.color = boundary_info.get("color")
     
     db.commit()
-    print(f"✓ Created {len(areas_data)} areas")
+    print(f"✓ Created/updated {len(areas_data)} areas with boundary data")
 
 
 def seed_buildings(db: Session):

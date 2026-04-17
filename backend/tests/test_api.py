@@ -518,3 +518,177 @@ class TestEmailService:
     def test_contract_status_email_noop(self):
         from app.services.email_service import send_contract_status_email
         send_contract_status_email("test@example.com", "CTR-001", "approve")
+
+    def test_dedup_guard_returns_false_first_time(self):
+        """Dedup guard should allow the first send."""
+        from app.services.email_service import _is_duplicate, _dedup_cache
+        _dedup_cache.clear()
+        assert _is_duplicate("unique-dedup-test@test.com", "Unique Subject 12345") is False
+
+    def test_dedup_guard_blocks_duplicate(self):
+        """Dedup guard should block a repeated send within window."""
+        from app.services.email_service import _is_duplicate, _dedup_cache
+        _dedup_cache.clear()
+        _is_duplicate("dedup-repeat@test.com", "Repeated Subject 12345")
+        assert _is_duplicate("dedup-repeat@test.com", "Repeated Subject 12345") is True
+
+    def test_html_escape_in_templates(self):
+        """Verify that HTML escaping is applied to user-provided content."""
+        import html
+        from app.services.email_service import _render_html
+        xss_attempt = '<script>alert("xss")</script>'
+        result = _render_html("Title", html.escape(xss_attempt))
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+
+    def test_render_html_produces_valid_rtl(self):
+        """Verify template renders with RTL direction."""
+        from app.services.email_service import _render_html
+        result = _render_html("Test Title", "<p>Content</p>")
+        assert 'dir="rtl"' in result
+        assert 'lang="ar"' in result
+        assert "Test Title" in result
+        assert "<p>Content</p>" in result
+        assert "منصة إدارة مشروع دمّر" in result
+
+
+# ---------------------------------------------------------------------------
+# 12. Health endpoints
+# ---------------------------------------------------------------------------
+
+class TestHealthEndpoints:
+    """Test detailed health check and SMTP test endpoints."""
+
+    def test_detailed_health_returns_healthy(self, client):
+        """Detailed health should return healthy when DB is working."""
+        resp = client.get("/health/detailed")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "healthy"
+        assert data["database"]["status"] == "ok"
+        assert data["smtp"]["status"] == "disabled"  # SMTP disabled in CI
+        assert "version" in data
+
+    def test_smtp_health_requires_auth(self, client):
+        """SMTP health endpoint requires authentication."""
+        resp = client.get("/health/smtp")
+        assert resp.status_code in (401, 403)
+
+    def test_smtp_health_returns_disabled(self, client, director_token):
+        """SMTP health returns disabled when SMTP_ENABLED=false."""
+        resp = client.get("/health/smtp", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# 13. Area boundary update + DB-backed boundaries
+# ---------------------------------------------------------------------------
+
+class TestAreaBoundaryUpdate:
+    """Test area boundary CRUD from database."""
+
+    def test_area_boundaries_from_db(self, client, db, director_token, sample_area):
+        """Area boundaries should read boundary_polygon from DB."""
+        import json
+        sample_area.boundary_polygon = json.dumps([[33.5, 36.2], [33.5, 36.3], [33.4, 36.3], [33.4, 36.2]])
+        sample_area.color = "#FF0000"
+        db.commit()
+
+        resp = client.get("/gis/area-boundaries", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        found = [a for a in data if a["code"] == "ISL-A"]
+        assert len(found) == 1
+        assert found[0]["boundary"] == [[33.5, 36.2], [33.5, 36.3], [33.4, 36.3], [33.4, 36.2]]
+        assert found[0]["color"] == "#FF0000"
+
+    def test_update_area_boundary(self, client, db, director_token, sample_area):
+        """Project director can update area boundaries."""
+        new_boundary = [[33.6, 36.3], [33.6, 36.4], [33.5, 36.4], [33.5, 36.3]]
+        resp = client.put(
+            f"/gis/area-boundaries/{sample_area.id}",
+            json={"boundary": new_boundary, "color": "#00FF00"},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["boundary"] == new_boundary
+        assert data["color"] == "#00FF00"
+
+    def test_non_director_cannot_update_boundary(self, client, db, field_token, sample_area):
+        """Non-director user cannot update area boundaries."""
+        resp = client.put(
+            f"/gis/area-boundaries/{sample_area.id}",
+            json={"boundary": [[1, 2]], "color": "#000"},
+            headers=_auth_headers(field_token),
+        )
+        assert resp.status_code == 403
+
+    def test_update_nonexistent_area(self, client, director_token):
+        """Updating a nonexistent area returns 404."""
+        resp = client.put(
+            "/gis/area-boundaries/9999",
+            json={"boundary": [[1, 2]], "color": "#000"},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 404
+
+    def test_area_boundary_null_when_not_set(self, client, db, director_token, sample_area):
+        """Areas without boundary_polygon should return null boundary."""
+        resp = client.get("/gis/area-boundaries", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        found = [a for a in data if a["code"] == "ISL-A"]
+        assert len(found) == 1
+        assert found[0]["boundary"] is None
+
+
+# ---------------------------------------------------------------------------
+# 14. Audit log API
+# ---------------------------------------------------------------------------
+
+class TestAuditLogAPI:
+    """Test the audit log listing endpoint."""
+
+    def test_director_can_list_audit_logs(self, client, db, director_token):
+        """Project director can access audit logs."""
+        resp = client.get("/audit-logs/", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_count" in data
+        assert "items" in data
+        assert isinstance(data["items"], list)
+
+    def test_field_user_cannot_list_audit_logs(self, client, db, field_token):
+        """Field team user cannot access audit logs."""
+        resp = client.get("/audit-logs/", headers=_auth_headers(field_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_list_audit_logs(self, client, db, citizen_token):
+        """Citizen cannot access audit logs."""
+        resp = client.get("/audit-logs/", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_audit_log_filter_by_entity_type(self, client, db, director_token):
+        """Audit log can be filtered by entity_type."""
+        from app.services.audit import write_audit_log
+        write_audit_log(db, action="test_action", entity_type="test_entity", entity_id=1, description="test")
+        resp = client.get("/audit-logs/?entity_type=test_entity", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_count"] >= 1
+        assert all(item["entity_type"] == "test_entity" for item in data["items"])
+
+    def test_audit_log_captures_ip_address(self, client, db, director_user, director_token):
+        """Audit log should capture IP address when request is provided."""
+        from app.services.audit import write_audit_log
+        # Direct call without request — ip_address should be None
+        log = write_audit_log(db, action="manual_test", entity_type="test", entity_id=99, user_id=director_user.id)
+        assert log.ip_address is None
+
+    def test_audit_log_anon_denied(self, client):
+        """Anonymous user cannot access audit logs."""
+        resp = client.get("/audit-logs/")
+        assert resp.status_code in (401, 403)

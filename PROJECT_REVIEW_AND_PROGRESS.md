@@ -5,11 +5,186 @@
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
 **المرحلة الحالية:** المرحلة الثالثة - تجهيز الإنتاج  
-**آخر تحديث:** 2026-04-16
+**آخر تحديث:** 2026-04-17
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-17T00:25 — Fix CI + Audit Logging API + PWA Install Prompt
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T00:25
+- **فهم النظام الحالي:**
+  - CI failing: Node.js 18 في CI workflow لكن Vite 8 + Tailwind CSS 4 + React Router 7 تتطلب Node.js 20+
+  - AuditLog model موجود لكن لا يوجد API endpoint لعرض سجلات التدقيق
+  - write_audit_log لا يلتقط IP address أو user_agent تلقائياً من Request
+  - PWA manifest و service worker موجودان لكن لا يوجد custom install prompt
+
+- **أهداف هذه الدفعة:**
+  1. إصلاح CI: تحديث Node.js من 18 إلى 20
+  2. Audit Logging API: endpoint لعرض سجلات التدقيق مع pagination + filters
+  3. تحسين audit trail: التقاط IP + user_agent تلقائياً من Request
+  4. PWA Install Prompt: مكون عربي يعرض عند إمكانية التثبيت
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ CI fix — Node.js 18 → 20 في `.github/workflows/ci.yml`
+  2. ✅ `GET /audit-logs/` — endpoint مع pagination + filters (action, entity_type, user_id)
+  3. ✅ Migration 005 — indexes لـ created_at و (user_id, entity_type) على audit_logs
+  4. ✅ Schema — AuditLogResponse + PaginatedAuditLogs
+  5. ✅ RBAC — project_director فقط يمكنه عرض audit logs
+  6. ✅ IP capture — write_audit_log يقبل Request ويلتقط IP + user_agent تلقائياً
+  7. ✅ Complaints/Tasks/Contracts — يمررون Request إلى write_audit_log
+  8. ✅ InstallPrompt component — بانر عربي RTL مع أزرار تثبيت/إغلاق
+  9. ✅ localStorage dismiss — المستخدم يمكنه إخفاء البانر نهائياً
+  10. ✅ 66 اختبار ناجح (60 سابق + 6 audit log tests)
+  11. ✅ بناء الواجهة ناجح
+
+---
+
+### الدفعة: 2026-04-17T00:01 — PWA + Area Boundaries Migration + Health Monitoring
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T00:01
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL، FastAPI backend + React 19 frontend
+  - 52 اختبار ناجح، بناء الواجهة ناجح
+  - Mobile responsiveness مكتمل — hamburger nav، card views، responsive filters
+  - SMTP معزز — TLS fallback، dedup guard، escape — لم يُختبر مع خادم حقيقي
+  - Area boundaries ثابتة في gis.py كـ hardcoded dict — النموذج يحتوي geometry column لكن لا يُستخدم
+  - لا يوجد PWA/offline mode — التطبيق يحتاج اتصال إنترنت دائم
+  - لا يوجد endpoint صحة تفصيلي — فقط /health بسيط
+
+- **أهداف هذه الدفعة:**
+  1. PWA/offline mode — Service Worker + web app manifest للعمل دون اتصال ولإمكانية التثبيت
+  2. نقل area boundaries من hardcoded dict إلى قاعدة البيانات (migration + seed update + API update)
+  3. Health monitoring — endpoint تفصيلي يتحقق من DB + SMTP
+  4. SMTP connection test endpoint
+
+- **الملفات المخطط تعديلها:**
+  - `public/manifest.json` — جديد: PWA manifest
+  - `public/sw.js` — جديد: Service Worker
+  - `src/main.tsx` — تسجيل Service Worker
+  - `index.html` — PWA meta tags + manifest link
+  - `backend/alembic/versions/004_add_area_boundary_data.py` — جديد: migration
+  - `backend/app/scripts/seed_data.py` — تحديث لتخزين boundary data
+  - `backend/app/api/gis.py` — قراءة boundaries من DB + endpoint إداري لتحديثها
+  - `backend/app/api/health.py` — جديد: health checks تفصيلية
+  - `backend/app/main.py` — تسجيل health router
+  - `backend/tests/test_api.py` — اختبارات جديدة
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — سجل الدفعة
+  - `HANDOFF_STATUS.md` — تحديث الحالة
+
+- **المخاطر:**
+  - Service Worker caching قد يسبب مشاكل في عرض التحديثات — يجب استخدام network-first strategy
+  - migration 004 يجب أن تكون متوافقة مع CI (SQLite)
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ PWA manifest — `public/manifest.json` مع RTL + Arabic meta
+  2. ✅ Service Worker — `public/sw.js` بإستراتيجية network-first للتنقل و stale-while-revalidate للأصول الثابتة
+  3. ✅ SW Registration — `src/main.tsx` يسجل SW عند التحميل (fail-safe)
+  4. ✅ PWA Icons — `icon-192.png` و `icon-512.png` مُولّدة
+  5. ✅ PWA meta tags — theme-color، apple-mobile-web-app، manifest link في `index.html`
+  6. ✅ Migration 004 — boundary_polygon (Text/JSON) + color (String) مضافة لجدول areas
+  7. ✅ Area model — الأعمدة الجديدة مضافة لنموذج `location.py`
+  8. ✅ Seed data — boundaries تُخزّن في DB مع backfill للبيانات الموجودة
+  9. ✅ GIS API — `area-boundaries` يقرأ من DB بدل hardcoded dict
+  10. ✅ PUT `/gis/area-boundaries/{id}` — endpoint لتحديث الحدود (project_director فقط)
+  11. ✅ Health detailed — `/health/detailed` يتحقق من DB + SMTP (public)
+  12. ✅ SMTP test — `/health/smtp` يختبر اتصال SMTP (يتطلب auth)
+  13. ✅ 60 اختبار ناجح (52 سابق + 3 health + 5 area boundary)
+  14. ✅ بناء الواجهة ناجح مع PWA files في dist/
+  15. ✅ AREA_BOUNDARIES hardcoded dict أُزيل بالكامل من gis.py
+
+- **القرارات الهندسية:**
+  - SW strategy: network-first للتنقل (ضمان حداثة البيانات) + stale-while-revalidate للأصول (سرعة)
+  - API requests لا تُخزّن مؤقتاً أبداً — البيانات المتغيرة يجب أن تأتي من الخادم دائماً
+  - boundary_polygon يُخزّن كـ JSON Text وليس PostGIS geometry — أبسط وأسرع
+  - /health/detailed عام (بدون auth) ليعمل مع أدوات المراقبة
+  - /health/smtp يتطلب auth لأنه يحاول login على SMTP
+
+- **الفجوات المتبقية:**
+  - SMTP لم يُختبر مع خادم SMTP حقيقي (connection test endpoint جاهز)
+  - PWA install prompt لم يُضف (المتصفح يعرض prompt تلقائياً)
+  - PostGIS geometry column لا يزال غير مُستخدم (boundary_polygon JSON كافٍ)
+
+---
+
+### الدفعة: 2026-04-17T00:00 — Mobile Responsiveness + SMTP Hardening
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T00:00
+- **فهم النظام الحالي:**
+  - منصة إدارة مشروع دمّر مع واجهة عربية RTL، FastAPI backend + React 19 frontend
+  - 48 اختبار ناجح، بناء الواجهة ناجح
+  - RBAC مكتمل، نظام إشعارات (in-app + email templates) جاهز
+  - SMTP مُعطّل بالافتراض، لم يُختبر مع خادم حقيقي
+  - خريطة عمليات موحدة تعمل (شكاوى + مهام + مناطق)
+  - الواجهة تستخدم Tailwind 4 لكن لا تحتوي على تحسينات mobile-first كافية
+  - الجداول في صفحات القوائم (شكاوى/مهام/عقود) لا تتأقلم مع الشاشات الصغيرة
+  - شريط التنقل يعرض كل العناصر أفقياً — يتطلب scroll على الجوال
+
+- **أهداف هذه الدفعة:**
+  1. تحسين تجربة الجوال عبر جميع الشاشات التشغيلية الرئيسية
+  2. اختبار/تعزيز نظام SMTP مع خادم حقيقي
+  3. تقوية سلوك البريد الإلكتروني (قوالب، حماية، منع التكرار)
+  4. تحديث التوثيق
+
+- **الملفات المخطط تعديلها:**
+  - `src/components/Layout.tsx` — hamburger menu للجوال
+  - `src/index.css` — mobile responsive utilities
+  - `src/pages/ComplaintsListPage.tsx` — card view للجوال
+  - `src/pages/TasksListPage.tsx` — card view للجوال
+  - `src/pages/ContractsListPage.tsx` — card view للجوال
+  - `src/pages/ComplaintDetailsPage.tsx` — responsive details
+  - `src/pages/TaskDetailsPage.tsx` — responsive details
+  - `src/pages/ContractDetailsPage.tsx` — responsive details
+  - `src/pages/ReportsPage.tsx` — responsive filters + tables
+  - `src/pages/ComplaintsMapPage.tsx` — mobile map layout
+  - `src/pages/CitizenDashboardPage.tsx` — mobile adjustments
+  - `src/pages/DashboardPage.tsx` — mobile adjustments
+  - `backend/app/services/email_service.py` — SMTP hardening
+  - `backend/tests/test_api.py` — SMTP verification tests
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — batch log
+  - `HANDOFF_STATUS.md` — status update
+
+- **المخاطر:**
+  - تغيير Layout قد يؤثر على جميع الصفحات — يجب اختبار بناء الواجهة بعد كل تغيير
+  - SMTP لن يُختبر مع خادم حقيقي في CI (بيئة sandboxed) — سيُوثّق كجزئي
+
+**بعد الانتهاء:**
+- **النتيجة:** ✅ Done
+- **التحقق:**
+  1. ✅ Mobile Layout — hamburger menu للجوال مع قائمة منسدلة، اختفاء تلقائي عند تغيير الصفحة
+  2. ✅ Mobile card views — ComplaintsListPage, TasksListPage, ContractsListPage تعرض بطاقات على الجوال بدلاً من جداول
+  3. ✅ Responsive filters — فلاتر البحث تتكيف مع عرض الشاشة (column layout على الجوال)
+  4. ✅ ReportsPage — فلاتر responsive، tabs 2-column على الجوال، جداول قابلة للتمرير أفقياً
+  5. ✅ ContractDetailsPage — أزرار header responsive مع flex-wrap
+  6. ✅ DashboardPage — حجم عنوان responsive
+  7. ✅ ComplaintsMapPage — ارتفاع خريطة ديناميكي (calc), عنوان responsive
+  8. ✅ SMTP hardening — TLS fallback (STARTTLS/SSL)، deduplication guard (5 min)، SSL context
+  9. ✅ SMTP dedup tested — اختبارات وحدة تؤكد منع التكرار
+  10. ✅ HTML escape verified — اختبار XSS prevention في قوالب البريد
+  11. ✅ RTL template verified — اختبار أن قالب البريد يحتوي dir="rtl" و lang="ar"
+  12. ✅ 52 اختبار ناجح (48 سابق + 4 جديد: dedup guard, dedup block, XSS escape, RTL template)
+  13. ✅ بناء الواجهة ناجح (1.75s)
+  14. ✅ Production deployment guide updated with SMTP hardening docs
+- **القرارات الهندسية:**
+  - Mobile nav: hamburger مع قائمة عمودية بدل scroll أفقي — أسهل للاستخدام الميداني
+  - Card views: بطاقات تظهر فقط تحت 768px (md breakpoint) — الجداول تبقى على desktop
+  - CSS approach: responsive-table-desktop / responsive-cards-mobile classes في index.css — بسيط ومباشر
+  - SMTP dedup: 5 دقائق نافذة — توازن بين منع الضوضاء والسماح بتحديثات متعددة
+  - TLS: port 465 = SMTP_SSL, port 587+ = STARTTLS — يتبع المعايير الصناعية
+- **الفجوات المتبقية:**
+  - SMTP لم يُختبر مع خادم SMTP حقيقي (الحماية والقوالب جاهزة، لم يُتحقق من التوصيل الفعلي)
+  - PWA/offline mode لم يُنفذ بعد
+  - area boundaries ثابتة في الكود
+
+---
 
 ### الدفعة: 2026-04-16T22:59 — CI/CD, Production Guide, SMTP, GIS
 

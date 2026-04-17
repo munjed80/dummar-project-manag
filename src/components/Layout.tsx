@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -22,6 +23,12 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { role } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     apiService.logout();
@@ -50,19 +57,30 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="sticky top-0 z-50 bg-primary text-primary-foreground shadow-md">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-bold">منصة إدارة مشروع دمّر</h1>
+        <div className="container mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
+            {/* Mobile menu toggle */}
+            <button
+              className="md:hidden p-1.5 rounded-md hover:bg-primary/80 transition-colors"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="القائمة"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <List size={24} />}
+            </button>
+            <h1 className="text-lg md:text-2xl font-bold truncate">منصة إدارة مشروع دمّر</h1>
+          </div>
+          <div className="flex items-center gap-1 md:gap-2">
             <NotificationBell />
-            <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary/90">
-              <SignOut className="ml-2" />
-              تسجيل الخروج
+            <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary/90 px-2 md:px-4">
+              <SignOut size={20} />
+              <span className="hidden sm:inline mr-1">تسجيل الخروج</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <nav className="bg-secondary text-secondary-foreground shadow-sm">
+      {/* Desktop nav — horizontal bar */}
+      <nav className="hidden md:block bg-secondary text-secondary-foreground shadow-sm">
         <div className="container mx-auto px-4">
           <ul className="flex gap-1 overflow-x-auto">
             {navItems.map(({ path, icon: Icon, label }) => (
@@ -84,12 +102,35 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </nav>
 
-      <main className="container mx-auto px-4 py-6">
+      {/* Mobile nav — slide-down panel */}
+      {mobileMenuOpen && (
+        <nav className="md:hidden bg-secondary text-secondary-foreground shadow-lg border-b border-border">
+          <ul className="flex flex-col">
+            {navItems.map(({ path, icon: Icon, label }) => (
+              <li key={path}>
+                <Link
+                  to={path}
+                  className={`flex items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors border-b border-border/50 ${
+                    location.pathname === path || location.pathname.startsWith(path + '/')
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-primary/10'
+                  }`}
+                >
+                  <Icon size={20} />
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      <main className="container mx-auto px-3 md:px-4 py-4 md:py-6">
         {children}
       </main>
 
-      <footer className="bg-muted mt-12 py-6">
-        <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
+      <footer className="bg-muted mt-8 md:mt-12 py-4 md:py-6">
+        <div className="container mx-auto px-4 text-center text-muted-foreground text-xs md:text-sm">
           <p>© 2024 مشروع دمر - دمشق | جميع الحقوق محفوظة</p>
         </div>
       </footer>
