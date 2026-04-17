@@ -495,7 +495,7 @@ export default function LocationDetailPage() {
                   }] : []),
                   // Child locations
                   ...(mapData?.children || []).map((child: any) => ({
-                    id: child.id + 10000,
+                    id: child.id,
                     latitude: child.latitude,
                     longitude: child.longitude,
                     title: child.name,

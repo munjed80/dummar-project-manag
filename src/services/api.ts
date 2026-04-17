@@ -400,7 +400,10 @@ class ApiService {
     if (params?.location_type) qp.append('location_type', params.location_type);
     if (params?.status) qp.append('status', params.status);
     const response = await fetch(`${API_BASE_URL}/locations/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to export location report');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to export location report');
+    }
     return response.blob();
   }
 

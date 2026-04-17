@@ -1,31 +1,29 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T23:45
+## آخر تحديث: 2026-04-17T23:55
 
 ---
 
-## الدفعة الحالية: 2026-04-17T22:59 — Locations Operational Geography Engine
+## الدفعة الحالية: 2026-04-17T23:28 — Location Enhancement Batch (CRUD, Migration, Auto-assign, Map, CSV)
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `backend/app/models/location.py` | إضافة: نموذج Location الموحّد مع تسلسل هرمي + ContractLocation + LocationType/LocationStatus enums |
-| `backend/app/models/complaint.py` | إضافة: location_id FK على الشكاوى |
-| `backend/app/models/task.py` | إضافة: location_id FK على المهام |
-| `backend/app/models/contract.py` | إضافة: location_links relationship |
-| `backend/app/models/__init__.py` | تصدير النماذج الجديدة |
-| `backend/app/schemas/location.py` | إضافة: مخططات شاملة (Location CRUD, TreeNode, Detail, Stats, Reports) |
-| `backend/app/api/locations.py` | إعادة كتابة: واجهة API شاملة للجغرافيا التشغيلية |
-| `backend/alembic/versions/007_add_locations_hierarchy.py` | جديد: هجرة لجداول locations + contract_locations + FKs |
-| `backend/tests/conftest.py` | إضافة: fixtures للمواقع (sample_location, sample_location_tree) |
-| `backend/tests/test_locations.py` | جديد: 37 اختبار للمواقع |
-| `src/services/api.ts` | إضافة: 12 method جديدة لـ API المواقع |
-| `src/pages/LocationsListPage.tsx` | إعادة كتابة: عرض شجري + جدول + بحث + فلاتر |
-| `src/pages/LocationDetailPage.tsx` | جديد: صفحة ملف الموقع التشغيلي |
-| `src/pages/LocationReportsPage.tsx` | جديد: تقارير المواقع الإدارية |
-| `src/App.tsx` | إضافة: مسارات جديدة (/locations/:id, /locations/reports) |
-| `package.json` | إضافة: @radix-ui/react-progress |
+| `backend/app/scripts/migrate_areas_to_locations.py` | جديد: سكريبت هجرة Area→Location (آمن، قابل للتكرار، غير مدمّر) |
+| `backend/app/services/location_service.py` | جديد: خدمة استدلال الموقع التلقائي (explicit → area mapping → coordinates) |
+| `backend/app/api/locations.py` | إضافة: CSV export endpoint + map-data endpoint |
+| `backend/app/api/complaints.py` | إضافة: auto-location assignment عند إنشاء شكوى |
+| `backend/app/api/tasks.py` | إضافة: auto-location assignment عند إنشاء مهمة |
+| `backend/app/schemas/complaint.py` | إضافة: حقل location_id في ComplaintCreate |
+| `backend/app/schemas/task.py` | إضافة: حقل location_id في TaskCreate |
+| `src/components/LocationFormDialog.tsx` | جديد: نموذج إنشاء/تحرير شامل مع تحقق |
+| `src/pages/LocationsListPage.tsx` | إضافة: زر إضافة موقع + dialog |
+| `src/pages/LocationDetailPage.tsx` | إضافة: أزرار تعديل/إضافة فرعي + خريطة Leaflet تفاعلية |
+| `src/pages/LocationReportsPage.tsx` | إضافة: زر تصدير CSV |
+| `src/services/api.ts` | إضافة: deleteLocation, getLocationMapData, exportLocationReportCSV |
+| `backend/tests/test_locations.py` | إضافة: 13 اختبار جديد (CSV, map, auto-assign, migration) |
+| `package.json` | إضافة: @radix-ui/react-switch |
 | `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث: سجل الدفعة |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
@@ -48,7 +46,7 @@
 - ✅ ContractLocation — جدول ربط many-to-many للعقود والمواقع
 - ✅ الحفاظ على area_id الحالي للتوافقية
 
-**واجهة API شاملة (19 endpoint):**
+**واجهة API شاملة (21 endpoint):**
 - ✅ POST /locations/ — إنشاء موقع
 - ✅ GET /locations/list — قائمة مع بحث وفلاتر متعددة
 - ✅ GET /locations/tree — عرض شجري كامل مع عدّادات
@@ -57,24 +55,45 @@
 - ✅ GET /locations/detail/{id}/tasks — مهام الموقع
 - ✅ GET /locations/detail/{id}/contracts — عقود الموقع
 - ✅ GET /locations/detail/{id}/activity — النشاط الأخير
+- ✅ GET /locations/detail/{id}/map-data — بيانات الخريطة (NEW)
 - ✅ PUT /locations/{id} — تحديث موقع
 - ✅ DELETE /locations/{id} — حذف ناعم (director فقط)
 - ✅ GET /locations/stats/all — إحصائيات تشغيلية
 - ✅ GET /locations/reports/summary — تقرير إداري
+- ✅ GET /locations/reports/export/csv — تصدير CSV (NEW)
 - ✅ POST /locations/contracts/link — ربط عقد بموقع
 - ✅ DELETE /locations/contracts/link — فك ربط
 - ✅ الحفاظ على endpoints القديمة (areas, buildings, streets)
 
-**واجهة المستخدم:**
-- ✅ LocationsListPage — عرض شجري + عرض جدول + بحث + فلاتر + بطاقات ملخص
-- ✅ LocationDetailPage — ملف تشغيلي: breadcrumb + مواقع فرعية + شكاوى + مهام + عقود + نشاط
-- ✅ LocationReportsPage — نقاط ساخنة + كثافة الشكاوى + تأخيرات + تغطية عقدية
+**هجرة البيانات (Area → Location):**
+- ✅ سكريبت هجرة آمن وقابل للتكرار
+- ✅ Areas → Islands, Buildings → Buildings (مع parent), Streets → Streets
+- ✅ Backfill: Complaint.location_id من area_id
+- ✅ Backfill: Task.location_id من area_id
+- ✅ غير مدمّر — الجداول القديمة تبقى كما هي
 
-**المؤشرات التشغيلية:**
-- ✅ عدد الشكاوى (إجمالي + مفتوح)
-- ✅ عدد المهام (إجمالي + مفتوح + متأخر)
-- ✅ عدد العقود (إجمالي + نشط)
-- ✅ مؤشر النقطة الساخنة (≥5 شكاوى مفتوحة)
+**ربط الموقع التلقائي (Auto-assign):**
+- ✅ عند إنشاء شكوى: explicit location_id → area_id mapping → coordinate proximity
+- ✅ عند إنشاء مهمة: نفس المنطق
+- ✅ إذا كانت الثقة منخفضة → لا يتم التعيين (يبقى فارغاً)
+- ✅ يمكن التجاوز اليدوي دائماً
+
+**واجهة المستخدم:**
+- ✅ LocationsListPage — عرض شجري + عرض جدول + بحث + فلاتر + بطاقات ملخص + زر إضافة
+- ✅ LocationDetailPage — ملف تشغيلي + أزرار تعديل/إضافة فرعي + خريطة تفاعلية
+- ✅ LocationReportsPage — نقاط ساخنة + كثافة الشكاوى + تأخيرات + تغطية عقدية + تصدير CSV
+- ✅ LocationFormDialog — نموذج شامل: اسم، رمز، نوع، أب، حالة، وصف، إحداثيات، بيانات إضافية
+
+**خريطة تفاعلية على صفحة الموقع:**
+- ✅ عرض نقطة الموقع
+- ✅ عرض المواقع الفرعية بإحداثيات
+- ✅ عرض الشكاوى والمهام المرتبطة
+- ✅ ألوان مميزة حسب نوع الكيان
+
+**تصدير CSV:**
+- ✅ endpoint مع دعم فلاتر النوع والحالة
+- ✅ ترويسات عربية + BOM لدعم Excel
+- ✅ زر تنزيل في صفحة التقارير
 
 **الجودة والأمان:**
 - ✅ RBAC: internal staff only, citizen ممنوع, director فقط للحذف
@@ -82,7 +101,7 @@
 - ✅ واجهة RTL عربية أولاً
 - ✅ كود إنجليزي
 - ✅ بيانات حقيقية من الخلفية، بدون بيانات وهمية
-- ✅ 244 اختبار ناجح
+- ✅ 257 اختبار ناجح
 - ✅ بناء الواجهة ناجح
 
 ### الاختبارات:
@@ -90,42 +109,30 @@
 |---|---|---|
 | API + E2E | 121 | ✅ ناجح |
 | Contract Intelligence | 86 | ✅ ناجح |
-| Locations | 37 | ✅ ناجح |
-| **المجموع** | **244** | **✅ ناجح** |
+| Locations | 50 | ✅ ناجح |
+| **المجموع** | **257** | **✅ ناجح** |
 
 ### الفجوات المتبقية:
-- [ ] هجرة البيانات من Area إلى Location (يمكن تنفيذها عند الترقية)
-- [ ] واجهة إنشاء/تحرير المواقع من الأمام (CRUD forms)
-- [ ] خريطة تفاعلية على صفحة تفاصيل الموقع (Leaflet integration)
-- [ ] ربط إحداثيات الشكاوى/المهام تلقائياً بأقرب موقع
-- [ ] تصدير CSV لتقارير المواقع
+- [ ] تشغيل سكريبت الهجرة على قاعدة بيانات الإنتاج (يتطلب وصول للخادم)
+- [ ] محرر حدود المناطق (boundary polygon editor) في الواجهة
+- [ ] استخدام معادلة Haversine بدل المسافة الإقليدية (كافية حالياً لنفس المدينة)
+- [ ] تصدير CSV مع إحصائيات الفروع (حالياً: فقط الموقع المباشر)
 
 ### الدفعة التالية المُوصى بها:
-1. واجهة إنشاء/تحرير المواقع (CRUD forms)
-2. هجرة بيانات Area → Location
-3. خريطة تفاعلية على صفحة الموقع
-4. ربط تلقائي بأقرب موقع عند إنشاء شكوى/مهمة
-5. تصدير CSV لتقارير المواقع
+1. محرر حدود المناطق (boundary polygon editor)
+2. لوحة بيانات جغرافية متقدمة (geo dashboard)
+3. ربط العقود بالمواقع من واجهة العقد
+4. إشعارات مبنية على الموقع (location-based notifications)
+5. تحسين استدلال الموقع التلقائي (Haversine, fuzzy text matching)
 
 ---
 
-## ما قبل هذه الدفعة (Previous Batch Context):
-- ✅ Dashboard: Arabic status labels, progress bars, quick navigation
-- ✅ Login page: No hardcoded credentials, help toggle
-- ✅ Settings page: System health panel for admins
-- ✅ Load test: 10 endpoints including contract intelligence
-- ✅ 207 backend tests pass
-- ✅ Frontend builds clean
-
-### المقاييس:
-- **اختبارات الخلفية:** 207 ناجح (بدون تغيير)
-- **بناء الواجهة:** ناجح
-- **ملفات مُعدّلة:** 4
-
-### ⚠️ جزئي (يتطلب خادم حقيقي):
-- **SSL/TLS:** Full automation path ready (ssl-setup.sh --auto). Cannot issue cert without real domain + DNS.
-- **SMTP:** Verification path complete. Cannot test without real SMTP server.
-- **Docker deployment:** Scripts and config complete. Cannot run `docker compose up` in CI.
+## ما قبل هذه الدفعة (2026-04-17T22:59 — Locations Operational Geography Engine):
+- ✅ Unified Location model with hierarchy
+- ✅ 19 API endpoints
+- ✅ LocationsListPage, LocationDetailPage, LocationReportsPage
+- ✅ 244 tests passing
+- ✅ Frontend build clean
 
 ---
 

@@ -66,16 +66,16 @@ def infer_location_id(
                 .first()
             )
             if mapped:
-                logger.info("Area id=%d → mapped to Location id=%d (code=%s)",
-                            area_id, mapped.id, mapped_code)
+                logger.info("Area id=%d → mapped to Location id=%d",
+                            area_id, mapped.id)
                 return mapped.id
 
     # 3. Coordinate proximity
     if latitude is not None and longitude is not None:
         nearest = find_nearest_location(db, latitude, longitude)
         if nearest:
-            logger.info("Coordinates (%.5f, %.5f) → nearest Location id=%d (%s)",
-                        latitude, longitude, nearest.id, nearest.name)
+            logger.info("Coordinate proximity match → Location id=%d (%s)",
+                        nearest.id, nearest.name)
             return nearest.id
 
     return None

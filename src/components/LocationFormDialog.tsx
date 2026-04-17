@@ -77,7 +77,9 @@ export function LocationFormDialog({
   // Load parent location options
   useEffect(() => {
     if (!open) return;
-    apiService.getLocations({ is_active: 1, limit: 500 }).then(setParentOptions).catch(() => {});
+    apiService.getLocations({ is_active: 1, limit: 500 }).then(setParentOptions).catch((err) => {
+      console.error('Failed to load parent options:', err);
+    });
   }, [open]);
 
   // Populate form when editing or when parentId changes
