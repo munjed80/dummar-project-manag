@@ -11,6 +11,74 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T12:34 — Contract Intelligence Operational Completion
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T12:34
+- **فهم النظام الحالي:**
+  - 160 اختبار ناجح (76 API + 43 E2E + 41 contract intelligence)، بناء الواجهة ناجح
+  - مركز ذكاء العقود موجود مع: OCR (نصوص PDF فقط)، استخراج حقول، تصنيف، ملخص، مخاطر، تكرارات، CSV import
+  - OCR للصور غير متوفر (يحتاج Tesseract)
+  - لا يوجد دعم Excel (.xlsx)
+  - لا توجد إشعارات لاكتمال المعالجة
+  - لا توجد تقارير/رسوم بيانية لذكاء العقود
+- **أهداف الدفعة:**
+  1. دعم Tesseract OCR الحقيقي مع كشف تلقائي للتوفر
+  2. استيراد Excel (.xlsx) عبر openpyxl
+  3. إشعارات اكتمال المعالجة (OCR/استيراد/مراجعة/مخاطر)
+  4. تقارير ورسوم بيانية ذكاء العقود
+- **الملفات المتوقع تعديلها:**
+  - backend/app/services/ocr_service.py (Tesseract engine)
+  - backend/app/api/contract_intelligence.py (Excel import + reports API)
+  - backend/app/services/notification_service.py (intelligence notifications)
+  - backend/app/models/notification.py (new notification type)
+  - backend/app/schemas/contract_intelligence.py (report schemas)
+  - backend/requirements.txt (openpyxl, pytesseract)
+  - backend/Dockerfile (tesseract-ocr package)
+  - backend/tests/test_contract_intelligence.py (new tests)
+  - src/pages/IntelligenceReportsPage.tsx (new)
+  - src/services/api.ts (new API methods)
+  - src/App.tsx (new route)
+  - src/components/Layout.tsx (nav link)
+- **المخاطر/العوائق:**
+  - Tesseract binary may not be available in CI — implement graceful fallback
+  - openpyxl is a new dependency
+
+**بعد الانتهاء:**
+- **الطابع الزمني:** 2026-04-17T13:30
+- **النتيجة: Done**
+- **الاختبارات:** 178 اختبار ناجح (160 سابق + 18 جديد)
+- **بناء الواجهة:** ناجح
+- **التفاصيل:**
+  - ✅ **Tesseract OCR:** TesseractEngine مع كشف تلقائي (is_tesseract_available)، يدعم صور + PDF ممسوح ضوئياً، fallback سلس إلى BasicTextExtractor
+  - ✅ **OCR Status API:** GET /contract-intelligence/ocr-status — يعرض المحرك الحالي وحالة Tesseract
+  - ✅ **Dockerfile:** إضافة tesseract-ocr + tesseract-ocr-ara + poppler-utils
+  - ✅ **Excel Import:** preview-excel + execute-excel عبر openpyxl، يدعم عناوين أعمدة عربية/إنجليزية
+  - ✅ **Notifications:** 6 أنواع إشعارات ذكاء (ocr_complete, extraction_review_ready, duplicate_review_needed, risk_review_needed, batch_import_complete, batch_import_failed)
+  - ✅ **Intelligence Reports API:** GET /contract-intelligence/reports — 12 قسم بيانات حقيقية
+  - ✅ **IntelligenceReportsPage:** صفحة تقارير RTL عربية مع رسوم بيانية وجداول وبطاقات
+  - ✅ **RBAC:** contracts_manager + project_director فقط لجميع الميزات الجديدة
+  - ✅ **Audit logging:** يبقى سليماً لجميع العمليات
+  - ✅ **18 اختبار جديد** تغطي: Tesseract detection, Excel preview/execute/Arabic headers, notifications, reports, RBAC
+- **الملفات المُعدّلة:**
+  - `backend/app/services/ocr_service.py` — TesseractEngine, is_tesseract_available(), get_ocr_status()
+  - `backend/app/api/contract_intelligence.py` — Excel import endpoints, reports endpoint, OCR status, notifications
+  - `backend/app/services/notification_service.py` — notify_intelligence_processing_complete()
+  - `backend/app/models/notification.py` — INTELLIGENCE_PROCESSING type
+  - `backend/requirements.txt` — openpyxl==3.1.5, pytesseract==0.3.13
+  - `backend/Dockerfile` — tesseract-ocr, tesseract-ocr-ara, poppler-utils
+  - `backend/tests/test_contract_intelligence.py` — 18 new tests
+  - `src/pages/IntelligenceReportsPage.tsx` — new
+  - `src/pages/BulkImportPage.tsx` — Excel auto-detection
+  - `src/pages/ContractIntelligencePage.tsx` — reports quick link
+  - `src/services/api.ts` — 5 new API methods
+  - `src/App.tsx` — reports route
+- **ملاحظات جزئية:**
+  - Tesseract OCR binary غير متوفر في بيئة CI — المحرك يُكتشف تلقائياً ويعود لـ BasicTextExtractor
+  - pdf2image (لـ PDFs ممسوحة ضوئياً) اختيارية — تعمل إذا ثُبّتت
+
+---
+
 ### الدفعة: 2026-04-17T09:30 — Contract Intelligence Center
 
 **قبل البدء:**

@@ -212,3 +212,72 @@ def notify_contract_status_change(
         contract_number,
         action,
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Contract Intelligence Notifications
+# ─────────────────────────────────────────────────────────────
+
+def notify_intelligence_processing_complete(
+    db: Session,
+    event: str,
+    document_id: Optional[int] = None,
+    batch_id: Optional[str] = None,
+    details: Optional[str] = None,
+):
+    """
+    Send notification when contract intelligence processing completes.
+
+    Events:
+    - ocr_complete: OCR processing finished
+    - extraction_review_ready: extraction done, review needed
+    - duplicate_review_needed: duplicates found needing attention
+    - risk_review_needed: high/critical risk flags detected
+    - batch_import_complete: bulk import finished
+    - batch_import_failed: bulk import had significant failures
+
+    Only notifies contracts_manager and project_director.
+    Failures in notification never break the calling workflow.
+    """
+    try:
+        event_labels = {
+            "ocr_complete": "اكتملت معالجة OCR",
+            "extraction_review_ready": "بيانات مستخرجة جاهزة للمراجعة",
+            "duplicate_review_needed": "تكرارات محتملة تحتاج مراجعة",
+            "risk_review_needed": "مخاطر مرتفعة تحتاج انتباه",
+            "batch_import_complete": "اكتمل الاستيراد الجماعي",
+            "batch_import_failed": "فشل كبير في الاستيراد الجماعي",
+        }
+
+        title = event_labels.get(event, "تحديث ذكاء العقود")
+        message = title
+        if details:
+            message = f"{title}: {details}"
+        if document_id:
+            message += f" (مستند #{document_id})"
+        if batch_id:
+            message += f" (دفعة {batch_id})"
+
+        # Notify contracts managers and project director
+        managers = db.query(User.id).filter(
+            User.role.in_([UserRole.CONTRACTS_MANAGER, UserRole.PROJECT_DIRECTOR]),
+            User.is_active == 1,
+        ).all()
+
+        for (uid,) in managers:
+            create_notification(
+                db=db,
+                user_id=uid,
+                notification_type=NotificationType.INTELLIGENCE_PROCESSING,
+                title=title,
+                message=message,
+                entity_type="contract_document" if document_id else "batch_import",
+                entity_id=document_id,
+            )
+
+        logger.info(
+            "Sent %d intelligence notifications: event=%s, doc=%s, batch=%s",
+            len(managers), event, document_id, batch_id,
+        )
+    except Exception:
+        logger.exception("Failed to send intelligence notification (event=%s)", event)

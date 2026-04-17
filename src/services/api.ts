@@ -678,6 +678,47 @@ class ApiService {
     return response.json();
   }
 
+  // Excel import
+  async previewExcelImport(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/preview-excel`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to preview Excel');
+    return response.json();
+  }
+
+  async executeExcelImport(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/execute-excel`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Failed to execute Excel import');
+    return response.json();
+  }
+
+  // OCR status
+  async getOcrStatus(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/ocr-status`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch OCR status');
+    return response.json();
+  }
+
+  // Intelligence reports
+  async getIntelligenceReports(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch intelligence reports');
+    return response.json();
+  }
+
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');

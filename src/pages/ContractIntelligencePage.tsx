@@ -110,6 +110,7 @@ export default function ContractIntelligencePage() {
     { label: 'استيراد جماعي', path: '/contract-intelligence/bulk-import', icon: FileCsv },
     { label: 'المخاطر', path: '/contract-intelligence/risks', icon: ShieldWarning },
     { label: 'التكرارات', path: '/contract-intelligence/duplicates', icon: CopySimple },
+    { label: 'التقارير', path: '/contract-intelligence/reports', icon: FileText },
   ];
 
   return (

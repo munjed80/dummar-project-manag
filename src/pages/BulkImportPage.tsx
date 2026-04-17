@@ -66,7 +66,10 @@ export default function BulkImportPage() {
     setPreviewLoading(true);
     setError('');
     try {
-      const data = await apiService.previewCsvImport(csvFile);
+      const isExcel = csvFile.name.toLowerCase().endsWith('.xlsx') || csvFile.name.toLowerCase().endsWith('.xls');
+      const data = isExcel
+        ? await apiService.previewExcelImport(csvFile)
+        : await apiService.previewCsvImport(csvFile);
       setPreview(data);
       if (data.warnings?.length) {
         data.warnings.forEach((w: string) => toast.warning(w));
@@ -84,7 +87,10 @@ export default function BulkImportPage() {
     setImportLoading(true);
     setError('');
     try {
-      const data = await apiService.executeCsvImport(csvFile);
+      const isExcel = csvFile.name.toLowerCase().endsWith('.xlsx') || csvFile.name.toLowerCase().endsWith('.xls');
+      const data = isExcel
+        ? await apiService.executeExcelImport(csvFile)
+        : await apiService.executeCsvImport(csvFile);
       setCsvResult(data);
       toast.success(`تم استيراد ${data.successful} من ${data.total_processed} سجل بنجاح`);
     } catch {
