@@ -809,3 +809,226 @@ class TestOcrStatusEndpoint:
         headers = _auth_headers(token)
         resp = client.get("/contract-intelligence/ocr-status", headers=headers)
         assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# New tests for Batch: Intelligence Export, Filters, Extraction & Production
+# ---------------------------------------------------------------------------
+
+
+class TestExtractionRefinements:
+    """Test refined extraction patterns for edge cases."""
+
+    def test_extract_dotted_date(self):
+        from app.services.extraction_service import extract_fields
+        text = "تاريخ العقد 15.03.2024"
+        result = extract_fields(text)
+        assert "start_date" in result.fields
+        assert result.fields["start_date"] == "2024-03-15"
+
+    def test_extract_value_with_spaces(self):
+        from app.services.extraction_service import extract_fields
+        text = "قيمة العقد 5 000 000 ل.س"
+        result = extract_fields(text)
+        assert result.fields.get("contract_value") == 5000000.0
+
+    def test_extract_value_reversed_currency(self):
+        from app.services.extraction_service import extract_fields
+        text = "المبلغ: ل.س 2,500,000"
+        result = extract_fields(text)
+        assert result.fields.get("contract_value") == 2500000.0
+
+    def test_extract_contract_number_with_year_prefix(self):
+        from app.services.extraction_service import extract_fields
+        text = "عقد رقم: 2024-MAINT-001 بتاريخ 2024-01-15"
+        result = extract_fields(text)
+        assert result.success
+        assert "contract_number" in result.fields
+
+    def test_extract_contractor_with_company_prefix(self):
+        from app.services.extraction_service import extract_fields
+        text = "شركة الإعمار والبناء الحديثة"
+        result = extract_fields(text)
+        assert "contractor_name" in result.fields
+
+    def test_extract_duration_weeks(self):
+        from app.services.extraction_service import extract_fields
+        text = "مدة التنفيذ 4 أسابيع"
+        result = extract_fields(text)
+        assert result.fields.get("execution_duration_days") == 28
+
+    def test_extract_ocr_noise_tolerance(self):
+        """OCR noise should be cleaned before extraction."""
+        from app.services.extraction_service import extract_fields
+        text = "عقد  رقم:  TEST-OCR-001\n  المقاول:  شركة   الاختبار   \nالقيمة: 1,000,000 ل.س"
+        result = extract_fields(text)
+        assert result.success
+        assert "contract_number" in result.fields
+
+    def test_extract_mixed_arabic_english_label(self):
+        from app.services.extraction_service import extract_fields
+        text = "Contract No. ABC-2024-100\nالمقاول: Test Company\nValue: 500,000 ل.س"
+        result = extract_fields(text)
+        assert result.success
+
+    def test_clean_ocr_noise(self):
+        from app.services.extraction_service import _clean_ocr_noise
+        noisy = "عقد  رقم   123  في    تاريخ"
+        cleaned = _clean_ocr_noise(noisy)
+        assert "  " not in cleaned
+
+    def test_two_digit_year(self):
+        from app.services.extraction_service import _normalize_date
+        result = _normalize_date("15-03-24")
+        assert result == "2024-03-15"
+
+
+class TestReportsFilters:
+    """Test reports endpoint with filter parameters."""
+
+    def _setup_data(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+
+        # Upload a document to generate data
+        content = "عقد رقم: FLT-001\nالمقاول: شركة الفلتر\nالقيمة: 1,000,000 ل.س\nنطاق العمل: صيانة المباني"
+        file = io.BytesIO(content.encode("utf-8"))
+        client.post(
+            "/contract-intelligence/upload",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("filter.txt", file, "text/plain")},
+        )
+        return headers
+
+    def test_reports_with_date_filter(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports?date_from=2020-01-01&date_to=2030-12-31",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_documents"] >= 1
+        assert "active_filters" in data
+        assert data["active_filters"]["date_from"] == "2020-01-01"
+
+    def test_reports_with_review_status_filter(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports?review_status=review",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "active_filters" in data
+
+    def test_reports_with_search(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports?search=FLT-001",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_reports_with_import_source_filter(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports?import_source=upload",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_reports_returns_time_series(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get("/contract-intelligence/reports", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "documents_over_time" in data
+        assert "risks_over_time" in data
+        assert isinstance(data["documents_over_time"], list)
+
+
+class TestExportEndpoints:
+    """Test CSV and PDF export endpoints."""
+
+    def _setup_data(self, client, db):
+        headers, _ = TestContractIntelligenceAPI()._get_manager_headers(client, db)
+        content = "عقد رقم: EXP-001\nالمقاول: شركة التصدير\nالقيمة: 2,000,000 ل.س\nنطاق العمل: صيانة"
+        file = io.BytesIO(content.encode("utf-8"))
+        client.post(
+            "/contract-intelligence/upload",
+            headers={k: v for k, v in headers.items()},
+            files={"file": ("export.txt", file, "text/plain")},
+        )
+        return headers
+
+    def test_csv_export_all(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/csv?section=all",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "text/csv" in resp.headers.get("content-type", "")
+        content = resp.text
+        assert "ID" in content
+        assert "EXP-001" in content or "export.txt" in content
+
+    def test_csv_export_documents(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/csv?section=documents",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "Filename" in resp.text
+
+    def test_csv_export_risks(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/csv?section=risks",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "Risk Flags" in resp.text
+
+    def test_csv_export_with_filter(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/csv?section=documents&date_from=2020-01-01",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_csv_export_rbac_denied(self, client, db):
+        _create_user(db, "exp_citizen", UserRole.CITIZEN)
+        token = _login(client, "exp_citizen")
+        headers = _auth_headers(token)
+        resp = client.get("/contract-intelligence/reports/export/csv", headers=headers)
+        assert resp.status_code == 403
+
+    def test_pdf_export(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/pdf",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "application/pdf" in resp.headers.get("content-type", "")
+        # Check that content starts with PDF header
+        assert resp.content[:4] == b"%PDF"
+
+    def test_pdf_export_with_filter(self, client, db):
+        headers = self._setup_data(client, db)
+        resp = client.get(
+            "/contract-intelligence/reports/export/pdf?date_from=2020-01-01",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.content[:4] == b"%PDF"
+
+    def test_pdf_export_rbac_denied(self, client, db):
+        _create_user(db, "pdf_citizen", UserRole.CITIZEN)
+        token = _login(client, "pdf_citizen")
+        headers = _auth_headers(token)
+        resp = client.get("/contract-intelligence/reports/export/pdf", headers=headers)
+        assert resp.status_code == 403

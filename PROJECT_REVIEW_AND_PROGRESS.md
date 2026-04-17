@@ -11,6 +11,40 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T13:27 — Intelligence Export, Filters, Extraction & Production Readiness
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T13:27
+- **فهم النظام الحالي:**
+  - 178 اختبار ناجح (76 API + 43 E2E + 59 contract intelligence)، بناء الواجهة ناجح
+  - Contract Intelligence Center مكتمل مع: OCR (basic + Tesseract), extraction, classification, summary, risk, duplicates, CSV/Excel import, reports API, notifications
+  - Reports page shows 12 data sections with charts and tables
+  - Tesseract integration works in Docker but not available in CI
+  - No export capability (CSV/PDF) for intelligence reports
+  - No filters/search in intelligence reports page
+  - Extraction patterns cover basic cases but not edge cases (mixed Arabic/English, OCR noise)
+- **أهداف الدفعة:**
+  1. Data export from intelligence reports (CSV + PDF)
+  2. Filters/search improvements in reports page
+  3. Production-ready Tesseract verification path
+  4. Extraction pattern refinement for edge cases
+  5. Optional time-series reporting
+- **الملفات المتوقع تعديلها:**
+  - backend/app/api/contract_intelligence.py (export endpoints, filter params)
+  - backend/app/services/extraction_service.py (pattern refinement)
+  - backend/app/services/ocr_service.py (health indicator improvements)
+  - backend/tests/test_contract_intelligence.py (new tests)
+  - src/pages/IntelligenceReportsPage.tsx (filters, export, time-series)
+  - src/services/api.ts (new API methods)
+  - backend/Dockerfile (production verification)
+  - PRODUCTION_DEPLOYMENT_GUIDE.md (Tesseract docs)
+- **المخاطر/العوائق:**
+  - reportlab already in requirements.txt — can use for PDF export
+  - Tesseract binary not available in CI — tests must handle gracefully
+  - Time-series requires created_at data aggregation — may be limited with test data
+
+---
+
 ### الدفعة: 2026-04-17T12:34 — Contract Intelligence Operational Completion
 
 **قبل البدء:**
