@@ -60,6 +60,8 @@ logger = logging.getLogger("dummar.contract_intelligence")
 
 ALLOWED_DOC_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".csv", ".xlsx", ".xls", ".txt"}
 MAX_DOC_SIZE = 20 * 1024 * 1024  # 20MB
+MAX_IMPORT_ROWS = 500  # Safety limit for bulk import (CSV/Excel)
+BATCH_FAILURE_THRESHOLD = 0.5  # 50% — notify as batch_import_failed if failures exceed this
 
 
 # ─────────────────────────────────────────────────────────────
@@ -803,8 +805,8 @@ async def preview_csv_import(
                 warnings.append(f"عمود '{target}' لم يتم العثور عليه في الملف")
 
     for i, row in enumerate(reader, start=1):
-        if i > 500:  # Safety limit
-            warnings.append("تم الاقتصار على 500 صف")
+        if i > MAX_IMPORT_ROWS:
+            warnings.append(f"تم الاقتصار على {MAX_IMPORT_ROWS} صف")
             break
 
         parsed = _map_csv_row(row, _COL_MAP)
@@ -883,7 +885,7 @@ async def execute_csv_import(
     successful = 0
 
     for i, row in enumerate(reader, start=1):
-        if i > 500:
+        if i > MAX_IMPORT_ROWS:
             break
 
         parsed = _map_csv_row(row, _COL_MAP)
@@ -942,7 +944,7 @@ async def execute_csv_import(
     # Send batch completion notification
     try:
         failed_count = len(documents) - successful
-        if failed_count > len(documents) * 0.5 and len(documents) > 0:
+        if failed_count > len(documents) * BATCH_FAILURE_THRESHOLD and len(documents) > 0:
             notify_intelligence_processing_complete(
                 db, event="batch_import_failed",
                 batch_id=batch_id,
@@ -1044,7 +1046,7 @@ async def bulk_scan_import(
     # Send batch completion notification
     try:
         total_failed = len(documents) - successful + len(errors)
-        if total_failed > len(documents) * 0.5 and len(documents) > 0:
+        if total_failed > len(documents) * BATCH_FAILURE_THRESHOLD and len(documents) > 0:
             notify_intelligence_processing_complete(
                 db, event="batch_import_failed",
                 batch_id=batch_id,
@@ -1272,8 +1274,8 @@ def _parse_excel_rows(content: bytes) -> tuple:
 
     rows = []
     for i, row in enumerate(rows_iter, start=1):
-        if i > 500:
-            warnings.append("تم الاقتصار على 500 صف")
+        if i > MAX_IMPORT_ROWS:
+            warnings.append(f"تم الاقتصار على {MAX_IMPORT_ROWS} صف")
             break
         row_dict = {}
         for j, cell in enumerate(row):
@@ -1438,7 +1440,7 @@ async def execute_excel_import(
     # Send batch completion notification
     try:
         failed_count = len(documents) - successful
-        if failed_count > len(documents) * 0.5 and len(documents) > 0:
+        if failed_count > len(documents) * BATCH_FAILURE_THRESHOLD and len(documents) > 0:
             notify_intelligence_processing_complete(
                 db, event="batch_import_failed",
                 batch_id=batch_id,
