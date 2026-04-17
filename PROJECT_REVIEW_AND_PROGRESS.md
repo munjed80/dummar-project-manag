@@ -11,6 +11,47 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T23:28 — Location Enhancement Batch (CRUD, Migration, Auto-assign, Map, CSV)
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T23:28
+- **فهم النظام الحالي:**
+  - 244 اختبار ناجح (121 API+E2E + 86 contract intelligence + 37 locations), بناء الواجهة ناجح
+  - Unified Location model exists with parent-child hierarchy (island, sector, block, building, tower, street, service_point, other)
+  - Location CRUD API fully functional (19 endpoints)
+  - Frontend has LocationsListPage (tree+table), LocationDetailPage (dossier), LocationReportsPage
+  - Complaints/Tasks have location_id FK (nullable), but no auto-assignment logic
+  - Legacy Area/Building/Street tables still exist for backward compatibility
+  - No Area→Location migration path yet
+  - No frontend create/edit forms for locations (only backend API)
+  - No interactive map on location detail page
+  - No CSV export for location reports
+- **أهداف الدفعة:**
+  1. Area → Location migration script (safe, repeatable)
+  2. Location CRUD forms (create/edit UI with all fields)
+  3. Auto-location assignment for complaints/tasks (infer from coordinates/hierarchy)
+  4. Interactive Leaflet map on location detail page
+  5. CSV export for location reports
+- **الملفات المتوقع تعديلها:**
+  - `backend/app/scripts/migrate_areas_to_locations.py` (new)
+  - `backend/app/api/locations.py` (add CSV export, auto-assign endpoint)
+  - `backend/app/schemas/location.py` (add auto-assign schema)
+  - `backend/app/schemas/complaint.py` (add location_id)
+  - `backend/app/schemas/task.py` (add location_id)
+  - `backend/app/api/complaints.py` (auto-assign on create)
+  - `backend/app/api/tasks.py` (auto-assign on create)
+  - `src/pages/LocationsListPage.tsx` (add create button/dialog)
+  - `src/pages/LocationDetailPage.tsx` (add map, edit button)
+  - `src/pages/LocationReportsPage.tsx` (add CSV export)
+  - `src/services/api.ts` (add new API methods)
+  - `backend/tests/test_locations.py` (new tests)
+- **المخاطر:**
+  - Migration must not destroy existing area data
+  - Auto-assignment must not silently force wrong locations
+  - Leaflet map must use real data from backend
+
+---
+
 ### الدفعة: 2026-04-17T22:59 — Locations Operational Geography Engine
 
 **قبل البدء:**
