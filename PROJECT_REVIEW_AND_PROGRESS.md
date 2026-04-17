@@ -11,6 +11,48 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-17T21:21 — Real VPS Deployment, SSL/TLS, SMTP Verification, OCR Verification & Production Polish
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T21:21
+- **فهم النظام الحالي:**
+  - 205 اختبار ناجح (76 API + 43 E2E + 86 contract intelligence)، بناء الواجهة ناجح
+  - Docker deployment stack exists (db + backend + nginx) with memory limits, health checks, restart policies
+  - Dockerfile has Tesseract, Arabic fonts, non-root user, healthcheck
+  - entrypoint.sh has DB wait, auto-migration, OCR/font verification
+  - nginx.conf has rate limiting, gzip, SPA routing, but HTTP only (no SSL)
+  - SMTP path hardened but never tested with real SMTP server
+  - OCR path implemented with TesseractEngine but Arabic scanned files not tested in current environment
+  - Production deployment guide exists but lacks SSL/TLS setup, deployment scripts, and some operational details
+  - No certbot/Let's Encrypt integration
+  - No deployment automation scripts
+- **أهداف الدفعة:**
+  1. Real VPS deployment readiness — improve Dockerfile, docker-compose, entrypoint, nginx, add deploy script
+  2. SSL/TLS setup path with Let's Encrypt — certbot script, nginx SSL config, domain docs
+  3. Real SMTP verification path — startup visibility, production test procedure, env docs
+  4. Real Arabic scanned OCR verification — test Tesseract in runtime with Arabic text
+  5. Final production-oriented verification and documentation polish
+- **الملفات المتوقع تعديلها:**
+  - docker-compose.yml (SSL support, certbot)
+  - nginx.conf (SSL config)
+  - backend/Dockerfile (improvements)
+  - backend/entrypoint.sh (SMTP startup check)
+  - backend/app/api/health.py (OCR verification endpoint)
+  - deploy.sh (new — deployment automation)
+  - ssl-setup.sh (new — Let's Encrypt setup)
+  - nginx-ssl.conf (new — SSL nginx config)
+  - PRODUCTION_DEPLOYMENT_GUIDE.md (SSL, SMTP, deployment improvements)
+  - PROJECT_REVIEW_AND_PROGRESS.md (batch log)
+  - HANDOFF_STATUS.md (update)
+- **المخاطر/العوائق:**
+  - Cannot issue real SSL certificate without real domain/DNS
+  - Cannot test real SMTP without live SMTP server
+  - Tesseract binary available in this environment for verification
+  - Full deployment can only be verified in a real VPS environment
+  - Docker compose up cannot run in this CI environment
+
+---
+
 ### الدفعة: 2026-04-17T14:08 — Arabic PDF Export, Deployment Hardening & Tesseract Verification
 
 **قبل البدء:**
