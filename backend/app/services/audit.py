@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
 from typing import Optional
+from fastapi import Request
 
 
 def write_audit_log(
@@ -12,7 +13,15 @@ def write_audit_log(
     description: Optional[str] = None,
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
+    request: Optional[Request] = None,
 ):
+    # Auto-extract IP and user_agent from Request if provided
+    if request is not None:
+        if ip_address is None:
+            ip_address = request.client.host if request.client else None
+        if user_agent is None:
+            user_agent = request.headers.get("user-agent", "")[:500]
+
     log = AuditLog(
         user_id=user_id,
         action=action,

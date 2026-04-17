@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
@@ -42,6 +42,7 @@ def generate_qr_code(contract_id: int) -> str:
 @router.post("/", response_model=ContractResponse)
 def create_contract(
     contract: ContractCreate,
+    request: Request,
     current_user: User = Depends(get_current_contracts_manager),
     db: Session = Depends(get_db)
 ):
@@ -76,7 +77,7 @@ def create_contract(
     db.add(approval)
     db.commit()
     
-    write_audit_log(db, action="contract_create", entity_type="contract", entity_id=db_contract.id, user_id=current_user.id, description=f"Contract {db_contract.contract_number} created")
+    write_audit_log(db, action="contract_create", entity_type="contract", entity_id=db_contract.id, user_id=current_user.id, description=f"Contract {db_contract.contract_number} created", request=request)
     
     return db_contract
 
@@ -148,6 +149,7 @@ def get_contract(
 def update_contract(
     contract_id: int,
     contract_update: ContractUpdate,
+    request: Request,
     current_user: User = Depends(get_current_contracts_manager),
     db: Session = Depends(get_db)
 ):
@@ -167,7 +169,7 @@ def update_contract(
     db.commit()
     db.refresh(contract)
     
-    write_audit_log(db, action="contract_update", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} updated")
+    write_audit_log(db, action="contract_update", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} updated", request=request)
     
     return contract
 
@@ -176,6 +178,7 @@ def update_contract(
 def approve_contract(
     contract_id: int,
     approval_request: ContractApprovalRequest,
+    request: Request,
     current_user: User = Depends(get_current_contracts_manager),
     db: Session = Depends(get_db)
 ):
@@ -208,7 +211,7 @@ def approve_contract(
     db.add(approval)
     db.commit()
     
-    write_audit_log(db, action=f"contract_{approval_request.action}", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} - action: {approval_request.action}")
+    write_audit_log(db, action=f"contract_{approval_request.action}", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} - action: {approval_request.action}", request=request)
 
     # Send notifications for contract status changes
     try:
@@ -257,6 +260,7 @@ def get_contract_approvals(
 @router.delete("/{contract_id}")
 def delete_contract(
     contract_id: int,
+    request: Request,
     current_user: User = Depends(get_current_contracts_manager),
     db: Session = Depends(get_db)
 ):
@@ -270,7 +274,7 @@ def delete_contract(
             detail="Only draft contracts can be deleted",
         )
     
-    write_audit_log(db, action="contract_delete", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} deleted")
+    write_audit_log(db, action="contract_delete", entity_type="contract", entity_id=contract.id, user_id=current_user.id, description=f"Contract {contract.contract_number} deleted", request=request)
     
     db.delete(contract)
     db.commit()

@@ -190,6 +190,7 @@ def get_complaint(
 def update_complaint(
     complaint_id: int,
     complaint_update: ComplaintUpdate,
+    request: Request,
     current_user: User = Depends(_complaint_managers),
     db: Session = Depends(get_db)
 ):
@@ -239,7 +240,7 @@ def update_complaint(
         except Exception:
             pass  # Don't block the update if notification fails
     
-    write_audit_log(db, action="complaint_update", entity_type="complaint", entity_id=complaint.id, user_id=current_user.id, description=f"Complaint {complaint.tracking_number} updated")
+    write_audit_log(db, action="complaint_update", entity_type="complaint", entity_id=complaint.id, user_id=current_user.id, description=f"Complaint {complaint.tracking_number} updated", request=request)
     
     return complaint
 

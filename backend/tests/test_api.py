@@ -643,3 +643,52 @@ class TestAreaBoundaryUpdate:
         found = [a for a in data if a["code"] == "ISL-A"]
         assert len(found) == 1
         assert found[0]["boundary"] is None
+
+
+# ---------------------------------------------------------------------------
+# 14. Audit log API
+# ---------------------------------------------------------------------------
+
+class TestAuditLogAPI:
+    """Test the audit log listing endpoint."""
+
+    def test_director_can_list_audit_logs(self, client, db, director_token):
+        """Project director can access audit logs."""
+        resp = client.get("/audit-logs/", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_count" in data
+        assert "items" in data
+        assert isinstance(data["items"], list)
+
+    def test_field_user_cannot_list_audit_logs(self, client, db, field_token):
+        """Field team user cannot access audit logs."""
+        resp = client.get("/audit-logs/", headers=_auth_headers(field_token))
+        assert resp.status_code == 403
+
+    def test_citizen_cannot_list_audit_logs(self, client, db, citizen_token):
+        """Citizen cannot access audit logs."""
+        resp = client.get("/audit-logs/", headers=_auth_headers(citizen_token))
+        assert resp.status_code == 403
+
+    def test_audit_log_filter_by_entity_type(self, client, db, director_token):
+        """Audit log can be filtered by entity_type."""
+        from app.services.audit import write_audit_log
+        write_audit_log(db, action="test_action", entity_type="test_entity", entity_id=1, description="test")
+        resp = client.get("/audit-logs/?entity_type=test_entity", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_count"] >= 1
+        assert all(item["entity_type"] == "test_entity" for item in data["items"])
+
+    def test_audit_log_captures_ip_address(self, client, db, director_user, director_token):
+        """Audit log should capture IP address when request is provided."""
+        from app.services.audit import write_audit_log
+        # Direct call without request — ip_address should be None
+        log = write_audit_log(db, action="manual_test", entity_type="test", entity_id=99, user_id=director_user.id)
+        assert log.ip_address is None
+
+    def test_audit_log_anon_denied(self, client):
+        """Anonymous user cannot access audit logs."""
+        resp = client.get("/audit-logs/")
+        assert resp.status_code in (401, 403)

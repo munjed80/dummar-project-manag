@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
@@ -116,6 +116,7 @@ def get_task(
 def update_task(
     task_id: int,
     task_update: TaskUpdate,
+    request: Request,
     current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
@@ -171,7 +172,7 @@ def update_task(
         except Exception:
             pass
     
-    write_audit_log(db, action="task_update", entity_type="task", entity_id=task.id, user_id=current_user.id, description=f"Task {task.id} updated")
+    write_audit_log(db, action="task_update", entity_type="task", entity_id=task.id, user_id=current_user.id, description=f"Task {task.id} updated", request=request)
     
     return task
 
