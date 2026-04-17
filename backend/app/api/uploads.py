@@ -12,7 +12,7 @@ router = APIRouter(prefix="/uploads", tags=["uploads"])
 limiter = Limiter(key_func=get_remote_address)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
-ALLOWED_CATEGORIES = {"general", "contracts", "complaints", "tasks", "profiles"}
+ALLOWED_CATEGORIES = {"general", "contracts", "complaints", "tasks", "profiles", "contract_intelligence"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Extensions allowed for public (anonymous) complaint attachments
