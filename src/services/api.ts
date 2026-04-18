@@ -407,6 +407,42 @@ class ApiService {
     return response.blob();
   }
 
+  async getContractLocations(contractId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/contracts/${contractId}/locations`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch contract locations');
+    return response.json();
+  }
+
+  async linkContractToLocation(contractId: number, locationId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to link contract to location');
+    }
+    return response.json();
+  }
+
+  async unlinkContractFromLocation(contractId: number, locationId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to unlink contract from location');
+    }
+    return response.json();
+  }
+
+  async getGeoDashboard(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/geo-dashboard`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch geo dashboard');
+    return response.json();
+  }
+
   // ── Users ──
   async getUsers(params?: { search?: string; role_filter?: string; is_active?: boolean; skip?: number; limit?: number }): Promise<PaginatedResponse<User>> {
     const qp = new URLSearchParams();

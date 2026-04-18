@@ -11,6 +11,42 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-18T00:11 — Advanced Location Operations Batch (Boundary Editor, Geo Dashboard, Contract-Location UI, Notifications, Haversine)
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-18T00:11
+- **فهم النظام الحالي:**
+  - 257 اختبار ناجح (121 API+E2E + 86 contract intelligence + 50 locations), بناء الواجهة ناجح
+  - Location model fully functional with hierarchy, CRUD forms, CSV export, map-data
+  - Auto-location assignment exists using Euclidean distance (~550m) — not Haversine
+  - ContractLocation many-to-many exists in API but no UI in ContractDetailsPage
+  - Boundary polygon field exists in model (boundary_path as JSON) but no editor
+  - Notification system exists (6 types) but no location-specific notifications
+  - No geo dashboard page aggregating spatial operational data
+- **أهداف الدفعة:**
+  1. Enhanced auto-assign: Haversine formula for accurate distance + fuzzy text matching
+  2. Location-based notifications: notify when locations become hotspots, locations assigned
+  3. Contract-location linking UI from ContractDetailsPage
+  4. Boundary polygon editor in LocationFormDialog with map click
+  5. Geo dashboard: operational geography overview with map + stats
+- **الملفات المتوقع تعديلها:**
+  - `backend/app/services/location_service.py` — Haversine + fuzzy text
+  - `backend/app/services/notification_service.py` — location notifications
+  - `backend/app/models/notification.py` — new LOCATION_ALERT type
+  - `backend/app/api/locations.py` — geo dashboard endpoint, contract locations for contract
+  - `src/pages/ContractDetailsPage.tsx` — location linking UI
+  - `src/components/LocationFormDialog.tsx` — boundary polygon editor
+  - `src/pages/GeoDashboardPage.tsx` — new geo dashboard page
+  - `src/App.tsx` — new route
+  - `src/services/api.ts` — new API methods
+  - `backend/tests/test_locations.py` — new tests
+- **المخاطر:**
+  - Haversine change must not break existing auto-assign tests
+  - Boundary editor must be practical, not over-engineered
+  - Geo dashboard must use real backend data
+
+---
+
 ### الدفعة: 2026-04-17T23:28 — Location Enhancement Batch (CRUD, Migration, Auto-assign, Map, CSV)
 
 **قبل البدء:**

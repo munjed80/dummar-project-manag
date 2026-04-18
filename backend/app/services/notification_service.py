@@ -281,3 +281,70 @@ def notify_intelligence_processing_complete(
         )
     except Exception:
         logger.exception("Failed to send intelligence notification (event=%s)", event)
+
+
+# ─────────────────────────────────────────────────────────────
+# Location Notifications
+# ─────────────────────────────────────────────────────────────
+
+def notify_location_event(
+    db: Session,
+    event: str,
+    location_id: int,
+    location_name: str,
+    details: Optional[str] = None,
+):
+    """
+    Send notification for location-related events.
+
+    Events:
+    - hotspot_detected: location became a hotspot (≥5 open complaints)
+    - location_created: new location created
+    - location_updated: location data changed
+    - location_contract_linked: contract linked to location
+    - location_contract_unlinked: contract unlinked from location
+
+    Notifies project_director, area_supervisor, and engineer_supervisor.
+    Failures never break the calling workflow.
+    """
+    try:
+        event_labels = {
+            "hotspot_detected": "تم اكتشاف نقطة ساخنة",
+            "location_created": "تم إنشاء موقع جديد",
+            "location_updated": "تم تحديث بيانات موقع",
+            "location_contract_linked": "تم ربط عقد بموقع",
+            "location_contract_unlinked": "تم فك ربط عقد من موقع",
+        }
+
+        title = event_labels.get(event, "تحديث الموقع")
+        message = f"{title}: {location_name}"
+        if details:
+            message = f"{message} — {details}"
+
+        # Notify relevant roles
+        managers = db.query(User.id).filter(
+            User.role.in_([
+                UserRole.PROJECT_DIRECTOR,
+                UserRole.AREA_SUPERVISOR,
+                UserRole.ENGINEER_SUPERVISOR,
+            ]),
+            User.is_active == 1,
+        ).all()
+
+        for (uid,) in managers:
+            create_notification(
+                db=db,
+                user_id=uid,
+                notification_type=NotificationType.LOCATION_ALERT,
+                title=title,
+                message=message,
+                entity_type="location",
+                entity_id=location_id,
+            )
+
+        logger.info(
+            "Sent %d location notifications: event=%s, location_id=%d",
+            len(managers), event, location_id,
+        )
+    except Exception:
+        logger.exception("Failed to send location notification (event=%s)", event)

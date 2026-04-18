@@ -45,6 +45,7 @@ from app.schemas.location import (
 )
 from app.api.deps import get_current_user, get_current_internal_user
 from app.services.audit import write_audit_log
+from app.services.notification_service import notify_location_event
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 logger = logging.getLogger("dummar.locations")
@@ -96,6 +97,11 @@ def create_location(
         entity_id=loc.id, user_id=current_user.id,
         description=f"Location '{loc.name}' ({loc.location_type}) created",
         request=request,
+    )
+
+    notify_location_event(
+        db, event="location_created",
+        location_id=loc.id, location_name=loc.name,
     )
 
     return loc
@@ -773,6 +779,12 @@ def link_contract_to_location(
         request=request,
     )
 
+    notify_location_event(
+        db, event="location_contract_linked",
+        location_id=location_id, location_name=loc.name,
+        details=f"عقد #{contract_id}",
+    )
+
     return {"message": "Contract linked to location", "id": link.id}
 
 
@@ -1012,6 +1024,208 @@ def get_location_map_data(
         "children": children_points,
         "complaints": complaint_markers,
         "tasks": task_markers,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Contract locations by contract (for contract detail UI)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/contracts/{contract_id}/locations")
+def get_contract_locations(
+    contract_id: int,
+    current_user: User = Depends(get_current_internal_user),
+    db: Session = Depends(get_db),
+):
+    """Get all locations linked to a specific contract."""
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    links = (
+        db.query(ContractLocation)
+        .filter(ContractLocation.contract_id == contract_id)
+        .all()
+    )
+
+    locations = []
+    for link in links:
+        loc = db.query(Location).filter(Location.id == link.location_id).first()
+        if loc:
+            lt = loc.location_type.value if hasattr(loc.location_type, 'value') else str(loc.location_type)
+            st = loc.status.value if hasattr(loc.status, 'value') else str(loc.status)
+            locations.append({
+                "id": loc.id,
+                "name": loc.name,
+                "code": loc.code,
+                "location_type": lt,
+                "status": st,
+                "latitude": loc.latitude,
+                "longitude": loc.longitude,
+                "link_id": link.id,
+                "linked_at": str(link.created_at) if link.created_at else None,
+            })
+
+    return {"contract_id": contract_id, "locations": locations}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Geo Dashboard — operational geography overview
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/geo-dashboard")
+def get_geo_dashboard(
+    current_user: User = Depends(get_current_internal_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Aggregated geo-dashboard data for the operational map overview.
+
+    Returns:
+    - summary: counts by type, status, total
+    - hotspots: locations with >= 5 open complaints
+    - all_locations: all active locations with coordinates and operational counts
+    - recent_complaints: latest geo-located complaints
+    - recent_tasks: latest geo-located tasks
+    """
+    today = date.today()
+
+    # Summary
+    total = db.query(func.count(Location.id)).filter(Location.is_active == 1).scalar() or 0
+    by_type = {}
+    for lt in LocationType:
+        cnt = db.query(func.count(Location.id)).filter(
+            Location.is_active == 1, Location.location_type == lt
+        ).scalar() or 0
+        if cnt > 0:
+            by_type[lt.value] = cnt
+
+    by_status = {}
+    for ls in LocationStatus:
+        cnt = db.query(func.count(Location.id)).filter(
+            Location.is_active == 1, Location.status == ls
+        ).scalar() or 0
+        if cnt > 0:
+            by_status[ls.value] = cnt
+
+    # All active locations with operational counts
+    locations = db.query(Location).filter(Location.is_active == 1).all()
+    all_locations = []
+    hotspots = []
+
+    for loc in locations:
+        lt = loc.location_type.value if hasattr(loc.location_type, 'value') else str(loc.location_type)
+        st = loc.status.value if hasattr(loc.status, 'value') else str(loc.status)
+
+        occ = db.query(func.count(Complaint.id)).filter(
+            Complaint.location_id == loc.id,
+            Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]),
+        ).scalar() or 0
+
+        otc = db.query(func.count(Task.id)).filter(
+            Task.location_id == loc.id,
+            Task.status.in_([s.value for s in _OPEN_TASK_STATUSES]),
+        ).scalar() or 0
+
+        dtc = db.query(func.count(Task.id)).filter(
+            Task.location_id == loc.id,
+            Task.status.in_([s.value for s in _OPEN_TASK_STATUSES]),
+            Task.due_date.isnot(None),
+            Task.due_date < today,
+        ).scalar() or 0
+
+        acc = (
+            db.query(func.count(ContractLocation.id))
+            .join(Contract, Contract.id == ContractLocation.contract_id)
+            .filter(
+                ContractLocation.location_id == loc.id,
+                Contract.status.in_([s.value for s in _ACTIVE_CONTRACT_STATUSES]),
+            )
+            .scalar() or 0
+        )
+
+        entry = {
+            "id": loc.id,
+            "name": loc.name,
+            "code": loc.code,
+            "location_type": lt,
+            "status": st,
+            "latitude": loc.latitude,
+            "longitude": loc.longitude,
+            "parent_id": loc.parent_id,
+            "open_complaints": occ,
+            "open_tasks": otc,
+            "delayed_tasks": dtc,
+            "active_contracts": acc,
+            "is_hotspot": occ >= _HOTSPOT_THRESHOLD,
+        }
+        all_locations.append(entry)
+        if occ >= _HOTSPOT_THRESHOLD:
+            hotspots.append(entry)
+
+    # Sort hotspots by open complaints desc
+    hotspots.sort(key=lambda x: x["open_complaints"], reverse=True)
+
+    # Recent geo-located complaints (last 50)
+    recent_complaints = (
+        db.query(Complaint)
+        .filter(
+            Complaint.latitude.isnot(None),
+            Complaint.longitude.isnot(None),
+        )
+        .order_by(Complaint.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    complaint_markers = [
+        {
+            "id": c.id,
+            "latitude": c.latitude,
+            "longitude": c.longitude,
+            "title": c.description[:60] if c.description else "",
+            "tracking_number": c.tracking_number,
+            "status": c.status.value if c.status else None,
+            "entity_type": "complaint",
+            "location_id": c.location_id,
+        }
+        for c in recent_complaints
+    ]
+
+    # Recent geo-located tasks (last 50)
+    recent_tasks = (
+        db.query(Task)
+        .filter(
+            Task.latitude.isnot(None),
+            Task.longitude.isnot(None),
+        )
+        .order_by(Task.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    task_markers = [
+        {
+            "id": t.id,
+            "latitude": t.latitude,
+            "longitude": t.longitude,
+            "title": t.title[:60] if t.title else "",
+            "reference": f"TSK-{t.id}",
+            "status": t.status.value if t.status else None,
+            "entity_type": "task",
+            "location_id": t.location_id,
+        }
+        for t in recent_tasks
+    ]
+
+    return {
+        "summary": {
+            "total_locations": total,
+            "by_type": by_type,
+            "by_status": by_status,
+        },
+        "hotspots": hotspots,
+        "all_locations": all_locations,
+        "recent_complaints": complaint_markers,
+        "recent_tasks": task_markers,
     }
 
 
