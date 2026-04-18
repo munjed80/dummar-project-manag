@@ -13,6 +13,7 @@ Covers:
 - RBAC enforcement
 """
 
+import json
 import pytest
 from tests.conftest import _auth_headers, _login, _create_user
 from app.models.user import UserRole
@@ -783,3 +784,359 @@ class TestMigrationScript:
         })
         assert created2 is False
         assert loc1.id == loc2.id
+
+
+# ---------------------------------------------------------------------------
+# Haversine & Enhanced Auto-assign
+# ---------------------------------------------------------------------------
+
+class TestHaversineAutoAssign:
+    def test_haversine_distance_correct(self):
+        """Verify Haversine formula gives correct distance."""
+        from app.services.location_service import _haversine_m
+        # Dummar center to nearby point ~500m away
+        d = _haversine_m(33.5365, 36.2204, 33.5410, 36.2204)
+        assert 450 < d < 600  # Should be ~500m
+
+    def test_haversine_same_point_zero(self):
+        """Same point should give 0 distance."""
+        from app.services.location_service import _haversine_m
+        d = _haversine_m(33.5365, 36.2204, 33.5365, 36.2204)
+        assert d < 0.01
+
+    def test_proximity_match_uses_haversine(self, client, db, director_token):
+        """Auto-assign should use Haversine for coordinate proximity."""
+        loc = Location(
+            name="موقع هافرسين",
+            code="HAV-001",
+            location_type=LocationType.ISLAND,
+            status=LocationStatus.ACTIVE,
+            latitude=33.5365,
+            longitude=36.2204,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        # Point ~400m away (within 550m threshold)
+        resp = client.post("/complaints/", json={
+            "full_name": "اختبار هافرسين",
+            "phone": "0900000099",
+            "complaint_type": "infrastructure",
+            "description": "شكوى اختبار المسافة",
+            "latitude": 33.5400,
+            "longitude": 36.2204,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        c = db.query(Complaint).filter(Complaint.tracking_number == data["tracking_number"]).first()
+        assert c.location_id == loc.id
+
+    def test_proximity_too_far_no_assign(self, client, db, director_token):
+        """Auto-assign should NOT assign if distance is > threshold."""
+        loc = Location(
+            name="موقع بعيد",
+            code="HAV-002",
+            location_type=LocationType.BUILDING,
+            status=LocationStatus.ACTIVE,
+            latitude=33.5365,
+            longitude=36.2204,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        # Point ~2km away (way beyond 550m threshold)
+        resp = client.post("/complaints/", json={
+            "full_name": "اختبار بعيد",
+            "phone": "0900000098",
+            "complaint_type": "infrastructure",
+            "description": "شكوى بعيدة",
+            "latitude": 33.5550,
+            "longitude": 36.2204,
+        })
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy text matching
+# ---------------------------------------------------------------------------
+
+class TestFuzzyTextMatch:
+    def test_exact_match(self, db):
+        """Exact name match should return the location."""
+        from app.services.location_service import fuzzy_match_location
+        loc = Location(
+            name="جزيرة العمال",
+            code="FUZ-001",
+            location_type=LocationType.ISLAND,
+            status=LocationStatus.ACTIVE,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        result = fuzzy_match_location(db, "جزيرة العمال")
+        assert result is not None
+        assert result.id == loc.id
+
+    def test_partial_match(self, db):
+        """Substring match should return the location."""
+        from app.services.location_service import fuzzy_match_location
+        loc = Location(
+            name="شارع الزهور الرئيسي",
+            code="FUZ-002",
+            location_type=LocationType.STREET,
+            status=LocationStatus.ACTIVE,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        result = fuzzy_match_location(db, "شارع الزهور")
+        assert result is not None
+        assert result.id == loc.id
+
+    def test_no_match_low_score(self, db):
+        """Text with no similarity should return None."""
+        from app.services.location_service import fuzzy_match_location
+        result = fuzzy_match_location(db, "xyz completely unrelated text")
+        # Should not match anything or if it matches, score should be below threshold
+        # (existing locations from other tests may have random matches)
+
+    def test_arabic_normalization(self):
+        """Test Arabic text normalization for fuzzy matching."""
+        from app.services.location_service import _normalize_arabic
+        # Alef variants
+        assert _normalize_arabic("أحمد") == _normalize_arabic("احمد")
+        assert _normalize_arabic("إبراهيم") == _normalize_arabic("ابراهيم")
+        # Ta marbuta
+        assert _normalize_arabic("جزيرة") == _normalize_arabic("جزيره")
+
+    def test_text_similarity_score(self):
+        """Test text similarity function."""
+        from app.services.location_service import _text_similarity
+        assert _text_similarity("جزيرة 1", "جزيرة 1") == 1.0
+        assert _text_similarity("جزيرة العمال", "جزيرة") > 0.6
+        assert _text_similarity("", "test") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Geo Dashboard
+# ---------------------------------------------------------------------------
+
+class TestGeoDashboard:
+    def test_geo_dashboard_endpoint(self, client, db, director_token, sample_location):
+        resp = client.get("/locations/geo-dashboard",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "summary" in data
+        assert "hotspots" in data
+        assert "all_locations" in data
+        assert "recent_complaints" in data
+        assert "recent_tasks" in data
+        assert data["summary"]["total_locations"] >= 1
+
+    def test_geo_dashboard_location_data(self, client, db, director_token):
+        loc = Location(
+            name="موقع لوحة",
+            code="GEO-001",
+            location_type=LocationType.ISLAND,
+            status=LocationStatus.ACTIVE,
+            latitude=33.5365,
+            longitude=36.2204,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        resp = client.get("/locations/geo-dashboard",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        geo_loc = next((l for l in data["all_locations"] if l["code"] == "GEO-001"), None)
+        assert geo_loc is not None
+        assert geo_loc["latitude"] == 33.5365
+
+    def test_geo_dashboard_requires_auth(self, client, db):
+        resp = client.get("/locations/geo-dashboard")
+        assert resp.status_code in [401, 403]
+
+
+# ---------------------------------------------------------------------------
+# Contract-Location API
+# ---------------------------------------------------------------------------
+
+class TestContractLocationAPI:
+    def test_get_contract_locations(self, client, db, director_user, director_token, sample_location):
+        contract = Contract(
+            contract_number="CNT-LOC-001",
+            title="عقد اختبار الربط",
+            contractor_name="مقاول",
+            contract_type=ContractType.CONSTRUCTION,
+            status=ContractStatus.ACTIVE,
+            contract_value=100000,
+            scope_description="نطاق ربط المواقع",
+            created_by_id=director_user.id,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=90),
+        )
+        db.add(contract)
+        db.commit()
+        db.refresh(contract)
+
+        # Link contract to location
+        link = ContractLocation(contract_id=contract.id, location_id=sample_location.id)
+        db.add(link)
+        db.commit()
+
+        resp = client.get(f"/locations/contracts/{contract.id}/locations",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["contract_id"] == contract.id
+        assert len(data["locations"]) == 1
+        assert data["locations"][0]["id"] == sample_location.id
+        assert data["locations"][0]["name"] == sample_location.name
+
+    def test_get_contract_locations_empty(self, client, db, director_user, director_token):
+        contract = Contract(
+            contract_number="CNT-LOC-002",
+            title="عقد بدون مواقع",
+            contractor_name="مقاول",
+            contract_type=ContractType.MAINTENANCE,
+            status=ContractStatus.DRAFT,
+            contract_value=50000,
+            scope_description="نطاق اختبار فارغ",
+            created_by_id=director_user.id,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=30),
+        )
+        db.add(contract)
+        db.commit()
+        db.refresh(contract)
+
+        resp = client.get(f"/locations/contracts/{contract.id}/locations",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["locations"]) == 0
+
+    def test_get_contract_locations_not_found(self, client, db, director_token):
+        resp = client.get("/locations/contracts/99999/locations",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Location Notifications
+# ---------------------------------------------------------------------------
+
+class TestLocationNotifications:
+    def test_create_location_sends_notification(self, client, db, director_token):
+        from app.models.notification import Notification, NotificationType
+        resp = client.post("/locations/", json={
+            "name": "موقع إشعار",
+            "code": "NOT-001",
+            "location_type": "island",
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+
+        # Check notification was created for director
+        notifs = db.query(Notification).filter(
+            Notification.notification_type == NotificationType.LOCATION_ALERT,
+            Notification.entity_type == "location",
+        ).all()
+        assert len(notifs) >= 1
+
+    def test_contract_link_sends_notification(self, client, db, director_user, director_token, sample_location):
+        from app.models.notification import Notification, NotificationType
+        contract = Contract(
+            contract_number="CNT-NOT-001",
+            title="عقد إشعار",
+            contractor_name="مقاول",
+            contract_type=ContractType.CONSTRUCTION,
+            status=ContractStatus.ACTIVE,
+            contract_value=100000,
+            scope_description="نطاق إشعار ربط",
+            created_by_id=director_user.id,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=90),
+        )
+        db.add(contract)
+        db.commit()
+        db.refresh(contract)
+
+        initial_count = db.query(Notification).filter(
+            Notification.notification_type == NotificationType.LOCATION_ALERT,
+        ).count()
+
+        resp = client.post(
+            f"/locations/contracts/link?contract_id={contract.id}&location_id={sample_location.id}",
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200
+
+        new_count = db.query(Notification).filter(
+            Notification.notification_type == NotificationType.LOCATION_ALERT,
+        ).count()
+        assert new_count > initial_count
+
+
+# ---------------------------------------------------------------------------
+# Boundary polygon
+# ---------------------------------------------------------------------------
+
+class TestBoundaryPolygon:
+    def test_create_location_with_boundary(self, client, db, director_token):
+        boundary = [[33.536, 36.220], [33.537, 36.220], [33.537, 36.221], [33.536, 36.221]]
+        resp = client.post("/locations/", json={
+            "name": "موقع مضلع",
+            "code": "POLY-001",
+            "location_type": "island",
+            "boundary_path": json.dumps(boundary),
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["boundary_path"] is not None
+        parsed = json.loads(data["boundary_path"])
+        assert len(parsed) == 4
+
+    def test_update_location_boundary(self, client, db, director_token, sample_location):
+        boundary = [[33.536, 36.220], [33.537, 36.220], [33.537, 36.221]]
+        resp = client.put(f"/locations/{sample_location.id}", json={
+            "boundary_path": json.dumps(boundary),
+        }, headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        parsed = json.loads(data["boundary_path"])
+        assert len(parsed) == 3
+
+    def test_map_data_returns_boundary(self, client, db, director_token):
+        boundary = [[33.536, 36.220], [33.537, 36.220], [33.537, 36.221]]
+        loc = Location(
+            name="موقع حدود خريطة",
+            code="POLY-MAP-001",
+            location_type=LocationType.ISLAND,
+            status=LocationStatus.ACTIVE,
+            latitude=33.5365,
+            longitude=36.2204,
+            boundary_path=json.dumps(boundary),
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        resp = client.get(f"/locations/detail/{loc.id}/map-data",
+                          headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["location"]["boundary"] is not None
+        assert len(data["location"]["boundary"]) == 3

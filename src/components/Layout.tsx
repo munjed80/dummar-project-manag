@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, Globe } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -45,6 +45,7 @@ export function Layout({ children }: LayoutProps) {
     { path: '/contracts', icon: FileText, label: 'العقود', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/contract-intelligence', icon: Brain, label: 'ذكاء العقود', roles: ['project_director', 'contracts_manager'] },
     { path: '/locations', icon: MapPin, label: 'المواقع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/locations/geo-dashboard', icon: Globe, label: 'لوحة جغرافية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
     { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },

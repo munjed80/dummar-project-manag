@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -10,8 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { apiService } from '@/services/api';
-import { Spinner } from '@phosphor-icons/react';
+import { Spinner, Trash, MapPin, Plus } from '@phosphor-icons/react';
 
 const LOCATION_TYPES = [
   { value: 'island', label: 'جزيرة' },
@@ -42,6 +43,7 @@ interface LocationFormData {
   longitude: string;
   is_active: boolean;
   metadata_json: string;
+  boundary_points: [number, number][];
 }
 
 interface LocationFormDialogProps {
@@ -63,6 +65,7 @@ const emptyForm: LocationFormData = {
   longitude: '',
   is_active: true,
   metadata_json: '',
+  boundary_points: [],
 };
 
 export function LocationFormDialog({
@@ -86,6 +89,12 @@ export function LocationFormDialog({
   useEffect(() => {
     if (!open) return;
     if (editData) {
+      let bp: [number, number][] = [];
+      if (editData.boundary_path) {
+        try {
+          bp = JSON.parse(editData.boundary_path);
+        } catch { /* ignore */ }
+      }
       setForm({
         name: editData.name || '',
         code: editData.code || '',
@@ -97,6 +106,7 @@ export function LocationFormDialog({
         longitude: editData.longitude != null ? String(editData.longitude) : '',
         is_active: editData.is_active === 1,
         metadata_json: editData.metadata_json || '',
+        boundary_points: bp,
       });
     } else {
       setForm({
@@ -123,6 +133,9 @@ export function LocationFormDialog({
       latitude: form.latitude ? parseFloat(form.latitude) : null,
       longitude: form.longitude ? parseFloat(form.longitude) : null,
       metadata_json: form.metadata_json.trim() || null,
+      boundary_path: form.boundary_points.length >= 3
+        ? JSON.stringify(form.boundary_points)
+        : null,
     };
 
     if (isEdit) {
@@ -278,6 +291,101 @@ export function LocationFormDialog({
                 className="text-left"
               />
             </div>
+          </div>
+
+          {/* Boundary Polygon Editor */}
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                <MapPin size={14} />
+                حدود المنطقة (مضلع)
+              </Label>
+              {form.boundary_points.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  {form.boundary_points.length} نقطة
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              أضف نقاط المضلع بإدخال الإحداثيات. يلزم 3 نقاط على الأقل لتشكيل مضلع.
+            </p>
+            {form.boundary_points.length > 0 && (
+              <div className="space-y-1 max-h-32 overflow-y-auto border rounded-lg p-2">
+                {form.boundary_points.map((pt, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground w-6">{idx + 1}.</span>
+                    <span className="font-mono">{pt[0].toFixed(6)}, {pt[1].toFixed(6)}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        const pts = [...form.boundary_points];
+                        pts.splice(idx, 1);
+                        setForm({ ...form, boundary_points: pts });
+                      }}
+                    >
+                      <Trash size={12} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                id="bp-lat"
+                type="number"
+                step="any"
+                placeholder="خط العرض"
+                dir="ltr"
+                className="text-left text-sm"
+              />
+              <Input
+                id="bp-lng"
+                type="number"
+                step="any"
+                placeholder="خط الطول"
+                dir="ltr"
+                className="text-left text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const latEl = document.getElementById('bp-lat') as HTMLInputElement;
+                  const lngEl = document.getElementById('bp-lng') as HTMLInputElement;
+                  const lat = parseFloat(latEl?.value || '');
+                  const lng = parseFloat(lngEl?.value || '');
+                  if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                    setForm({
+                      ...form,
+                      boundary_points: [...form.boundary_points, [lat, lng]],
+                    });
+                    if (latEl) latEl.value = '';
+                    if (lngEl) lngEl.value = '';
+                  } else {
+                    setError('إحداثيات نقطة المضلع غير صالحة');
+                  }
+                }}
+              >
+                <Plus size={14} className="ml-1" />
+                إضافة
+              </Button>
+            </div>
+            {form.boundary_points.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive text-xs justify-start"
+                onClick={() => setForm({ ...form, boundary_points: [] })}
+              >
+                <Trash size={12} className="ml-1" />
+                مسح جميع النقاط
+              </Button>
+            )}
           </div>
 
           {/* Metadata */}

@@ -1,29 +1,26 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-17T23:55
+## آخر تحديث: 2026-04-18T00:30
 
 ---
 
-## الدفعة الحالية: 2026-04-17T23:28 — Location Enhancement Batch (CRUD, Migration, Auto-assign, Map, CSV)
+## الدفعة الحالية: 2026-04-18T00:11 — Advanced Location Operations Batch (Boundary Editor, Geo Dashboard, Contract-Location UI, Notifications, Haversine)
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |
 |---|---|
-| `backend/app/scripts/migrate_areas_to_locations.py` | جديد: سكريبت هجرة Area→Location (آمن، قابل للتكرار، غير مدمّر) |
-| `backend/app/services/location_service.py` | جديد: خدمة استدلال الموقع التلقائي (explicit → area mapping → coordinates) |
-| `backend/app/api/locations.py` | إضافة: CSV export endpoint + map-data endpoint |
-| `backend/app/api/complaints.py` | إضافة: auto-location assignment عند إنشاء شكوى |
-| `backend/app/api/tasks.py` | إضافة: auto-location assignment عند إنشاء مهمة |
-| `backend/app/schemas/complaint.py` | إضافة: حقل location_id في ComplaintCreate |
-| `backend/app/schemas/task.py` | إضافة: حقل location_id في TaskCreate |
-| `src/components/LocationFormDialog.tsx` | جديد: نموذج إنشاء/تحرير شامل مع تحقق |
-| `src/pages/LocationsListPage.tsx` | إضافة: زر إضافة موقع + dialog |
-| `src/pages/LocationDetailPage.tsx` | إضافة: أزرار تعديل/إضافة فرعي + خريطة Leaflet تفاعلية |
-| `src/pages/LocationReportsPage.tsx` | إضافة: زر تصدير CSV |
-| `src/services/api.ts` | إضافة: deleteLocation, getLocationMapData, exportLocationReportCSV |
-| `backend/tests/test_locations.py` | إضافة: 13 اختبار جديد (CSV, map, auto-assign, migration) |
-| `package.json` | إضافة: @radix-ui/react-switch |
+| `backend/app/services/location_service.py` | تحسين: Haversine بدل Euclidean + fuzzy text matching + Arabic normalization |
+| `backend/app/services/notification_service.py` | إضافة: notify_location_event() لإشعارات المواقع |
+| `backend/app/models/notification.py` | إضافة: LOCATION_ALERT notification type |
+| `backend/app/api/locations.py` | إضافة: geo-dashboard endpoint + contract locations by contract + إشعارات location |
+| `src/pages/ContractDetailsPage.tsx` | إضافة: قسم المواقع المرتبطة + ربط/فك ربط من واجهة العقد |
+| `src/components/LocationFormDialog.tsx` | إضافة: محرر حدود المنطقة (boundary polygon editor) |
+| `src/pages/GeoDashboardPage.tsx` | جديد: لوحة بيانات جغرافية مع خريطة + نقاط ساخنة + إحصائيات |
+| `src/components/Layout.tsx` | إضافة: رابط لوحة جغرافية في القائمة |
+| `src/App.tsx` | إضافة: route /locations/geo-dashboard |
+| `src/services/api.ts` | إضافة: getContractLocations, linkContractToLocation, unlinkContractFromLocation, getGeoDashboard |
+| `backend/tests/test_locations.py` | إضافة: 20 اختبار جديد (Haversine, fuzzy, geo-dashboard, contract-locations, notifications, boundary) |
 | `PROJECT_REVIEW_AND_PROGRESS.md` | تحديث: سجل الدفعة |
 | `HANDOFF_STATUS.md` | هذا التحديث |
 
@@ -46,7 +43,7 @@
 - ✅ ContractLocation — جدول ربط many-to-many للعقود والمواقع
 - ✅ الحفاظ على area_id الحالي للتوافقية
 
-**واجهة API شاملة (21 endpoint):**
+**واجهة API شاملة (23 endpoint):**
 - ✅ POST /locations/ — إنشاء موقع
 - ✅ GET /locations/list — قائمة مع بحث وفلاتر متعددة
 - ✅ GET /locations/tree — عرض شجري كامل مع عدّادات
@@ -55,14 +52,16 @@
 - ✅ GET /locations/detail/{id}/tasks — مهام الموقع
 - ✅ GET /locations/detail/{id}/contracts — عقود الموقع
 - ✅ GET /locations/detail/{id}/activity — النشاط الأخير
-- ✅ GET /locations/detail/{id}/map-data — بيانات الخريطة (NEW)
+- ✅ GET /locations/detail/{id}/map-data — بيانات الخريطة
 - ✅ PUT /locations/{id} — تحديث موقع
 - ✅ DELETE /locations/{id} — حذف ناعم (director فقط)
 - ✅ GET /locations/stats/all — إحصائيات تشغيلية
 - ✅ GET /locations/reports/summary — تقرير إداري
-- ✅ GET /locations/reports/export/csv — تصدير CSV (NEW)
+- ✅ GET /locations/reports/export/csv — تصدير CSV
 - ✅ POST /locations/contracts/link — ربط عقد بموقع
 - ✅ DELETE /locations/contracts/link — فك ربط
+- ✅ GET /locations/contracts/{contract_id}/locations — مواقع العقد (NEW)
+- ✅ GET /locations/geo-dashboard — لوحة البيانات الجغرافية (NEW)
 - ✅ الحفاظ على endpoints القديمة (areas, buildings, streets)
 
 **هجرة البيانات (Area → Location):**
@@ -72,9 +71,11 @@
 - ✅ Backfill: Task.location_id من area_id
 - ✅ غير مدمّر — الجداول القديمة تبقى كما هي
 
-**ربط الموقع التلقائي (Auto-assign):**
-- ✅ عند إنشاء شكوى: explicit location_id → area_id mapping → coordinate proximity
+**ربط الموقع التلقائي (Auto-assign — Enhanced):**
+- ✅ عند إنشاء شكوى: explicit location_id → area_id mapping → Haversine proximity → fuzzy text
 - ✅ عند إنشاء مهمة: نفس المنطق
+- ✅ Haversine formula للمسافة الدقيقة (بدل Euclidean)
+- ✅ Fuzzy text matching: Arabic normalization + trigram similarity
 - ✅ إذا كانت الثقة منخفضة → لا يتم التعيين (يبقى فارغاً)
 - ✅ يمكن التجاوز اليدوي دائماً
 
@@ -82,7 +83,34 @@
 - ✅ LocationsListPage — عرض شجري + عرض جدول + بحث + فلاتر + بطاقات ملخص + زر إضافة
 - ✅ LocationDetailPage — ملف تشغيلي + أزرار تعديل/إضافة فرعي + خريطة تفاعلية
 - ✅ LocationReportsPage — نقاط ساخنة + كثافة الشكاوى + تأخيرات + تغطية عقدية + تصدير CSV
-- ✅ LocationFormDialog — نموذج شامل: اسم، رمز، نوع، أب، حالة، وصف، إحداثيات، بيانات إضافية
+- ✅ LocationFormDialog — نموذج شامل: اسم، رمز، نوع، أب، حالة، وصف، إحداثيات، بيانات إضافية، محرر حدود المضلع
+
+**لوحة البيانات الجغرافية (Geo Dashboard):**
+- ✅ صفحة GeoDashboardPage مع خريطة تشغيلية شاملة
+- ✅ بطاقات ملخص: إجمالي المواقع + حسب النوع + نقاط ساخنة
+- ✅ خريطة تفاعلية: مواقع + شكاوى + مهام على خريطة واحدة
+- ✅ تبويبات: نقاط ساخنة | حسب الحالة | جميع المواقع
+- ✅ رابط في القائمة الجانبية
+
+**ربط العقود بالمواقع من واجهة العقد:**
+- ✅ قسم المواقع المرتبطة في ContractDetailsPage
+- ✅ ربط موقع جديد عبر نافذة اختيار
+- ✅ فك ربط موقع
+- ✅ عرض نوع ورمز كل موقع مرتبط
+- ✅ API: GET /locations/contracts/{contract_id}/locations
+
+**إشعارات المواقع:**
+- ✅ NotificationType.LOCATION_ALERT جديد
+- ✅ إشعار عند إنشاء موقع جديد
+- ✅ إشعار عند ربط عقد بموقع
+- ✅ يُرسل لـ project_director, area_supervisor, engineer_supervisor
+
+**محرر حدود المنطقة (Boundary Polygon Editor):**
+- ✅ إضافة نقاط مضلع بإحداثيات يدوية
+- ✅ عرض النقاط المضافة مع ترقيم
+- ✅ حذف نقاط فردية أو مسح جميعها
+- ✅ حفظ كـ boundary_path JSON
+- ✅ عرض في خريطة map-data
 
 **خريطة تفاعلية على صفحة الموقع:**
 - ✅ عرض نقطة الموقع
@@ -101,7 +129,7 @@
 - ✅ واجهة RTL عربية أولاً
 - ✅ كود إنجليزي
 - ✅ بيانات حقيقية من الخلفية، بدون بيانات وهمية
-- ✅ 257 اختبار ناجح
+- ✅ 277 اختبار ناجح
 - ✅ بناء الواجهة ناجح
 
 ### الاختبارات:
@@ -109,25 +137,30 @@
 |---|---|---|
 | API + E2E | 121 | ✅ ناجح |
 | Contract Intelligence | 86 | ✅ ناجح |
-| Locations | 50 | ✅ ناجح |
-| **المجموع** | **257** | **✅ ناجح** |
+| Locations | 70 | ✅ ناجح |
+| **المجموع** | **277** | **✅ ناجح** |
 
 ### الفجوات المتبقية:
 - [ ] تشغيل سكريبت الهجرة على قاعدة بيانات الإنتاج (يتطلب وصول للخادم)
-- [ ] محرر حدود المناطق (boundary polygon editor) في الواجهة
-- [ ] استخدام معادلة Haversine بدل المسافة الإقليدية (كافية حالياً لنفس المدينة)
 - [ ] تصدير CSV مع إحصائيات الفروع (حالياً: فقط الموقع المباشر)
+- [ ] اكتشاف النقاط الساخنة التلقائي مع إشعارات (حالياً: فقط عند إنشاء/ربط)
 
 ### الدفعة التالية المُوصى بها:
-1. محرر حدود المناطق (boundary polygon editor)
-2. لوحة بيانات جغرافية متقدمة (geo dashboard)
-3. ربط العقود بالمواقع من واجهة العقد
-4. إشعارات مبنية على الموقع (location-based notifications)
-5. تحسين استدلال الموقع التلقائي (Haversine, fuzzy text matching)
+1. خريطة رسم المضلع التفاعلية (draw on map بدل إدخال يدوي)
+2. WebSocket للإشعارات الفورية
+3. تصدير PDF للوحة الجغرافية
+4. تحسين الأداء: تخزين مؤقت لإحصائيات المواقع
+5. تكامل خرائط Google/OSM للعناوين
 
 ---
 
-## ما قبل هذه الدفعة (2026-04-17T22:59 — Locations Operational Geography Engine):
+## ما قبل هذه الدفعة (2026-04-17T23:28 — Location Enhancement Batch):
+- ✅ Migration script, auto-assign, CSV export, map-data
+- ✅ LocationFormDialog, delete locations
+- ✅ 257 tests passing
+- ✅ Frontend build clean
+
+## ما قبل ذلك (2026-04-17T22:59 — Locations Operational Geography Engine):
 - ✅ Unified Location model with hierarchy
 - ✅ 19 API endpoints
 - ✅ LocationsListPage, LocationDetailPage, LocationReportsPage
