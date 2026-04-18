@@ -11,6 +11,124 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-18T00:11 — Advanced Location Operations Batch (Boundary Editor, Geo Dashboard, Contract-Location UI, Notifications, Haversine)
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-18T00:11
+- **فهم النظام الحالي:**
+  - 257 اختبار ناجح (121 API+E2E + 86 contract intelligence + 50 locations), بناء الواجهة ناجح
+  - Location model fully functional with hierarchy, CRUD forms, CSV export, map-data
+  - Auto-location assignment exists using Euclidean distance (~550m) — not Haversine
+  - ContractLocation many-to-many exists in API but no UI in ContractDetailsPage
+  - Boundary polygon field exists in model (boundary_path as JSON) but no editor
+  - Notification system exists (6 types) but no location-specific notifications
+  - No geo dashboard page aggregating spatial operational data
+- **أهداف الدفعة:**
+  1. Enhanced auto-assign: Haversine formula for accurate distance + fuzzy text matching
+  2. Location-based notifications: notify when locations become hotspots, locations assigned
+  3. Contract-location linking UI from ContractDetailsPage
+  4. Boundary polygon editor in LocationFormDialog with map click
+  5. Geo dashboard: operational geography overview with map + stats
+- **الملفات المتوقع تعديلها:**
+  - `backend/app/services/location_service.py` — Haversine + fuzzy text
+  - `backend/app/services/notification_service.py` — location notifications
+  - `backend/app/models/notification.py` — new LOCATION_ALERT type
+  - `backend/app/api/locations.py` — geo dashboard endpoint, contract locations for contract
+  - `src/pages/ContractDetailsPage.tsx` — location linking UI
+  - `src/components/LocationFormDialog.tsx` — boundary polygon editor
+  - `src/pages/GeoDashboardPage.tsx` — new geo dashboard page
+  - `src/App.tsx` — new route
+  - `src/services/api.ts` — new API methods
+  - `backend/tests/test_locations.py` — new tests
+- **المخاطر:**
+  - Haversine change must not break existing auto-assign tests
+  - Boundary editor must be practical, not over-engineered
+  - Geo dashboard must use real backend data
+
+---
+
+### الدفعة: 2026-04-17T23:28 — Location Enhancement Batch (CRUD, Migration, Auto-assign, Map, CSV)
+
+**قبل البدء:**
+- **الطابع الزمني:** 2026-04-17T23:28
+- **فهم النظام الحالي:**
+  - 244 اختبار ناجح (121 API+E2E + 86 contract intelligence + 37 locations), بناء الواجهة ناجح
+  - Unified Location model exists with parent-child hierarchy (island, sector, block, building, tower, street, service_point, other)
+  - Location CRUD API fully functional (19 endpoints)
+  - Frontend has LocationsListPage (tree+table), LocationDetailPage (dossier), LocationReportsPage
+  - Complaints/Tasks have location_id FK (nullable), but no auto-assignment logic
+  - Legacy Area/Building/Street tables still exist for backward compatibility
+  - No Area→Location migration path yet
+  - No frontend create/edit forms for locations (only backend API)
+  - No interactive map on location detail page
+  - No CSV export for location reports
+- **أهداف الدفعة:**
+  1. Area → Location migration script (safe, repeatable)
+  2. Location CRUD forms (create/edit UI with all fields)
+  3. Auto-location assignment for complaints/tasks (infer from coordinates/hierarchy)
+  4. Interactive Leaflet map on location detail page
+  5. CSV export for location reports
+- **الملفات المتوقع تعديلها:**
+  - `backend/app/scripts/migrate_areas_to_locations.py` (new)
+  - `backend/app/api/locations.py` (add CSV export, auto-assign endpoint)
+  - `backend/app/schemas/location.py` (add auto-assign schema)
+  - `backend/app/schemas/complaint.py` (add location_id)
+  - `backend/app/schemas/task.py` (add location_id)
+  - `backend/app/api/complaints.py` (auto-assign on create)
+  - `backend/app/api/tasks.py` (auto-assign on create)
+  - `src/pages/LocationsListPage.tsx` (add create button/dialog)
+  - `src/pages/LocationDetailPage.tsx` (add map, edit button)
+  - `src/pages/LocationReportsPage.tsx` (add CSV export)
+  - `src/services/api.ts` (add new API methods)
+  - `backend/tests/test_locations.py` (new tests)
+- **المخاطر:**
+  - Migration must not destroy existing area data
+  - Auto-assignment must not silently force wrong locations
+  - Leaflet map must use real data from backend
+
+**بعد الانتهاء:**
+- **الحالة:** Done ✅
+- **الاختبارات:** 257 اختبار ناجح (121 API+E2E + 86 contract intelligence + 50 locations)
+- **بناء الواجهة:** ناجح ✅
+- **الملفات المعدّلة:**
+  - `backend/app/scripts/migrate_areas_to_locations.py` — NEW: migration script (Areas→Islands, Buildings→Buildings, Streets→Streets, backfill complaints/tasks)
+  - `backend/app/services/location_service.py` — NEW: auto-location inference (explicit ID, area mapping, coordinate proximity)
+  - `backend/app/api/locations.py` — CSV export endpoint, map-data endpoint
+  - `backend/app/api/complaints.py` — auto-location assignment on create
+  - `backend/app/api/tasks.py` — auto-location assignment on create
+  - `backend/app/schemas/complaint.py` — added location_id field
+  - `backend/app/schemas/task.py` — added location_id field
+  - `src/components/LocationFormDialog.tsx` — NEW: full create/edit dialog with validation
+  - `src/pages/LocationsListPage.tsx` — create button + dialog
+  - `src/pages/LocationDetailPage.tsx` — edit/create-child buttons + interactive Leaflet map
+  - `src/pages/LocationReportsPage.tsx` — CSV export button
+  - `src/services/api.ts` — new API methods (delete, mapData, exportCSV)
+  - `backend/tests/test_locations.py` — 13 new tests (CSV, map, auto-assign, migration)
+  - `package.json` — added @radix-ui/react-switch dependency
+- **التحقق المنجز:**
+  1. ✅ Frontend build passes
+  2. ✅ Backend tests pass (257/257)
+  3. ✅ Migration script works safely and is documented
+  4. ✅ Location create/edit forms work with real backend data
+  5. ✅ Auto-location assignment works (explicit → area mapping → coordinate proximity)
+  6. ✅ Location detail map renders with real data (location point, children, complaints, tasks)
+  7. ✅ CSV export works with Arabic headers and filter support
+  8. ✅ RBAC and audit logging remain intact
+- **القرارات الهندسية:**
+  - Migration maps Areas to Islands (logical match for Dummar residential islands)
+  - Auto-assign uses 3-tier priority: explicit > area_id mapping > coordinate proximity (~550m threshold)
+  - Auto-assign returns None (no assignment) when confidence is low — never forces wrong location
+  - CSV uses UTF-8 BOM for Excel Arabic support
+  - Map shows all entities (location, children, complaints, tasks) with color-coded markers
+  - Location form supports all 8 types, 4 statuses, parent selection, coordinates, metadata
+- **الفجوات المتبقية:**
+  - Migration script not yet run against production data (requires DB access)
+  - Haversine formula not used for coordinate distance (Euclidean adequate for same-city)
+  - No boundary polygon editor in UI (boundary_path field exists but is JSON-only)
+  - CSV export does not include descendant stats (only direct location stats)
+
+---
+
 ### الدفعة: 2026-04-17T22:59 — Locations Operational Geography Engine
 
 **قبل البدء:**

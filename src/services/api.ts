@@ -357,7 +357,10 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to create location');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to create location');
+    }
     return response.json();
   }
 
@@ -367,7 +370,76 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error('Failed to update location');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to update location');
+    }
+    return response.json();
+  }
+
+  async deleteLocation(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to delete location');
+    }
+    return response.json();
+  }
+
+  async getLocationMapData(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/map-data`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch location map data');
+    return response.json();
+  }
+
+  async exportLocationReportCSV(params?: { location_type?: string; status?: string }): Promise<Blob> {
+    const qp = new URLSearchParams();
+    if (params?.location_type) qp.append('location_type', params.location_type);
+    if (params?.status) qp.append('status', params.status);
+    const response = await fetch(`${API_BASE_URL}/locations/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to export location report');
+    }
+    return response.blob();
+  }
+
+  async getContractLocations(contractId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/contracts/${contractId}/locations`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch contract locations');
+    return response.json();
+  }
+
+  async linkContractToLocation(contractId: number, locationId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to link contract to location');
+    }
+    return response.json();
+  }
+
+  async unlinkContractFromLocation(contractId: number, locationId: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to unlink contract from location');
+    }
+    return response.json();
+  }
+
+  async getGeoDashboard(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/locations/geo-dashboard`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch geo dashboard');
     return response.json();
   }
 

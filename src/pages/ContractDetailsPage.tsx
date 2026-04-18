@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash, ShieldWarning, Brain, Copy } from '@phosphor-icons/react';
+import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash, ShieldWarning, Brain, Copy, MapPin, Plus, X } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -54,6 +54,10 @@ export default function ContractDetailsPage() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [linkedLocations, setLinkedLocations] = useState<any[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<any[]>([]);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [linkingLocation, setLinkingLocation] = useState(false);
 
   const fetchData = () => {
     if (!id) return;
@@ -64,11 +68,13 @@ export default function ContractDetailsPage() {
       apiService.getContract(numId),
       apiService.getContractApprovals(numId).catch(() => []),
       apiService.getContractIntelligence(numId).catch(() => null),
+      apiService.getContractLocations(numId).catch(() => ({ locations: [] })),
     ])
-      .then(([contractData, approvalsData, intelligenceData]) => {
+      .then(([contractData, approvalsData, intelligenceData, locData]) => {
         setContract(contractData);
         setApprovals(Array.isArray(approvalsData) ? approvalsData : []);
         setIntelligence(intelligenceData);
+        setLinkedLocations(locData?.locations || []);
       })
       .catch(() => setError('فشل تحميل بيانات العقد'))
       .finally(() => setLoading(false));
@@ -116,6 +122,43 @@ export default function ContractDetailsPage() {
     } finally {
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  };
+
+  const handleOpenLocationPicker = async () => {
+    try {
+      const locs = await apiService.getLocations({ is_active: 1, limit: 500 });
+      const linkedIds = new Set(linkedLocations.map((l: any) => l.id));
+      setAvailableLocations(locs.filter((l: any) => !linkedIds.has(l.id)));
+      setShowLocationPicker(true);
+    } catch {
+      toast.error('فشل تحميل قائمة المواقع');
+    }
+  };
+
+  const handleLinkLocation = async (locationId: number) => {
+    if (!id) return;
+    setLinkingLocation(true);
+    try {
+      await apiService.linkContractToLocation(Number(id), locationId);
+      toast.success('تم ربط الموقع بالعقد');
+      setShowLocationPicker(false);
+      fetchData();
+    } catch {
+      toast.error('فشل ربط الموقع');
+    } finally {
+      setLinkingLocation(false);
+    }
+  };
+
+  const handleUnlinkLocation = async (locationId: number) => {
+    if (!id) return;
+    try {
+      await apiService.unlinkContractFromLocation(Number(id), locationId);
+      toast.success('تم فك ربط الموقع');
+      fetchData();
+    } catch {
+      toast.error('فشل فك ربط الموقع');
     }
   };
 
@@ -351,6 +394,114 @@ export default function ContractDetailsPage() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Linked Locations */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin size={20} />
+                المواقع المرتبطة
+                {linkedLocations.length > 0 && (
+                  <Badge variant="outline">{linkedLocations.length}</Badge>
+                )}
+              </div>
+              {canManageContracts && (
+                <Button variant="outline" size="sm" onClick={handleOpenLocationPicker}>
+                  <Plus size={14} className="ml-1" />
+                  ربط موقع
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {linkedLocations.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">لا توجد مواقع مرتبطة</p>
+            ) : (
+              <div className="space-y-2">
+                {linkedLocations.map((loc: any) => (
+                  <div key={loc.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <MapPin size={16} className="text-primary" />
+                      <div>
+                        <Link to={`/locations/${loc.id}`} className="font-medium text-primary hover:underline">
+                          {loc.name}
+                        </Link>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                          <span className="font-mono">{loc.code}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {loc.location_type === 'island' ? 'جزيرة' :
+                             loc.location_type === 'building' ? 'مبنى' :
+                             loc.location_type === 'street' ? 'شارع' :
+                             loc.location_type === 'sector' ? 'قطاع' :
+                             loc.location_type === 'block' ? 'بلوك' :
+                             loc.location_type === 'tower' ? 'برج' :
+                             loc.location_type === 'service_point' ? 'نقطة خدمة' :
+                             loc.location_type}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                    {canManageContracts && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUnlinkLocation(loc.id)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X size={16} />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Location Picker Dialog */}
+        {showLocationPicker && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <Card className="w-full max-w-lg max-h-[70vh] overflow-hidden" dir="rtl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span>اختيار موقع لربطه</span>
+                  <Button variant="ghost" size="sm" onClick={() => setShowLocationPicker(false)}>
+                    <X size={18} />
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-y-auto max-h-[50vh]">
+                {availableLocations.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">جميع المواقع مرتبطة بالفعل</p>
+                ) : (
+                  <div className="space-y-1">
+                    {availableLocations.map((loc: any) => (
+                      <button
+                        key={loc.id}
+                        onClick={() => handleLinkLocation(loc.id)}
+                        disabled={linkingLocation}
+                        className="w-full text-right p-3 rounded-lg border hover:bg-muted/50 transition-colors flex items-center gap-3"
+                      >
+                        <MapPin size={16} className="text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{loc.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{loc.code}</div>
+                        </div>
+                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                          {loc.location_type === 'island' ? 'جزيرة' :
+                           loc.location_type === 'building' ? 'مبنى' :
+                           loc.location_type === 'street' ? 'شارع' :
+                           loc.location_type}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Approval Trail */}

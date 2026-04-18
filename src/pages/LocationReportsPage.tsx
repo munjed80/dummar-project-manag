@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table';
 import {
   Spinner, MapPin, WarningCircle, ChartBar, ArrowLeft,
-  FileText, ChatCircleDots, ListChecks,
+  FileText, ChatCircleDots, ListChecks, DownloadSimple,
 } from '@phosphor-icons/react';
 
 const LOCATION_TYPE_LABELS: Record<string, string> = {
@@ -28,6 +28,7 @@ const LOCATION_TYPE_LABELS: Record<string, string> = {
 export default function LocationReportsPage() {
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     apiService.getLocationReportSummary()
@@ -35,6 +36,23 @@ export default function LocationReportsPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const blob = await apiService.exportLocationReportCSV();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `location_report_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('CSV export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading || !report) {
     return (
@@ -59,12 +77,18 @@ export default function LocationReportsPage() {
             <ChartBar size={28} />
             تقارير المواقع
           </h1>
-          <Link to="/locations">
-            <Button variant="outline" size="sm" className="flex items-center gap-1">
-              <ArrowLeft size={14} />
-              العودة للمواقع
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={exporting}>
+              {exporting ? <Spinner className="animate-spin ml-1" size={14} /> : <DownloadSimple size={14} className="ml-1" />}
+              تصدير CSV
             </Button>
-          </Link>
+            <Link to="/locations">
+              <Button variant="outline" size="sm" className="flex items-center gap-1">
+                <ArrowLeft size={14} />
+                العودة للمواقع
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Summary Cards */}

@@ -13,6 +13,7 @@ from app.api.deps import get_current_user, require_role, get_current_internal_us
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_task_assigned
 from app.schemas.file_utils import serialize_file_list
+from app.services.location_service import infer_location_id
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 logger = logging.getLogger("dummar.tasks")
@@ -33,7 +34,19 @@ def create_task(
     current_user: User = Depends(_task_managers),
     db: Session = Depends(get_db)
 ):
-    db_task = Task(**task.model_dump())
+    task_data = task.model_dump()
+
+    # Auto-assign location_id if not explicitly provided
+    resolved_location_id = infer_location_id(
+        db,
+        explicit_location_id=task_data.get("location_id"),
+        area_id=task_data.get("area_id"),
+        latitude=task_data.get("latitude"),
+        longitude=task_data.get("longitude"),
+    )
+    task_data["location_id"] = resolved_location_id
+
+    db_task = Task(**task_data)
     
     db.add(db_task)
     db.commit()
