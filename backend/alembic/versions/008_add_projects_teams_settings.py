@@ -26,10 +26,14 @@ depends_on = None
 
 
 def upgrade():
-    # Create enum types
-    op.execute("CREATE TYPE projectstatus AS ENUM ('planned', 'active', 'on_hold', 'completed', 'cancelled')")
-    op.execute("CREATE TYPE teamtype AS ENUM ('internal_team', 'contractor', 'field_crew', 'supervision_unit')")
-    
+    # NOTE on PostgreSQL ENUM types: we intentionally do NOT issue an explicit
+    # `CREATE TYPE projectstatus ...` / `CREATE TYPE teamtype ...` here.
+    # SQLAlchemy's `sa.Enum(..., name='projectstatus')` inside create_table()
+    # already emits `CREATE TYPE` automatically on PostgreSQL. Doing it twice
+    # raises `DuplicateObject: type "projectstatus" already exists` and aborts
+    # the whole migration (which previously caused the backend container to
+    # exit 1 in entrypoint.sh and never become healthy).
+
     # --- projects table ---
     op.create_table(
         'projects',
@@ -56,7 +60,11 @@ def upgrade():
         sa.Column('contact_name', sa.String(200), nullable=True),
         sa.Column('contact_phone', sa.String(50), nullable=True),
         sa.Column('contact_email', sa.String(200), nullable=True),
-        sa.Column('is_active', sa.Boolean(), server_default='1', index=True),
+        # Note: PostgreSQL rejects '1' as a Boolean literal at CREATE TABLE
+        # time (invalid input syntax for type boolean: "1"). Use sa.text('true')
+        # so the DDL is portable across PostgreSQL (production) and SQLite
+        # (tests). This matches the pattern used in 006 for `is_resolved`.
+        sa.Column('is_active', sa.Boolean(), server_default=sa.text('true'), index=True),
         sa.Column('location_id', sa.Integer(), sa.ForeignKey('locations.id'), nullable=True, index=True),
         sa.Column('project_id', sa.Integer(), sa.ForeignKey('projects.id'), nullable=True, index=True),
         sa.Column('notes', sa.Text(), nullable=True),
@@ -112,7 +120,9 @@ def downgrade():
     op.drop_table('app_settings')
     op.drop_table('teams')
     op.drop_table('projects')
-    
-    # Drop enum types
-    op.execute("DROP TYPE teamtype")
-    op.execute("DROP TYPE projectstatus")
+
+    # Drop enum types — SQLAlchemy does NOT auto-drop ENUM types when the
+    # owning table is dropped on PostgreSQL, so we must do it explicitly to
+    # keep `downgrade` symmetric with `upgrade`.
+    op.execute("DROP TYPE IF EXISTS teamtype")
+    op.execute("DROP TYPE IF EXISTS projectstatus")
