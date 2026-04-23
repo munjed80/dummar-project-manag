@@ -475,7 +475,7 @@ if [ "$SSL_ENABLED" = true ]; then
         error "HTTPS origin (https://localhost) → curl failed (status=$https_status)"
         error "  nginx.conf has 'listen 443 ssl' but the TLS handshake on the"
         error "  origin failed. Check 'docker compose logs nginx' and verify"
-        error "  /etc/letsencrypt/live/${DOMAIN:-<domain>}/ contains fullchain.pem"
+        error "  /etc/letsencrypt/live/${DOMAIN:-your-domain}/ contains fullchain.pem"
         error "  and privkey.pem and is mounted into the nginx container."
         FAIL=$((FAIL + 1))
     fi
