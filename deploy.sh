@@ -35,6 +35,33 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 step()    { echo -e "\n${CYAN}▸ $*${NC}"; }
 
+# Detect whether a Let's Encrypt cert file exists. We CANNOT rely on a plain
+# `[ -f "$cert" ]` because /etc/letsencrypt/{live,archive} are mode 0700
+# root:root on a standard install. When this script is run by the typical
+# non-root deploy user (who only needs docker-socket access, not full root),
+# that test silently returns false even when the cert is present. The
+# resulting failure mode was: SSL self-heal skipped → nginx.conf stays
+# HTTP-only after `git pull` → no `listen 443 ssl` → docker-proxy resets
+# every connection on 443 → curl reports SSL_SYSCALL and Cloudflare
+# returns 521.
+#
+# Fall back to the docker daemon (which always has root via the socket) by
+# running a tiny throw-away container against the same nginx:alpine image
+# the stack already uses. The cert path is passed via env (CERT_PATH) so
+# it is not subject to shell interpolation/quoting inside the container.
+cert_present() {
+    local cert="$1"
+    [ -r "$cert" ] && return 0
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        docker run --rm \
+            -e CERT_PATH="$cert" \
+            -v /etc/letsencrypt:/etc/letsencrypt:ro \
+            --entrypoint sh nginx:alpine \
+            -c '[ -f "$CERT_PATH" ]' >/dev/null 2>&1 && return 0
+    fi
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
@@ -213,35 +240,10 @@ fi
 if [ -n "$DOMAIN" ]; then
     LE_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
 
-    # Detect whether the cert exists. We CANNOT just use `[ -f "$LE_CERT" ]`
-    # or `[ -d /etc/letsencrypt/live/$DOMAIN ]` because /etc/letsencrypt/{live,
-    # archive} are mode 0700 root:root on a standard Let's Encrypt install.
-    # When this script is run by the typical non-root deploy user (who only
-    # needs docker-socket access, not full root), those tests silently
-    # return false even when the cert is there. The result was: self-heal
-    # skipped → nginx.conf stays HTTP-only → no `listen 443 ssl` →
-    # docker-proxy accepts on 443 but resets the connection → curl reports
-    # SSL_SYSCALL and Cloudflare reports 521. The CORS scheme also fell
-    # back to http://, which then broke login from the HTTPS frontend.
-    #
-    # Use docker (whose daemon runs as root via the socket) as a privileged
-    # fallback so the check works for non-root operators too. Mounting
-    # /etc/letsencrypt read-only into the same nginx:alpine image used by
-    # the stack avoids pulling anything extra.
-    cert_present() {
-        local cert="$1"
-        [ -r "$cert" ] && return 0
-        if command -v docker >/dev/null 2>&1; then
-            docker run --rm \
-                -v /etc/letsencrypt:/etc/letsencrypt:ro \
-                --entrypoint sh nginx:alpine \
-                -c "[ -f '$cert' ]" >/dev/null 2>&1 && return 0
-        fi
-        return 1
-    }
-
     if [ -f .env ]; then
-        # Determine scheme (https if certs exist, http otherwise)
+        # Determine scheme (https if certs exist, http otherwise).
+        # cert_present() (defined near the top) handles the non-root /
+        # 0700-permissions case via a docker fallback.
         if [ -d certs ] || cert_present "$LE_CERT"; then
             SCHEME="https"
         else
@@ -493,10 +495,7 @@ fi
 # When --domain was passed AND a Let's Encrypt cert exists, also probe the
 # real public HTTPS endpoint. This catches "nginx is healthy locally but TLS
 # is broken" regressions (e.g. cert mount path wrong, HSTS issue).
-#
-# Note: cert_present() is only defined when --domain was passed (above),
-# so this guard implicitly skips when no domain is set.
-if [ -n "$DOMAIN" ] && cert_present "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" 2>/dev/null; then
+if [ -n "$DOMAIN" ] && cert_present "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
     check_endpoint "HTTPS frontend"      "https://${DOMAIN}/"                200
     check_endpoint "HTTPS health/ready"  "https://${DOMAIN}/api/health/ready" 200
 fi
