@@ -32,7 +32,7 @@ _SEED_DEFAULT_PASSWORD = "password123"
 # credentials and then delete the file.
 _DEFAULT_CREDENTIALS_FILE = os.environ.get(
     "SEED_CREDENTIALS_FILE",
-    os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "seed_credentials.txt")),
+    "/tmp/seed_credentials.txt",
 )
 
 

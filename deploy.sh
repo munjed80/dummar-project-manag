@@ -302,13 +302,13 @@ if [ "$SEED_DATA" = true ]; then
     if [ "$FIRST_DEPLOY" = true ] || [ "$FORCE_REBUILD" = true ]; then
         info "Running seed script inside backend container…"
         info "Mode: STRONG RANDOM PASSWORDS (production-safe). Credentials will"
-        info "be written to /app/seed_credentials.txt inside the backend container."
+        info "be written to /tmp/seed_credentials.txt inside the backend container."
         $COMPOSE exec -T backend python -m app.scripts.seed_data 2>&1 | tail -10
         success "Seed data loaded."
         warn "IMPORTANT: Retrieve and securely distribute the generated passwords:"
-        warn "  $COMPOSE exec backend cat /app/seed_credentials.txt"
+        warn "  $COMPOSE exec backend cat /tmp/seed_credentials.txt"
         warn "Then DELETE the file:"
-        warn "  $COMPOSE exec backend rm /app/seed_credentials.txt"
+        warn "  $COMPOSE exec backend rm /tmp/seed_credentials.txt"
         warn "Force operators to rotate their passwords on first login."
     else
         warn "Skipping seed data — not a first-time deployment. Use --rebuild to force."
