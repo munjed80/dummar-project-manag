@@ -10,7 +10,7 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
 const ALLOWED_DOC_TYPES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-const API_BASE_URL = config.API_BASE_URL;
+const FILES_BASE_URL = config.FILES_BASE_URL;
 
 interface FileUploadProps {
   category: string;
@@ -126,7 +126,7 @@ export function FileUpload({ category, accept = 'all', multiple = true, existing
             <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded-md">
               {isImage(file.path) ? <Image size={18} className="text-blue-600" /> : <FileText size={18} className="text-orange-600" />}
               <a
-                href={`${API_BASE_URL}${file.path}`}
+                href={`${FILES_BASE_URL}${file.path}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline flex-1 truncate"
