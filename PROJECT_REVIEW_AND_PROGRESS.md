@@ -4,14 +4,62 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة العاشرة - تثبيت ما قبل التحديث على الـ VPS (final SSL/nginx/docker-compose alignment + doc reality-sync + smoke-check)  
-**آخر تحديث:** 2026-04-23T20:55
+**المرحلة الحالية:** المرحلة الحادية عشرة - Hotfix لإفشال نشر VPS الناتج عن Migration 008 (انعدام التوافق مع PostgreSQL)
+**آخر تحديث:** 2026-04-23T21:37
 
 ---
 
 ## سجل الدفعات (Batch Log)
 
-### الدفعة الحالية: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch (SSL self-healing in deploy.sh + doc reality-sync + smoke-check)
+### الدفعة الحالية: 2026-04-23T21:37 — Hotfix: Migration 008 PostgreSQL compatibility (VPS deploy unblock)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T21:37
+- **سياق هذه الدفعة:** نشر VPS فشل: `docker-compose` يصنّف `dummar-backend-1` كـ `unhealthy`، فلا يبدأ `nginx` (الذي يعتمد على `service_healthy`)، وCloudflare يعيد `521`. سياق المستخدم نصّ صراحةً على أن ربط المنفذ 8000 بـ 127.0.0.1 مقصود وليس السبب الجذري، وأن الإصلاحات الأخيرة (`/api`, FILES_BASE_URL, login, complaint flow, Projects/Teams, SSL self-heal) يجب ألا تتراجع.
+- **منهجية التشخيص (مبنية على الكود الفعلي، لا التخمين):**
+  1. فحص `entrypoint.sh:20-26` → يستدعي `alembic upgrade head` ويخرج بـ `exit 1` عند الفشل، وهو ما يفسّر مباشرةً حالة `unhealthy` لأن الحاوية تخرج قبل أن يبدأ gunicorn.
+  2. فحص `docker-compose.yml:64-73` → الـ healthcheck يضرب `/health/ready` مع `start_period: 30s`، لكنه لن يُختبر أبداً إن خرجت الحاوية في entrypoint.
+  3. فحص `backend/alembic/versions/008_add_projects_teams_settings.py` (آخر migration) ومقارنته بـ `006`/`007` → كشف خللين خاصّين بـ PostgreSQL.
+  4. التحقق التجريبي: تشغيل `postgis/postgis:15-3.3` (نفس صورة `docker-compose.yml:3`) محلياً وتشغيل `alembic upgrade head` ضدها → فشل فوري عند migration 008 بـ `psycopg2.errors.DuplicateObject: type "projectstatus" already exists`. تطبيق الإصلاح ثم إعادة المحاولة → جميع الـ migrations تنجح.
+- **السبب الجذري الدقيق:**
+  1. **CREATE TYPE مكرر:** الـ migration كان يستدعي `op.execute("CREATE TYPE projectstatus AS ENUM (...)")` و `op.execute("CREATE TYPE teamtype AS ENUM (...)")` صراحةً، ثم يُنشئ الجداول بأعمدة `sa.Enum(..., name='projectstatus')` و `sa.Enum(..., name='teamtype')`. على PostgreSQL، SQLAlchemy يصدر `CREATE TYPE` تلقائياً عند `create_table` إذا كان `name=` محدداً، فينتج `DuplicateObject` ويُلغى الـ migration بأكمله داخل المعاملة.
+  2. **Boolean server_default غير قانوني:** `sa.Column('is_active', sa.Boolean(), server_default='1', ...)` يولّد `is_active BOOLEAN DEFAULT '1'`، وهو ما يرفضه PostgreSQL بـ `invalid input syntax for type boolean: "1"`. حتى لو لم يكن هناك خطأ #1 لكان هذا الخطأ يُسقط الـ migration عند `CREATE TABLE teams`.
+- **لماذا لم تكشفه الاختبارات:** `backend/tests/conftest.py:14, 105` يستخدم SQLite في الذاكرة و `Base.metadata.create_all` (مبني على الـ models، لا الـ migrations). SQLite لا يملك ENUM أصلاً ويقبل `'1'` كـ Boolean، فالخطآن صامتان على مسار الاختبار. هذا يفسّر بدقة كيف نجحت 296 اختباراً مع وجود migration معطوب تماماً على PostgreSQL.
+- **ما لم يكن السبب (نفي صريح، حسب طلب السياق):**
+  - منفذ 127.0.0.1:8000 — ليس له أي علاقة (الحاوية لا تصل أصلاً لمرحلة الاستماع).
+  - `start_period: 30s` للـ healthcheck — غير ذي صلة (الحاوية تخرج بـ exit 1 قبل أي فحص).
+  - `SECRET_KEY` / `DB_PASSWORD` — `${VAR:?}` كان سيرفض docker-compose بشكل صريح وقابل للقراءة قبل أي محاولة بناء.
+  - تسرب `localhost:8000` في bundle الواجهة — لا يؤثر على صحة الباك‑إند (تم حظره أصلاً في `deploy.sh:298`).
+
+**بعد التنفيذ (After Current Batch):**
+
+- **Files changed (exact, this batch):**
+  - `backend/alembic/versions/008_add_projects_teams_settings.py`:
+    - حذف `op.execute("CREATE TYPE projectstatus ...")` و `op.execute("CREATE TYPE teamtype ...")` من `upgrade()`. إضافة تعليق يشرح لماذا (SQLAlchemy يُنشئها ضمنياً).
+    - تغيير `sa.Column('is_active', sa.Boolean(), server_default='1', ...)` إلى `sa.Column('is_active', sa.Boolean(), server_default=sa.text('true'), ...)` لمطابقة نمط `006`.
+    - تحويل `op.execute("DROP TYPE teamtype")` و `op.execute("DROP TYPE projectstatus")` إلى `DROP TYPE IF EXISTS ...` في `downgrade()` لجعل الـ downgrade idempotent.
+  - `HANDOFF_STATUS.md`: بطاقة الدفعة هذه.
+  - `PROJECT_REVIEW_AND_PROGRESS.md`: هذا التحديث.
+- **Files NOT changed (preserved):** كل ملفات `app/`، النماذج، الراوترز، `docker-compose.yml`، `nginx.conf`، `nginx-ssl.conf`، `deploy.sh`، `entrypoint.sh`، `ssl-setup.sh`، الواجهة بأكملها. السلوكيات المحفوظة: SSL self-heal، `/api` routing، `VITE_FILES_BASE_URL=''`، تدفق Login، تدفق Complaint→Task، Projects/Teams، uploads split.
+- **Verification (تم تنفيذها فعلياً، لا ادّعاءً):**
+  - `cd backend && python -m pytest tests/ -q` → ✅ **296 passed**, 871 warnings, 119.85s — مطابق للدفعة السابقة بالضبط، صفر تراجع.
+  - `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → ✅ `✓ built in 1.23s`، dist/index.html موجود.
+  - `grep -rq 'http://localhost:8000' dist/assets` → ✅ لا تطابق.
+  - **اختبار الـ migration المباشر مقابل postgis/postgis:15-3.3 (نفس صورة الإنتاج):**
+    - DB فارغة → `alembic upgrade head` → ✅ كل الـ migrations 001..008 تُطبَّق.
+    - `\d teams` → ✅ `is_active boolean DEFAULT true`، `team_type teamtype NOT NULL DEFAULT 'internal_team'::teamtype`.
+    - `INSERT INTO teams (name) VALUES ('test-team') RETURNING ...` → ✅ ينجح ويعيد `is_active=t, team_type='internal_team'`.
+    - `alembic downgrade 007 && alembic upgrade head` → ✅ جولة كاملة ناجحة (إثبات للـ idempotency).
+  - **إعادة إنتاج الفشل قبل الإصلاح** (تأكيد للسبب الجذري): إعادة الـ migration الأصلي → ✅ يفشل فوراً بـ `DuplicateObject: type "projectstatus" already exists` كما هو متوقع.
+- **هل يمكن إعادة نشر الـ VPS بأمان؟ نعم.**
+  - الترتيب الموصى به: `git pull && ./deploy.sh --rebuild --domain=<DOMAIN>`.
+  - لا حاجة لتنظيف يدوي على VPS: Alembic على PostgreSQL يلفّ كل migration في معاملة، والفشل السابق ألغي تلقائياً قبل كتابة `alembic_version`، فالقاعدة عند revision 007 بالضبط.
+  - SSL self-heal من الدفعة السابقة لا يزال يعمل (لم يُلمس `deploy.sh`).
+  - إن وُجدت أنواع متبقية لسبب نادر، الـ migration الجديد لا يُصدر `CREATE TYPE` صراحةً، فـ SQLAlchemy ستتعامل معها بشكل سليم؛ ويمكن في أسوأ الأحوال إصدار `DROP TYPE IF EXISTS projectstatus, teamtype CASCADE;` يدوياً ثم إعادة المحاولة.
+
+---
+
+### الدفعة السابقة: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch (SSL self-healing in deploy.sh + doc reality-sync + smoke-check)
 
 **قبل البدء (Before Current Batch):**
 - **الطابع الزمني:** 2026-04-23T20:55

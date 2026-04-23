@@ -1,11 +1,71 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T20:55
+## آخر تحديث: 2026-04-23T21:37
 
 ---
 
-## الدفعة الحالية: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch
+## الدفعة الحالية: 2026-04-23T21:37 — Hotfix: Migration 008 PostgreSQL Compatibility (VPS deploy unblock)
+
+**Scope:** Single targeted fix for the live VPS deploy failure where `dummar-backend-1` was reported `unhealthy`, `nginx` (which has `depends_on: backend: condition: service_healthy`) refused to start, and Cloudflare returned `521`. No feature work, no refactor, no behavior change.
+
+### Root cause (verified end-to-end against `postgis/postgis:15-3.3`)
+
+`backend/alembic/versions/008_add_projects_teams_settings.py` had **two PostgreSQL-specific bugs** that aborted `alembic upgrade head` inside `entrypoint.sh`. The script then ran `exit 1`, the backend container exited (never reached healthy), nginx never started, Cloudflare saw an empty origin and returned 521.
+
+1. **Duplicate `CREATE TYPE`** — the migration first ran `op.execute("CREATE TYPE projectstatus AS ENUM (...)")` and `op.execute("CREATE TYPE teamtype AS ENUM (...)")`, then immediately created the `projects` and `teams` tables with `sa.Column('status', sa.Enum(..., name='projectstatus'))` / `sa.Column('team_type', sa.Enum(..., name='teamtype'))`. On PostgreSQL, SQLAlchemy's inline `sa.Enum(name=...)` already auto-emits `CREATE TYPE` during `create_table`, so the explicit `op.execute` lines guaranteed a `psycopg2.errors.DuplicateObject: type "projectstatus" already exists` failure on the very first migration run. The whole migration was rolled back, leaving the database at revision 007 forever.
+2. **Boolean `server_default='1'`** — `sa.Column('is_active', sa.Boolean(), server_default='1', ...)` emits `is_active BOOLEAN DEFAULT '1'`, which PostgreSQL rejects with `invalid input syntax for type boolean: "1"`. Even if bug #1 had been hidden, this would have failed `CREATE TABLE teams` next.
+
+**Why CI did not catch this:** `backend/tests/conftest.py` uses an in-memory SQLite engine and creates the schema via `Base.metadata.create_all` (model-driven, not migration-driven). SQLite has no native ENUM and accepts `'1'` as a Boolean literal, so both bugs were silent on the test path.
+
+### Files changed this batch
+
+| File | Change |
+|---|---|
+| `backend/alembic/versions/008_add_projects_teams_settings.py` | (1) Removed the two redundant `op.execute("CREATE TYPE ...")` lines from `upgrade()` — SQLAlchemy already creates them via the inline `sa.Enum(name=...)` columns. (2) Changed `is_active` server default from `'1'` (PG-incompatible) to `sa.text('true')` to match the existing pattern in `006` (`is_resolved`, `sa.Boolean(), server_default=sa.text('false')`). (3) Hardened `downgrade()` to use `DROP TYPE IF EXISTS` (idempotent) and added an explanatory comment because SQLAlchemy does not auto-drop ENUM types when the owning table is dropped. |
+| `HANDOFF_STATUS.md` | This entry. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New batch entry with the same root-cause analysis and verification record. |
+
+### What was NOT changed (preserved verbatim)
+
+- `docker-compose.yml`, `nginx.conf`, `nginx-ssl.conf`, `ssl-setup.sh`, `deploy.sh`, `entrypoint.sh`, `backend/Dockerfile`: untouched. The deploy/SSL-self-heal pipeline from the previous batch is intact.
+- Backend application code: zero `.py` files outside `alembic/versions/008_*.py` were touched. `app/main.py`, all routers, all models, all services, all schemas, all middleware: bit-for-bit identical.
+- Frontend code: zero files touched. `src/config.ts` still defaults to `/api`. The `localhost:8000` build-leak guard still runs.
+- Login flow, RBAC, audit, contract intelligence, complaint→task, Projects/Teams/Settings, uploads split, Arabic-RTL UI: all untouched.
+
+### Verification (this batch)
+
+| Check | Result |
+|---|---|
+| `cd backend && python -m pytest tests/ -q` | ✅ **296 passed**, 871 warnings in 119.85s — same count as previous batch, zero regression |
+| `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` | ✅ `✓ built in 1.23s`, no TS errors |
+| `grep -rq 'http://localhost:8000' dist/assets` | ✅ no matches (deploy.sh leak guard still effective) |
+| **End-to-end migration against real PostGIS** (`docker run postgis/postgis:15-3.3`, identical to `docker-compose.yml:3`) — `alembic upgrade head` from empty DB | ✅ All 8 migrations apply cleanly: `001 → 002 → ... → 008` |
+| Post-migration sanity: `\d teams` | ✅ `is_active boolean DEFAULT true`, `team_type teamtype NOT NULL DEFAULT 'internal_team'::teamtype` |
+| Post-migration sanity: `INSERT INTO teams (name) VALUES ('test-team') RETURNING ...` | ✅ Row created: `id=1, name='test-team', is_active=t, team_type='internal_team'` |
+| `alembic downgrade 007 && alembic upgrade head` (idempotency / re-runnability) | ✅ Roundtrip succeeds; ENUM types correctly dropped and recreated |
+| Pre-fix reproduction (sanity check that the diagnosis is correct) | ✅ Without the fix: `psycopg2.errors.DuplicateObject: type "projectstatus" already exists` on a fresh PG database |
+
+### Is it safe to redeploy the VPS?
+
+**Yes.** Recommended sequence on the VPS:
+
+```bash
+git pull
+./deploy.sh --rebuild --domain=<your-domain>
+```
+
+The migration is now idempotent and PG-safe. The previous failed run on the VPS rolled back inside its transaction (Alembic on PostgreSQL wraps each migration in a transaction; the failure occurred inside that transaction, before any `INSERT INTO alembic_version`), so the schema is at revision `007` and **no manual cleanup is required**. The next backend container start will run `alembic upgrade head`, succeed, pass `/health/ready`, become healthy, and unblock nginx.
+
+If — and only if — a previous VPS attempt somehow left a partial type behind (very unlikely given transactional DDL), the operator can run:
+```bash
+docker compose exec db psql -U dummar dummar_db -c "DROP TYPE IF EXISTS projectstatus CASCADE; DROP TYPE IF EXISTS teamtype CASCADE;"
+```
+and re-run `./deploy.sh --rebuild`. This is now also handled gracefully by the migration on the next attempt because we no longer issue an explicit `CREATE TYPE` (SQLAlchemy's inline emit will succeed because the type doesn't exist after the rollback).
+
+---
+
+## الدفعة السابقة: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch
 
 **Scope:** This is intentionally NOT a feature batch. The product is functionally complete; the remaining risk is purely operational. Goal: make `git pull && ./deploy.sh --rebuild --domain=X` reliably preserve HTTPS without manual VPS edits, and align all docs with the actual current code so an operator reading the repo gets correct instructions.
 
