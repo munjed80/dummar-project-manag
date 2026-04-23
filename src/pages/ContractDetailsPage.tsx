@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 
 import { config } from '@/config';
 
-const API_BASE_URL = config.API_BASE_URL;
+const FILES_BASE_URL = config.FILES_BASE_URL;
 
 const statusLabels: Record<string, string> = {
   draft: 'مسودة', under_review: 'قيد المراجعة', approved: 'مُعتمد',
@@ -89,7 +89,7 @@ export default function ContractDetailsPage() {
       const result = await apiService.generateContractPdf(Number(id));
       toast.success('تم إنشاء ملف PDF بنجاح');
       if (result.pdf_path) {
-        window.open(`${API_BASE_URL}${result.pdf_path}`, '_blank');
+        window.open(`${FILES_BASE_URL}${result.pdf_path}`, '_blank');
       }
       fetchData();
     } catch {
@@ -211,7 +211,7 @@ export default function ContractDetailsPage() {
                 )}
                 {contract.pdf_file && (
                   <Button variant="outline" asChild>
-                    <a href={`${API_BASE_URL}${contract.pdf_file}`} target="_blank" rel="noopener noreferrer">
+                    <a href={`${FILES_BASE_URL}${contract.pdf_file}`} target="_blank" rel="noopener noreferrer">
                       <FilePdf className="ml-2" size={18} />
                       تحميل PDF
                     </a>

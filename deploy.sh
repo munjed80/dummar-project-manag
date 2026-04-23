@@ -234,6 +234,19 @@ step "Building frontend"
 info "Installing dependencies…"
 npm ci --prefer-offline --no-audit --no-fund 2>&1 | tail -5
 
+# Pin production-safe frontend env values for the build. Vite bakes VITE_*
+# into the bundle at build time, so any stray .env / .env.local on the VPS
+# with a localhost fallback would otherwise silently poison the production
+# bundle on every rebuild. We therefore EXPORT the safe defaults in-process
+# and let them take precedence over any file-based value.
+#
+# Override ONLY if the operator explicitly set them in the current shell
+# (e.g. for a non-standard reverse-proxy mount point).
+: "${VITE_API_BASE_URL:=/api}"
+: "${VITE_FILES_BASE_URL:=}"
+export VITE_API_BASE_URL VITE_FILES_BASE_URL
+info "Frontend build env: VITE_API_BASE_URL='${VITE_API_BASE_URL}' VITE_FILES_BASE_URL='${VITE_FILES_BASE_URL}'"
+
 info "Running production build…"
 npm run build 2>&1 | tail -3
 
@@ -241,6 +254,17 @@ if [ ! -d dist ] || [ ! -f dist/index.html ]; then
     error "Frontend build failed — dist/index.html not found."
     exit 1
 fi
+
+# Fail loud if the legacy localhost fallback somehow leaked into the bundle.
+# This protects against operator mistakes (e.g. a leftover VITE_API_BASE_URL=
+# http://localhost:8000 in .env.production on the VPS).
+if grep -rq 'http://localhost:8000' dist/assets 2>/dev/null; then
+    error "dist/ bundle contains 'http://localhost:8000' — refusing to deploy."
+    error "This would break login/auth in production. Remove the localhost"
+    error "value from .env / .env.production / .env.local and re-run deploy.sh."
+    exit 1
+fi
+
 success "Frontend built → dist/ ($(du -sh dist | awk '{print $1}'))"
 
 # ---------------------------------------------------------------------------

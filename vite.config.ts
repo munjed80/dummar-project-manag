@@ -18,10 +18,21 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // API calls: frontend uses VITE_API_BASE_URL=/api (same-origin). In dev
+      // we proxy it to the backend and strip the /api prefix to match the
+      // FastAPI routes (which are mounted at the root, not /api).
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      // Uploads: the backend returns root-relative paths like
+      // "/uploads/contracts/foo.pdf". Proxy them verbatim so dev file links
+      // work the same way they do in production (nginx serves public uploads
+      // and proxies sensitive categories to the backend).
+      '/uploads': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       },
     },
   },

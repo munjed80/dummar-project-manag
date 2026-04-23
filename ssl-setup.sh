@@ -261,13 +261,17 @@ if [ "$AUTO_CONFIGURE" = true ]; then
     sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" nginx.conf
     success "nginx.conf updated with SSL config for $DOMAIN."
 
-    # 2. Uncomment letsencrypt volumes in docker-compose.yml
+    # 2. Ensure letsencrypt volumes are active in docker-compose.yml.
+    #    The current repo mounts them unconditionally (LETSENCRYPT_DIR /
+    #    CERTBOT_WEBROOT), so nothing to patch here on fresh checkouts.
+    #    The legacy commented-out form is handled for backward compatibility
+    #    with older clones that may still have the commented mounts.
     if grep -q '# - /etc/letsencrypt:/etc/letsencrypt:ro' docker-compose.yml; then
         sed -i 's|# - /etc/letsencrypt:/etc/letsencrypt:ro|- /etc/letsencrypt:/etc/letsencrypt:ro|' docker-compose.yml
         sed -i 's|# - /var/www/certbot:/var/www/certbot:ro|- /var/www/certbot:/var/www/certbot:ro|' docker-compose.yml
-        success "docker-compose.yml: letsencrypt volumes enabled."
+        success "docker-compose.yml: legacy commented letsencrypt volumes activated."
     else
-        info "docker-compose.yml: letsencrypt volumes already configured."
+        info "docker-compose.yml: letsencrypt volumes already active (mounted unconditionally)."
     fi
 
     # 3. Update CORS_ORIGINS in .env to use HTTPS
@@ -307,15 +311,11 @@ if [ "$AUTO_CONFIGURE" = false ]; then
     echo "  2. Replace DOMAIN_PLACEHOLDER with your domain:"
     echo "     sed -i 's/DOMAIN_PLACEHOLDER/$DOMAIN/g' nginx.conf"
     echo ""
-    echo "  3. Update docker-compose.yml nginx volumes — uncomment letsencrypt lines:"
-    echo "     volumes:"
-    echo "       - /etc/letsencrypt:/etc/letsencrypt:ro"
-    echo "       - /var/www/certbot:/var/www/certbot:ro"
-    echo ""
-    echo "  4. Update CORS_ORIGINS in .env to use HTTPS:"
+    echo "  3. Update CORS_ORIGINS in .env to use HTTPS:"
     echo "     CORS_ORIGINS=https://$DOMAIN"
     echo ""
-    echo "  5. Restart the stack:"
+    echo "  4. Restart the nginx container (SSL volumes are already mounted"
+    echo "     unconditionally by docker-compose.yml — no volume editing needed):"
     echo "     docker compose up -d --build nginx"
     echo ""
 else

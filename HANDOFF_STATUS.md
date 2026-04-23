@@ -1,11 +1,78 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T15:22
+## آخر تحديث: 2026-04-23T16:53
 
 ---
 
-## الدفعة الحالية: 2026-04-23T15:22 — Final Secret Rotation, Credential Hardening, Production-Safe Env Setup
+## الدفعة الحالية: 2026-04-23T16:53 — Deployment-Alignment & Production-Stability Batch
+
+**Scope:** Close the repo-level deploy/config gaps that were still letting the live VPS at `matrixtop.com` regress on each `./deploy.sh --rebuild`. Not a feature batch. No product behavior change. Arabic-first RTL UI untouched.
+
+### الملفات المُعدّلة في هذه الدفعة:
+
+| الملف | التغيير |
+|---|---|
+| `src/config.ts` | Removed the `http://localhost:8000` fallback. Default `API_BASE_URL` is now `/api` (same-origin). Added a separate `FILES_BASE_URL` (default `''` for same-origin; auto-derived from `API_BASE_URL` only when the latter is an absolute URL). Trailing slashes trimmed. Comprehensive JSDoc explains why there is no localhost fallback. |
+| `src/components/FileUpload.tsx` | Switched file-link construction from `API_BASE_URL` to `FILES_BASE_URL`. File hrefs are now built correctly under the new `/api` API base. |
+| `src/pages/ContractDetailsPage.tsx` | Same: PDF download open (line 92) and contract `pdf_file` link (line 214) now use `FILES_BASE_URL`. Removed the now-unused `API_BASE_URL` local. |
+| `vite.config.ts` | Added a `/uploads` proxy (→ `http://localhost:8000`) so dev file links resolve the same way they do in production. Inline comments explain the API vs files split. |
+| `.env.example` | Rewritten: no more `VITE_API_BASE_URL=http://localhost:8000`. Now documents `/api` as the production-safe value and an empty `VITE_FILES_BASE_URL` as the same-origin default. Explicit warning that Vite bakes these at *build* time. |
+| `deploy.sh` | Before `npm run build`: `export VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api}"` and `VITE_FILES_BASE_URL="${VITE_FILES_BASE_URL:-}"`, with an `info` log showing the resolved values. After the build: `grep -rq 'http://localhost:8000' dist/assets` and abort the deploy with a clear error if the localhost fallback somehow leaked into the bundle (defense in depth against operator `.env` mistakes). |
+| `docker-compose.yml` | nginx volumes now include unconditional read-only mounts of `${LETSENCRYPT_DIR:-/etc/letsencrypt}` and `${CERTBOT_WEBROOT:-/var/www/certbot}`. No more "uncomment to enable SSL" step. nginx healthcheck switched from `http://localhost:80/` (which 301-redirects under SSL) to `http://localhost:80/nginx-health` (defined locally in nginx, returns static 200). |
+| `nginx.conf` | Added `location = /nginx-health { access_log off; return 200 "ok\n"; }` — the target of the compose healthcheck. Logs disabled to keep the access log readable. |
+| `nginx-ssl.conf` | Added `/nginx-health` to **both** the HTTP server block (defined *before* the catch-all 301 to HTTPS, so docker probes on port 80 do not get redirected) and the HTTPS server block (for external uptime monitors over TLS). |
+| `ssl-setup.sh` | Removed the mandatory uncomment-volumes step in `--auto` (kept as backward-compat no-op for older clones still carrying the commented form). Cleaned up the "next steps" block for the non-`--auto` path — no more "edit docker-compose.yml" instruction, because the mounts are now active by default. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New "Before / After" entry for this batch with full engineering decisions and honest residual-gaps list. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### ✅ مكتمل ومُتحقق منه (Done — verified):
+
+| Goal | Status | Evidence |
+|---|---|---|
+| A) Production frontend no longer falls back to `http://localhost:8000` | **Done** | `src/config.ts` has no localhost string; `grep -r 'localhost:8000' dist/` after `npm run build` (both with explicit env and with unset env) → 0 hits. |
+| B) API base and public files base are separate | **Done** | `config.FILES_BASE_URL` introduced; `FileUpload.tsx` and `ContractDetailsPage.tsx` migrated; `vite.config.ts` proxies `/uploads` in dev so same-origin file links work. |
+| C) `deploy.sh` and env examples force production-safe frontend values | **Done** | `deploy.sh` exports `VITE_API_BASE_URL=/api` / `VITE_FILES_BASE_URL=` before `npm run build`, logs the resolved values, and aborts if `dist/assets` still contains `http://localhost:8000`. `.env.example` fully rewritten. |
+| D) nginx + docker-compose + ssl-setup represent the real SSL deployment | **Done** | `docker-compose.yml` mounts `/etc/letsencrypt` + `/var/www/certbot` unconditionally via env-overridable paths; `ssl-setup.sh --auto` no longer depends on a repo-state sed patch; HTTPS enablement requires only `ssl-setup.sh --auto` — no manual compose edits. |
+| E) nginx healthcheck no longer falsely unhealthy after SSL enablement | **Done** | New `/nginx-health` location returns 200 locally without any redirect. Defined in both HTTP and HTTPS blocks of `nginx-ssl.conf`. Compose healthcheck targets it. |
+| F) Frontend build passes | **Verified** | `npm ci` clean; `npm run build` → `✓ built in 1.00s` (with explicit env) and `✓ built in 1.11s` (with defaults). |
+| G) Backend tests pass | **Verified** | `python -m pytest tests/ -q` → **279 passed, 538 warnings in 111.16s**. No regression. |
+| H) Shell scripts parse | **Verified** | `bash -n deploy.sh && bash -n ssl-setup.sh` → OK. |
+| I) `PROJECT_REVIEW_AND_PROGRESS.md` + `HANDOFF_STATUS.md` updated honestly | **Done** | New batch entries with real verification evidence. |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| Frontend Dockerfile | **Not done** | Out of scope for this deploy-alignment batch. Node 20+ on host is still required and still documented. |
+| Dependency CVE pass (`python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0`) | **Not done** | Explicitly out of scope; flagged since the previous two batches. Recommend a separate batch. |
+| `/metrics` real counters | **Not done** | Still placeholder; auth-gated. |
+| Container content-scanning (ClamAV) on uploads | **Not done** | Out of scope. |
+| `backend/tests/load_test.py --password` default = `password123` | **Kept** | Intentional: load-test tool, not a seeded credential; overridable via `--password=...`. |
+
+### 🚫 Blocked: none.
+
+### الفجوات المتبقية قبل النشر الحقيقي:
+
+1. **Frontend remains a host-built artifact.** Node 20+ on host, `npm run build` must run before `docker compose up`. `deploy.sh` already handles this; a Dockerfile-based build is still a future improvement.
+2. **Aging tokens/hashing libs.** `python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0`. Still recommend a dependency-upgrade batch.
+3. **No virus scanning** on uploaded files.
+4. **`/metrics` counters are placeholders** — not real request totals.
+
+### الخطوة التالية الموصى بها على VPS الحي:
+
+1. `git pull` on the VPS checkout.
+2. `./deploy.sh --rebuild` — the rebuild will:
+   - export `VITE_API_BASE_URL=/api` and `VITE_FILES_BASE_URL=` before `npm run build`,
+   - abort with a clear error if the bundle still contains `http://localhost:8000`,
+   - probe nginx with `/nginx-health` (no more false unhealthy under SSL),
+   - keep the live SSL mounts intact (they were always there; now the repo matches).
+3. Smoke-test: load the site, perform a login, open a contract PDF link, open a complaint attachment. All four should work without any host-level edits to `nginx.conf` or `docker-compose.yml`.
+4. Schedule the dependency-upgrade batch flagged under "Partial / Out-of-scope".
+
+---
+
+## الدفعة السابقة: 2026-04-23T15:22 — Final Secret Rotation, Credential Hardening, Production-Safe Env Setup
 
 **Scope:** Finalization pass on top of the 2026-04-23T11:58 Pre-Deployment Hardening Batch. Closes residual documentation drift and an operator-ergonomics gap. No code-path changes to the security primitives themselves — those were already correct.
 

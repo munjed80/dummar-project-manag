@@ -90,17 +90,26 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./dist:/usr/share/nginx/html:ro
       - backend_uploads:/usr/share/nginx/uploads:ro
-      # SSL certificates — mount Let's Encrypt directory when available
-      # To enable SSL: run ssl-setup.sh, copy nginx-ssl.conf → nginx.conf,
-      # and uncomment the letsencrypt volume below:
-      # - /etc/letsencrypt:/etc/letsencrypt:ro
-      # - /var/www/certbot:/var/www/certbot:ro
+      # SSL certificates — mounted unconditionally so HTTPS enablement does
+      # NOT require hand-editing docker-compose.yml on the VPS. The paths
+      # default to the standard Let's Encrypt / certbot locations and are
+      # read-only. When certs do not yet exist Docker will create empty
+      # directories on the host (no-op for the HTTP-only nginx.conf). Once
+      # ssl-setup.sh has obtained certs and nginx-ssl.conf is in place, the
+      # same mounts already resolve correctly — no further compose changes.
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+      - ${CERTBOT_WEBROOT:-/var/www/certbot}:/var/www/certbot:ro
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      # Use a dedicated /nginx-health endpoint that returns 200 on both HTTP
+      # and HTTPS server blocks (see nginx.conf / nginx-ssl.conf). The old
+      # probe hit "http://localhost:80/", which under the SSL-enabled config
+      # returns 301 → https://<server_name>/ and then fails TLS inside the
+      # container, causing false "unhealthy" even when the site was fine.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/nginx-health"]
       interval: 30s
       timeout: 5s
       retries: 3

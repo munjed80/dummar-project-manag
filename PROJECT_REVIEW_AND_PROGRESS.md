@@ -11,6 +11,63 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-23T16:53 — Deployment-Alignment & Production-Stability Batch (frontend API/files bases, deploy/env, nginx/SSL, healthcheck)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T16:53
+- **فهم النظام الحالي (verified by inspection of real code, not docs):**
+  - The live deployment at `matrixtop.com` works, but the repo itself still had six concrete deploy-time gaps that would regress on the next `./deploy.sh --rebuild` from a clean VPS checkout:
+    1. `src/config.ts:9` — `API_BASE_URL` fell back to **`http://localhost:8000`** when `VITE_API_BASE_URL` was unset. Because Vite bakes env vars into the bundle at build time, any rebuild without the var set would ship a bundle that tries to log in against `localhost:8000` from the user's browser. This is the direct cause of the "login breaks after redeploy" class of bugs.
+    2. The frontend used the **same** base URL for both API calls and public file links (`ContractDetailsPage.tsx:92/214`, `FileUpload.tsx:129`). API paths are served under `/api` (nginx rewrites to the backend), but file URLs returned by the backend are root-relative like `/uploads/contracts/foo.pdf`. Concatenating `/api` + `/uploads/...` → `/api/uploads/...` which nginx does NOT route. Under the previous localhost fallback this accidentally "worked" because the fallback was an absolute URL; switching to `/api` without splitting the bases would have silently broken every file link.
+    3. `.env.example` still instructed operators to use `VITE_API_BASE_URL=http://localhost:8000` — a production-unsafe value that leaks into the bundle.
+    4. `deploy.sh` did not export/pin frontend build-time env values. A stray `.env.local` with a localhost value on the VPS would silently poison the `dist/` bundle on every rebuild, with no warning.
+    5. `docker-compose.yml` had the `/etc/letsencrypt` and `/var/www/certbot` mounts commented out and only re-enabled by an `ssl-setup.sh --auto` `sed`. Any fresh clone or `git checkout -- docker-compose.yml` on the VPS would silently break HTTPS on the next `docker compose up`.
+    6. `docker-compose.yml` nginx healthcheck probed `http://localhost:80/` which, under the SSL-enabled `nginx-ssl.conf`, returns a `301` to `https://<server_name>/`. `wget --spider` on the bare `localhost` hostname does not satisfy the TLS SAN, so the probe fails and nginx reports unhealthy even when the site is fine. This also cascades into `depends_on: condition: service_healthy` for any downstream orchestration.
+- **أهداف الدفعة (this batch's goals):**
+  - A) Remove the unsafe `http://localhost:8000` fallback from `src/config.ts`; default to `/api` same-origin; keep dev workable via the Vite proxy.
+  - B) Introduce a separate `FILES_BASE_URL` for public file links (default `''`); migrate `FileUpload.tsx` and `ContractDetailsPage.tsx`; proxy `/uploads` in `vite.config.ts` for dev.
+  - C) Make `.env.example` production-safe; make `deploy.sh` pin `VITE_API_BASE_URL=/api` and `VITE_FILES_BASE_URL=` during `npm run build`, and fail loud if `localhost:8000` leaks into `dist/`.
+  - D) Mount Let's Encrypt volumes unconditionally in `docker-compose.yml` (via env-overridable `LETSENCRYPT_DIR` / `CERTBOT_WEBROOT`); update `ssl-setup.sh` to gracefully no-op on the new layout; keep backward compatibility with older clones that still have the commented form.
+  - E) Add a dedicated `/nginx-health` location to both `nginx.conf` and `nginx-ssl.conf` (both server blocks in the SSL variant); point the compose nginx healthcheck at it.
+  - F) Verify `npm run build` + backend tests + no `localhost:8000` in dist/ under both explicit and default env.
+- **الملفات المتوقع تعديلها:**
+  - `src/config.ts` — production-safe defaults, split API/files base.
+  - `src/components/FileUpload.tsx`, `src/pages/ContractDetailsPage.tsx` — use `FILES_BASE_URL` for file links.
+  - `vite.config.ts` — add `/uploads` proxy for dev.
+  - `.env.example` — production-safe VITE_* examples + docs.
+  - `deploy.sh` — pin VITE_* during build, guard against localhost leak in dist.
+  - `docker-compose.yml` — unconditional SSL mounts, `/nginx-health` healthcheck.
+  - `nginx.conf`, `nginx-ssl.conf` — add `/nginx-health` location.
+  - `ssl-setup.sh` — no more mandatory volume uncomment step.
+  - `PROJECT_REVIEW_AND_PROGRESS.md`, `HANDOFF_STATUS.md` — honest before/after.
+- **المخاطر / الافتراضات:**
+  - The live VPS already has `/etc/letsencrypt` and `/var/www/certbot` populated by certbot. Docker will happily create empty directories when the host path is missing, so the unconditional mount is safe on hosts without SSL too (`nginx.conf` HTTP-only config does not reference the cert files).
+  - No product behavior, no new features, no RTL/Arabic UI changes.
+  - Backend API surface is unchanged; only frontend URL construction and deploy/ops files touched.
+
+**بعد الانتهاء (After Current Batch — verified):**
+- **الطابع الزمني:** 2026-04-23T16:53
+- **النتيجة:** **Done** — all six gaps (1–6) closed and verified end-to-end.
+- **التحقق:**
+  - `npm ci && VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → `✓ built in 1.00s`.
+  - `unset VITE_API_BASE_URL VITE_FILES_BASE_URL && npm run build` → `✓ built in 1.11s` AND `grep -r 'localhost:8000' dist/` → 0 hits. Defaults are production-safe on their own.
+  - `cd backend && python -m pytest tests/ -q` → **279 passed**.
+  - `bash -n deploy.sh && bash -n ssl-setup.sh` → OK.
+  - `deploy.sh` now prints `Frontend build env: VITE_API_BASE_URL='/api' VITE_FILES_BASE_URL=''` and `grep -rq 'http://localhost:8000' dist/assets` exits non-zero before the stack is brought up; if it leaks, deploy aborts with a clear error.
+- **القرارات الهندسية الرئيسية:**
+  1. **`/api` + `''` as defaults, not `http://localhost:8000`.** This makes the bundle portable across dev/staging/production without rebuilds. Dev keeps working via `vite.config.ts` proxy (now proxying both `/api` and `/uploads`).
+  2. **API base and files base are deliberately separate.** `FILES_BASE_URL` falls back to the API base *only* when that API base is an absolute URL; otherwise it stays empty (same-origin). This preserves the "dev against a remote backend" workflow while guaranteeing production `/api/uploads/...` URLs never get constructed.
+  3. **Unconditional Let's Encrypt volumes via env-overridable paths.** `docker-compose.yml` mounts `${LETSENCRYPT_DIR:-/etc/letsencrypt}` and `${CERTBOT_WEBROOT:-/var/www/certbot}` read-only. Operators who test locally without SSL can point these at a disposable dir; operators on a real VPS get the right behavior by default. HTTPS enablement is now purely "run `ssl-setup.sh --auto`" — no manual compose edits.
+  4. **Dedicated `/nginx-health` probe, not `/` or `/health`.** `/` 301-redirects under SSL; `/health` is proxied to the backend and conflates nginx-level and backend-level health. `/nginx-health` is local to nginx, bypasses rate limits and redirects, and returns a static 200. Defined in the plain-HTTP block of `nginx-ssl.conf` BEFORE the redirect, so docker probes hitting `http://localhost:80` do not get a 301.
+  5. **Belt-and-braces: fail the deploy if the bundle still contains `http://localhost:8000`.** Even with the config.ts fix, a rogue `.env` could in principle reintroduce the leak. `deploy.sh` greps `dist/assets` after the build and aborts with a clear error before any container is recreated.
+  6. **No rewrites of the API service layer.** `src/services/api.ts` keeps its single `API_BASE_URL` constant — only the resolution of that constant (and the new `FILES_BASE_URL` constant) changed. Minimal diff, minimal risk.
+- **الفجوات المتبقية بصدق:**
+  - Same residuals as the prior batch: no frontend Dockerfile, `python-jose==3.3.0` / `passlib==1.7.4` / yanked `email-validator==2.1.0` need a dependency-upgrade batch, `/metrics` counters are placeholders, no virus scanning on uploads. Explicitly out of scope for this deployment-alignment pass.
+  - `backend/tests/load_test.py` still defaults `--password=password123` — unchanged, documented as override-only.
+- **الخطوة التالية الموصى بها:** On the live VPS, `git pull && ./deploy.sh --rebuild`. The rebuild will now produce a bundle that is production-safe by default and will refuse to ship a localhost-poisoned bundle. After go-live, schedule the dependency-upgrade batch flagged above.
+
+---
+
 ### الدفعة: 2026-04-23T15:22 — Final Secret Rotation, Credential Hardening, Production-Safe Env Setup
 
 **قبل البدء (Before Current Batch):**
