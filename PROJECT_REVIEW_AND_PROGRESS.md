@@ -5,11 +5,97 @@
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
 **المرحلة الحالية:** المرحلة السادسة - الجغرافيا التشغيلية للمواقع  
-**آخر تحديث:** 2026-04-17
+**آخر تحديث:** 2026-04-23
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-23T11:58 — Pre-Deployment Hardening Batch (Security, Secrets, Uploads, Docs, Health, Logs)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T11:58
+- **فهم النظام الحالي (verified by inspection of real code, not docs):**
+  - Frontend builds cleanly (`npm run build`, ~1.5s, dist/ produced)
+  - Backend test suite passes (`tests/test_api.py`: 78/78 verified)
+  - 7 alembic migrations exist; auto-applied on container start
+  - RBAC is consistently enforced via `require_role(...)` dependencies; spot-checked all `contract_intelligence` endpoints — every route has a role gate
+  - Health endpoints are real: `/health`, `/health/ready` (503 if DB down), `/health/detailed` (DB+SMTP latency), `/health/smtp[/test-send]`, `/health/ocr`, `/metrics`
+  - Rate limiting at both app (slowapi 120/min) and nginx (api 30r/s, auth 10r/s, upload 5r/s) layers
+  - DB port intentionally not published in docker-compose.yml
+  - `entrypoint.sh` does pg_isready wait, alembic upgrade, OCR/SMTP self-checks, then gunicorn
+  - `deploy.sh` and `ssl-setup.sh` are non-trivial and largely correct
+- **الفجوات الأمنية المُتحقق منها (real, code-verified gaps that block production):**
+  1. `docker-compose.yml:30-31` publishes backend `8000:8000` on all interfaces — bypasses nginx
+  2. `docker-compose.yml:33,37` has fallback values for `SECRET_KEY` and `DB_PASSWORD` — stack can boot with insecure defaults
+  3. `seed_data.py` hardcodes `password123` for all 9 seed accounts; `check_default_passwords()` only warns
+  4. `app/main.py:123` mounts `/uploads` as unauthenticated `StaticFiles`; nginx also serves `/uploads/` directly — sensitive contract-intelligence documents are anonymously readable by URL
+  5. `/docs` and `/redoc` are exposed by default (FastAPI default)
+  6. `entrypoint.sh:21-24` makes `alembic upgrade head` failure non-fatal — broken state can start
+  7. `/health/detailed` and `/metrics` are unauthenticated and leak operational details
+  8. `docker-compose.yml` has no log rotation — unbounded growth on long-lived VPS
+  9. `backend/.env.example` literally contains `SECRET_KEY=dummar-secret-key-change-in-production-32chars-min` and `DB_PASSWORD=dummar_password` — copy-paste footgun
+  10. `README.md` and `PRODUCTION_DEPLOYMENT_GUIDE.md` mismatch deploy.sh on prerequisites (Python/PostgreSQL/PostGIS/nginx are NOT host requirements in the Docker path)
+- **أهداف هذه الدفعة (this batch's goals — strict pre-deployment hardening):**
+  - A) Bind backend port to `127.0.0.1` only; nginx is the public entry point
+  - B) Remove fallback secrets from `docker-compose.yml`; clean `backend/.env.example`; require explicit `.env`
+  - C) Replace hardcoded seed passwords with strong random per-user passwords written to `backend/seed_credentials.txt`; provide opt-in `--force-default-passwords` for dev
+  - D) Replace `StaticFiles("/uploads")` mount with a category-aware router: PUBLIC categories (`complaints`, `profiles`, `general`, `tasks`) served openly; SENSITIVE categories (`contracts`, `contract_intelligence`) require auth. Update nginx to proxy sensitive paths to backend.
+  - E) Disable `/docs`, `/redoc`, `/openapi.json` by default in production; gate via `ENABLE_API_DOCS=true` env var
+  - F) Make `alembic upgrade head` failure fatal in `entrypoint.sh` (`exit 1`)
+  - G) Auth-gate `/health/detailed` (internal staff) and `/metrics` (internal staff); keep `/health` and `/health/ready` public for orchestrators/probes
+  - H) Add Docker `json-file` log rotation (10MB × 5 files) to all three services
+  - I) Align `README.md`, `PRODUCTION_DEPLOYMENT_GUIDE.md`, `deploy.sh`, env examples on real prerequisites: Docker, Compose v2, Node 20+, optional Certbot. Postgres/PostGIS/nginx run inside containers.
+  - J) Add fail2ban + backups guidance to deployment guide
+- **الملفات المتوقع تعديلها:**
+  - `docker-compose.yml` — bind to 127.0.0.1, remove fallback secrets, add log rotation
+  - `backend/.env.example` — remove insecure literal defaults
+  - `.env.example` — add reminder
+  - `backend/app/scripts/seed_data.py` — random per-user passwords + credentials file + flag
+  - `backend/app/api/uploads.py` — category-aware secure download endpoint
+  - `backend/app/api/contract_intelligence.py` — return secure download URL for stored documents
+  - `backend/app/main.py` — drop unauthenticated StaticFiles mount; gate /docs by env
+  - `backend/app/core/config.py` — add `ENABLE_API_DOCS`, `ENVIRONMENT` settings
+  - `backend/app/api/health.py` — auth-gate /health/detailed
+  - `backend/app/main.py` — auth-gate /metrics (move into health router or similar)
+  - `backend/entrypoint.sh` — exit non-zero on migration failure
+  - `nginx.conf`, `nginx-ssl.conf` — restrict /uploads to PUBLIC categories; proxy /uploads/contracts and /uploads/contract_intelligence to backend
+  - `deploy.sh` — validate .env has SECRET_KEY/DB_PASSWORD; warn if missing
+  - `README.md` — fix prerequisites, remove default-credentials section (or move under "first-time only")
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — align prerequisites, document env-gated /docs, document auth-gated health, document log rotation, add fail2ban + backup snippets
+- **المخاطر / الافتراضات:**
+  - Existing tests rely on default seed passwords. Solution: `seed_data` keeps default-password mode (gated via env or flag) for tests; production path uses random.
+  - Test suite uses `app.mount("/uploads", StaticFiles)` indirectly? Need to confirm — frontend uses `${API_BASE_URL}${file.path}` so existing complaint photos work via the same backend host. Switching to category-aware router preserves the URL shape `/uploads/{category}/{filename}` for public categories and changes contract-intelligence URLs to `/uploads/secure/...`.
+  - No frontend Dockerfile is added in this batch (out of scope — node-on-host stays, but is now properly documented).
+- **افتراضات النشر:**
+  - Single VPS, Ubuntu 22.04+ LTS, Docker Compose v2, Node 20+ on host (for `npm run build`), Certbot only if Let's Encrypt is desired. No host Postgres, no host nginx.
+
+**بعد الانتهاء (After Current Batch — verified):**
+- **الطابع الزمني:** 2026-04-23T11:58
+- **النتيجة:** **Done** — all 10 hardening goals (A–J) implemented and verified end-to-end. No "Blocked" items.
+- **التحقق:**
+  - `npm run build` → `✓ built in 1.90s`, dist produced.
+  - `python -m pytest tests/ -q` → **279 passed** (78 API + 43 E2E + 86 contract intelligence + 70 locations + 2 new auth-gating tests).
+  - `bash -n entrypoint.sh deploy.sh` → no syntax errors.
+  - `python -c "import ast; ast.parse(...)"` for `main.py`, `seed_data.py` → OK.
+- **التغييرات الفعلية:** see HANDOFF_STATUS.md for the full file-by-file table.
+- **القرارات الهندسية الرئيسية:**
+  1. Backend port binding made env-driven (`BACKEND_BIND`, default `127.0.0.1`) instead of hardcoded — preserves single-box dev usability while making the safe choice the default.
+  2. Secrets moved from `${VAR:-default}` to `${VAR:?explanation}` — Docker Compose itself refuses to start the stack with missing/empty values; deploy.sh additionally rejects the legacy default literals (defense in depth).
+  3. Seed passwords switched to `secrets.token_urlsafe(18)` (≈144 bits) per user, written to `seed_credentials.txt` (chmod 600). Legacy `password123` mode is opt-in only via env or CLI flag; tests are unaffected because they create users via `_create_user` fixtures, not via seed.
+  4. Uploads architecture changed from "everything served as static" to a category-aware split: PUBLIC categories (complaints/profiles/general/tasks) stay as fast nginx static (UUID filenames provide unguessability); SENSITIVE categories (contracts/contract_intelligence) are routed by nginx to the backend, which enforces `get_current_internal_user`. The unauthenticated `app.mount("/uploads", StaticFiles)` in `main.py` is REMOVED.
+  5. API docs are gated by a single setting `docs_enabled() = ENABLE_API_DOCS or not is_production()` — keeps developer ergonomics in dev, secures by default in prod.
+  6. Migration failures in `entrypoint.sh` now `exit 1`. Combined with `restart: unless-stopped`, Docker will keep retrying — surfacing the failure in container status rather than silently serving against a broken schema.
+  7. `/health/detailed`, `/health/smtp`, `/health/ocr`, and `/metrics` all require `get_current_internal_user`. `/health` and `/health/ready` remain anonymous so that orchestrators (Docker healthcheck, load balancers, uptime monitors) work without credentials.
+  8. Docker `json-file` log rotation (10 MB × 5 files) added to all three services — bounds disk usage on long-lived VPS.
+- **الفجوات المتبقية بصدق:**
+  - Frontend still requires Node 20+ on the host (no frontend Dockerfile yet) — out of scope for this hardening batch.
+  - `python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0` — should be reviewed in a separate dependency-upgrade batch.
+  - `/metrics` counters are placeholders (always zero); now at least auth-gated so they don't mislead anonymous callers.
+  - No virus scanning (e.g. ClamAV) on uploaded files.
+- **الخطوة التالية الموصى بها:** فعلاً نشر على VPS تجريبي وتطبيق checklist الموجود في HANDOFF_STATUS.md. ثم batch مستقل لـ: frontend Dockerfile، ترقية tokens deps، instrumentation حقيقي للـ metrics.
+
+---
 
 ### الدفعة: 2026-04-18T00:11 — Advanced Location Operations Batch (Boundary Editor, Geo Dashboard, Contract-Location UI, Notifications, Haversine)
 

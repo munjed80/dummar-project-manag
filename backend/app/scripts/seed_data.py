@@ -1,10 +1,11 @@
 import sys
 import os
 import logging
+import secrets
 sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from sqlalchemy.orm import Session
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 
 import json
@@ -19,38 +20,136 @@ from app.models.contract import Contract, ContractType, ContractStatus
 
 logger = logging.getLogger(__name__)
 
-# Default insecure passwords used in seed data
+# Insecure default password — used ONLY when explicitly requested via the
+# SEED_DEFAULT_PASSWORDS=1 env var (or --force-default-passwords flag) to keep
+# the existing test/dev workflow working. Production seeding generates strong
+# random passwords per user and writes them to a credentials file.
 _SEED_DEFAULT_PASSWORD = "password123"
 
+# Where per-user generated passwords are written when the production-safe
+# random-password mode is used. Must NOT be world-readable; the file is
+# chmod 600 after writing. The operator should record/distribute the
+# credentials and then delete the file.
+_DEFAULT_CREDENTIALS_FILE = os.environ.get(
+    "SEED_CREDENTIALS_FILE",
+    os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "seed_credentials.txt")),
+)
 
-def seed_users(db: Session):
+
+def _use_default_passwords() -> bool:
+    """Return True if the operator/test runner explicitly requested the legacy
+    insecure default password for every seeded account.
+
+    Triggered by:
+      - env var SEED_DEFAULT_PASSWORDS=1 / true / yes
+      - CLI flag --force-default-passwords (parsed in main())
+
+    Default behavior (production) is to generate strong random passwords.
+    """
+    val = os.environ.get("SEED_DEFAULT_PASSWORDS", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
+def _generate_strong_password() -> str:
+    """24-char URL-safe random password (≈ 144 bits of entropy)."""
+    return secrets.token_urlsafe(18)
+
+
+def seed_users(db: Session, credentials_file: str = _DEFAULT_CREDENTIALS_FILE):
     print("Seeding users...")
     users_data = [
-        {"username": "director", "password": "password123", "full_name": "م. أحمد الخطيب", "role": UserRole.PROJECT_DIRECTOR, "email": "director@dummar.gov.sy", "phone": "+963112345001"},
-        {"username": "contracts_mgr", "password": "password123", "full_name": "م. سامر القاسم", "role": UserRole.CONTRACTS_MANAGER, "email": "contracts@dummar.gov.sy", "phone": "+963112345002"},
-        {"username": "engineer", "password": "password123", "full_name": "م. ليلى حسن", "role": UserRole.ENGINEER_SUPERVISOR, "email": "engineer@dummar.gov.sy", "phone": "+963112345003"},
-        {"username": "complaints_off", "password": "password123", "full_name": "عمر المصري", "role": UserRole.COMPLAINTS_OFFICER, "email": "complaints@dummar.gov.sy", "phone": "+963112345004"},
-        {"username": "area_sup", "password": "password123", "full_name": "خالد الأحمد", "role": UserRole.AREA_SUPERVISOR, "email": "area@dummar.gov.sy", "phone": "+963112345005"},
-        {"username": "field_user", "password": "password123", "full_name": "يوسف العلي", "role": UserRole.FIELD_TEAM, "email": "field@dummar.gov.sy", "phone": "+963112345006"},
-        {"username": "contractor", "password": "password123", "full_name": "شركة البناء الحديث", "role": UserRole.CONTRACTOR_USER, "email": "contractor@dummar.gov.sy", "phone": "+963112345007"},
-        {"username": "citizen1", "password": "password123", "full_name": "مواطن — سمير الحسن", "role": UserRole.CITIZEN, "email": "citizen1@dummar.gov.sy", "phone": "+963911234567"},
+        {"username": "director", "full_name": "م. أحمد الخطيب", "role": UserRole.PROJECT_DIRECTOR, "email": "director@dummar.gov.sy", "phone": "+963112345001"},
+        {"username": "contracts_mgr", "full_name": "م. سامر القاسم", "role": UserRole.CONTRACTS_MANAGER, "email": "contracts@dummar.gov.sy", "phone": "+963112345002"},
+        {"username": "engineer", "full_name": "م. ليلى حسن", "role": UserRole.ENGINEER_SUPERVISOR, "email": "engineer@dummar.gov.sy", "phone": "+963112345003"},
+        {"username": "complaints_off", "full_name": "عمر المصري", "role": UserRole.COMPLAINTS_OFFICER, "email": "complaints@dummar.gov.sy", "phone": "+963112345004"},
+        {"username": "area_sup", "full_name": "خالد الأحمد", "role": UserRole.AREA_SUPERVISOR, "email": "area@dummar.gov.sy", "phone": "+963112345005"},
+        {"username": "field_user", "full_name": "يوسف العلي", "role": UserRole.FIELD_TEAM, "email": "field@dummar.gov.sy", "phone": "+963112345006"},
+        {"username": "contractor", "full_name": "شركة البناء الحديث", "role": UserRole.CONTRACTOR_USER, "email": "contractor@dummar.gov.sy", "phone": "+963112345007"},
+        {"username": "citizen1", "full_name": "مواطن — سمير الحسن", "role": UserRole.CITIZEN, "email": "citizen1@dummar.gov.sy", "phone": "+963911234567"},
     ]
-    
+
+    use_default = _use_default_passwords()
+    created_credentials = []  # list of (username, password) for newly-created users
+
     for user_data in users_data:
         existing = db.query(User).filter(User.username == user_data["username"]).first()
-        if not existing:
-            password = user_data.pop("password")
-            user = User(
-                **user_data,
-                hashed_password=get_password_hash(password),
-                is_active=1
-            )
-            db.add(user)
-    
+        if existing:
+            continue
+
+        if use_default:
+            password = _SEED_DEFAULT_PASSWORD
+        else:
+            password = _generate_strong_password()
+
+        user = User(
+            **user_data,
+            hashed_password=get_password_hash(password),
+            is_active=1,
+        )
+        db.add(user)
+        created_credentials.append((user_data["username"], password))
+
     db.commit()
-    print(f"✓ Created {len(users_data)} users")
-    print("⚠️  WARNING: All seed accounts use the default insecure password.")
-    print("⚠️  Change all passwords before deploying to production!")
+    print(f"✓ Processed {len(users_data)} users (newly created: {len(created_credentials)})")
+
+    if use_default:
+        print("⚠️  SEED_DEFAULT_PASSWORDS is enabled — all newly seeded accounts use 'password123'.")
+        print("⚠️  This mode is for tests and local development only. Do NOT use in production.")
+        print("⚠️  Change all passwords before exposing the system.")
+        return
+
+    if not created_credentials:
+        print("No new accounts were created (all already existed). No credentials file written.")
+        return
+
+    # Write credentials file with restrictive permissions.
+    # NOTE (security review): writing the freshly-generated passwords is
+    # unavoidable — there is otherwise no way to deliver them to the
+    # operator who runs the seed script. We mitigate by:
+    #   - writing to a single file with mode 0600
+    #   - documenting that the operator must distribute the credentials
+    #     through a secure channel and immediately delete the file
+    #   - NEVER falling back to stdout/log printing if the file write fails
+    #     (we raise instead, so the credentials are not leaked into logs)
+    #
+    # We intentionally use O_TRUNC (not O_EXCL) so re-running the seed
+    # script after adding a new operator account overwrites any prior
+    # credentials file in place. Note that seed_users only generates a
+    # password for newly created accounts, so an "overwrite" only occurs
+    # when there are genuinely new credentials to record.
+    try:
+        # Create with mode 0600 from the start (avoiding a brief
+        # world-readable window between create and chmod).
+        fd = os.open(
+            credentials_file,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError:
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("# Dummar — Seeded user credentials (generated)\n")
+            f.write(f"# Generated at: {datetime.now(timezone.utc).isoformat()}\n")
+            f.write("# These passwords were created with secrets.token_urlsafe(18) (~144 bits).\n")
+            f.write("# Distribute them to operators via a secure channel and DELETE this file.\n")
+            f.write("# Each operator should rotate their password on first login.\n\n")
+            for username, password in created_credentials:
+                f.write(f"{username}\t{password}\n")
+        print(f"✓ Credentials for {len(created_credentials)} new account(s) written to:")
+        print(f"    {credentials_file}")
+        print("⚠️  Distribute these passwords securely and DELETE the file afterwards.")
+    except OSError as exc:
+        # Do NOT print the passwords to stdout/logs as a fallback — that would
+        # leak them into container logs / journald / log aggregators. Fail
+        # loudly so the operator can fix permissions and retry.
+        raise RuntimeError(
+            f"Could not write seed credentials file '{credentials_file}': {exc}. "
+            "Refusing to print generated passwords to stdout. "
+            "Fix the path/permissions and re-run the seed script. "
+            "Override location with SEED_CREDENTIALS_FILE=/some/writable/path."
+        ) from exc
 
 
 def check_default_passwords(db: Session):
@@ -469,9 +568,18 @@ def seed_contracts(db: Session):
 
 
 def main():
+    # Parse CLI flag for default-password mode (in addition to env var).
+    if "--force-default-passwords" in sys.argv:
+        os.environ["SEED_DEFAULT_PASSWORDS"] = "1"
+
     print("Starting seed data process...")
+    if _use_default_passwords():
+        print("Mode: DEFAULT PASSWORDS (insecure — for tests/dev only).")
+    else:
+        print("Mode: STRONG RANDOM PASSWORDS (production-safe).")
+
     db = SessionLocal()
-    
+
     try:
         seed_users(db)
         seed_areas(db)
@@ -482,7 +590,7 @@ def main():
 
         # Check for insecure default passwords
         check_default_passwords(db)
-        
+
         print("\n✅ Seed data completed successfully!")
     except Exception as e:
         print(f"\n❌ Error during seeding: {e}")
