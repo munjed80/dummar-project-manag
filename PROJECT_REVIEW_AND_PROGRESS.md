@@ -4,12 +4,194 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة الثامنة - تعميق التكامل التشغيلي (Projects/Teams across complaints/tasks/contracts + cross-entity filters & deep links)  
-**آخر تحديث:** 2026-04-23T19:42
+**المرحلة الحالية:** المرحلة العاشرة - تثبيت ما قبل التحديث على الـ VPS (final SSL/nginx/docker-compose alignment + doc reality-sync + smoke-check)  
+**آخر تحديث:** 2026-04-23T20:55
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة الحالية: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch (SSL self-healing in deploy.sh + doc reality-sync + smoke-check)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T20:55
+- **سياق هذه الدفعة:** This is intentionally NOT a feature batch. The product is functionally complete (296 backend tests, frontend build passing, public landing + complaint→task lifecycle visibility shipped in the previous batch). The remaining risk is purely operational: the VPS rollout has historically only worked after manual server-side hot-fixes, which means the repo is *not yet* the single source of truth for "what runs in production". The goal is to close that gap.
+- **فهم الواقع الحالي بناءً على فحص الكود الفعلي (لا الوثائق):**
+  - **`docker-compose.yml`** *is* already correct: it mounts `${LETSENCRYPT_DIR:-/etc/letsencrypt}` and `${CERTBOT_WEBROOT:-/var/www/certbot}` unconditionally, exposes ports 80 and 443, and the nginx healthcheck hits a dedicated `/nginx-health` endpoint that returns 200 on both server blocks. So no compose edits are needed on the VPS to enable SSL — confirmed at `docker-compose.yml:84-115`.
+  - **`nginx-ssl.conf`** *is* already correct: HTTP→HTTPS redirect on port 80, dedicated `/nginx-health` endpoint defined BEFORE the catch-all redirect (so docker healthcheck works in both modes), TLS 1.2/1.3, HSTS, OCSP stapling. ACME challenge path served over HTTP. `DOMAIN_PLACEHOLDER` is the substitution token used by ssl-setup.sh.
+  - **`ssl-setup.sh --auto`** correctly does the post-cert wiring: `cp nginx-ssl.conf nginx.conf`, `sed s/DOMAIN_PLACEHOLDER/$DOMAIN/`, updates `CORS_ORIGINS` to https, restarts nginx.
+  - **`deploy.sh`** correctly pins production-safe Vite envs in-process (`VITE_API_BASE_URL=/api`, `VITE_FILES_BASE_URL=`), refuses to deploy if the build leaks `http://localhost:8000`, and validates that `.env` doesn't carry the legacy default secrets.
+  - **`src/config.ts`** correctly defaults to `/api` and `''` for files, with a comment explaining why the localhost fallback was removed.
+- **الفجوات الفعلية الحرجة (concrete remaining risks for the VPS):**
+  1. **`deploy.sh` is NOT idempotent across `git pull` for SSL.** This is the single highest-impact problem. Concrete failure mode: the operator runs `ssl-setup.sh --auto` once, which modifies the on-VPS `nginx.conf` to be the SSL version (a copy of `nginx-ssl.conf` with `DOMAIN_PLACEHOLDER` replaced). The next `git pull` overwrites that file back to the HTTP-only repo version. The next `./deploy.sh --rebuild` then restarts nginx with HTTP-only config and HTTPS dies — exactly the "VPS only worked after manual hot-fix" pattern in the prompt. `deploy.sh` currently has no logic to detect "SSL was previously configured for this domain" and re-apply the SSL config from `nginx-ssl.conf`. Verified at `deploy.sh:212-224, 270-289` (only sets `CORS_ORIGINS` from `--domain`; never touches `nginx.conf`).
+  2. **`README.md:88` is wrong** and is the doc that originally caused the production breakage. It claims `VITE_API_BASE_URL` defaults to `http://localhost:8000`. The real default in `src/config.ts:26` is `/api`. An operator who reads the README in isolation and decides "I'll just leave it default" gets a working dev env but a broken production build. (This was already fixed in `src/config.ts` and in `.env.example`, but `README.md` was not updated, so the trap is still there.)
+  3. **`PRODUCTION_DEPLOYMENT_GUIDE.md` SSL "Quick Setup" (lines 837-863) and "VPS Deployment Checklist → SSL/TLS Setup" (lines 1310-1319)** still document the OLD manual flow: "uncomment letsencrypt volume in docker-compose.yml". That instruction is now actively misleading — the volumes are already unconditional. An operator following these steps will literally search for a `# - /etc/letsencrypt:...` comment that no longer exists. Need to replace with the simpler `ssl-setup.sh --auto` flow.
+  4. There is **no in-repo smoke-check script** for post-deploy operator confidence (Outcome F, optional but explicitly suggested in the prompt). `deploy.sh` does check 3 endpoints inline at the end but only on `http://localhost`; there's no separate, runnable command that an operator can execute on demand against `https://<domain>` to confirm the live site is working.
+- **أهداف الدفعة (this batch's exact goals):**
+  - A) **`deploy.sh` SSL self-healing**: when invoked with `--domain=X` AND `/etc/letsencrypt/live/X/fullchain.pem` exists, automatically re-apply `nginx-ssl.conf` to `nginx.conf` (with the placeholder replaced) before bringing nginx up. Ensures `git pull && ./deploy.sh --rebuild --domain=X` is idempotent and never loses HTTPS.
+  - B) **Doc reality-sync**: fix `README.md` Vite env table; rewrite `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup + checklist to reflect the `--auto` flow and the unconditional letsencrypt mounts.
+  - C) **`smoke-check.sh`** *(new, optional)*: short script that probes homepage, login API, `/health/ready`, and (when run with a domain) HTTPS reachability. Operator-confidence helper, not a test framework.
+  - D) Verify nothing regresses: backend tests still pass, frontend build still passes, `localhost:8000` leak detection still works, public complaint intake / track / login paths are still operational by inspection.
+  - E) Strict no-go: NO new product features; NO new dependencies; NO redesign; NO new framework; NO RBAC/audit/contract-intelligence/map changes; NO change to login flow; NO change to upload split.
+
+**بعد التنفيذ (After Current Batch):**
+
+- **Files changed (exact, this batch):**
+  - `deploy.sh` — added the SSL self-heal block after the `--domain` CORS update (lines around 213-271). When `--domain=$DOMAIN` is passed AND `/etc/letsencrypt/live/$DOMAIN/fullchain.pem` exists, the script now: (1) detects whether `nginx.conf` is already the SSL version (`listen 443 ssl` + `server_name $DOMAIN` + no `DOMAIN_PLACEHOLDER`); (2) if not, automatically copies `nginx-ssl.conf` to `nginx.conf` and substitutes the domain — otherwise leaves it alone (idempotent). Also extended post-deploy verification to additionally probe `https://$DOMAIN/` and `https://$DOMAIN/api/health/ready` when the cert exists.
+  - `README.md` — replaced the misleading "Frontend Environment Variables" mini-table that claimed `VITE_API_BASE_URL` defaults to `http://localhost:8000` (it doesn't — `src/config.ts:26` defaults to `/api`). New table explicitly documents the production-safe defaults, the `localhost:8000` build-leak guard inside `deploy.sh`, and the dev-server proxy fallback in `vite.config.ts`.
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — rewrote the "SSL/TLS → Quick Setup" section (lines 837-) to reflect the actual one-command `--auto` flow and the unconditional letsencrypt mounts; rewrote the "VPS Deployment Checklist → SSL/TLS Setup" sub-section (lines 1310-) accordingly. Removed the obsolete "uncomment letsencrypt volume in docker-compose.yml" instruction that no longer matches the codebase. Kept the manual flow as a clearly-labeled advanced fallback.
+  - `smoke-check.sh` *(new)* — small standalone post-deploy probe (Outcome F). Checks: SPA, public landing, `/api/health/ready`, `/api/`, `/api/auth/login` reachability (accepts 405/422 — confirms route exists without supplying credentials), public submit + track pages. When invoked with `--domain=X`, additionally probes `https://X/` and `https://X/api/health/ready`, public submit/login over TLS, and verifies `http://X/` returns 301/302. Exit code = number of failed checks. Marked executable.
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — Before / After entries for this batch (this section).
+  - `HANDOFF_STATUS.md` — new "current batch" entry (see file).
+
+- **Engineering decisions (exact):**
+  - **SSL self-heal is conditional on `--domain`, never silent.** The script will not touch `nginx.conf` unless the operator explicitly passes `--domain=X` *and* a cert exists at the standard Let's Encrypt path for that exact domain. This protects against accidentally clobbering a hand-crafted `nginx.conf` on systems where the operator deliberately customized it.
+  - **The detection is structural (not version-based).** We look for `listen 443 ssl` + the substituted `server_name $DOMAIN` + the absence of `DOMAIN_PLACEHOLDER`. This works even after future edits to `nginx-ssl.conf`, because the marker is "is the live nginx.conf already serving HTTPS for the right domain?", not "does it textually equal the template?".
+  - **Post-deploy HTTPS verification is conditional on the cert existing**, not on `--domain` alone. So calling `--domain=X` *before* certs exist (the bootstrap case) still works without false-failing on HTTPS checks.
+  - **No new dependencies.** `smoke-check.sh` uses only `curl` (already a deploy.sh prerequisite) and POSIX shell. No `jq`, no test framework. The whole script is ~120 lines.
+  - **`smoke-check.sh` accepts comma-separated allowed status codes** (e.g. `405,422` for unauthenticated POST routes) so it can confirm "the route exists end-to-end through nginx → backend" without sending credentials. This is enough to detect a broken nginx ↔ backend wire (which would surface as 502/504) without needing to know any password.
+  - **Docs were trimmed, not expanded.** The "Quick Setup (recommended)" + "Manual setup (advanced)" split replaces the older single procedure that mixed required and obsolete steps. The intent is to make the recommended flow trivially copy-pasteable and to keep the advanced flow honest about what it requires.
+
+- **SSL / nginx / docker-compose / ssl-setup alignment fixes (concrete):**
+  - **`deploy.sh` is now SSL-idempotent** across `git pull`. Concrete pre-batch failure mode: operator runs `ssl-setup.sh --auto` once → `nginx.conf` becomes the SSL version → next `git pull` resets `nginx.conf` to the HTTP-only repo template → next `./deploy.sh --rebuild` restarts nginx with HTTP-only config → HTTPS dies. Concrete post-batch behaviour: same sequence detects the cert at `/etc/letsencrypt/live/$DOMAIN/fullchain.pem`, automatically re-applies `nginx-ssl.conf` with `$DOMAIN` substituted, and HTTPS keeps working without any manual VPS edits.
+  - **Post-deploy verification now probes the real public HTTPS URL** when applicable. Catches "nginx healthy locally but TLS broken" regressions immediately instead of waiting for an external uptime monitor to flag them.
+  - **No actual nginx/compose/ssl-setup file changes were needed** — `docker-compose.yml` already mounts the letsencrypt volumes unconditionally, `nginx-ssl.conf` already has the `/nginx-health` endpoint placed before the catch-all redirect (so docker healthchecks succeed in both modes), and `ssl-setup.sh --auto` already does the post-cert wiring correctly. The previous batches had already aligned these pieces; the only gap was that `deploy.sh` didn't *re-apply* the SSL config after a `git pull` overwrite. That is now fixed.
+
+- **Frontend production base-path fixes — preservation status:**
+  - **`VITE_API_BASE_URL=/api`** in-process pinning in `deploy.sh:245-247` — preserved verbatim.
+  - **`VITE_FILES_BASE_URL=` (empty)** separation in `deploy.sh:246-247` and `src/config.ts:40-43` — preserved verbatim.
+  - **Removal of `http://localhost:8000` fallback** in `src/config.ts:26` — preserved verbatim.
+  - **`deploy.sh` build-leak guard** at `deploy.sh:261-266` — preserved verbatim. Verified at the end of this batch by running `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` and `grep -rq 'http://localhost:8000' dist/assets` → no matches.
+  - **`README.md` Vite env table** — fixed (was the last surface still telling operators the wrong default).
+
+- **Deployment-script and docs alignment fixes (concrete):**
+  - `README.md` Vite env table now matches `src/config.ts` reality.
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup matches `ssl-setup.sh --auto` reality.
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` VPS Deployment Checklist SSL section matches the current docker-compose.yml reality (no more "uncomment letsencrypt volume").
+  - `deploy.sh` self-heal documents itself in the user-visible output: prints `[INFO] No Let's Encrypt cert at ... yet — staying on HTTP nginx.conf. Run sudo ./ssl-setup.sh ${DOMAIN} --auto once to enable HTTPS.` if no cert is present yet, or `[OK] nginx.conf re-generated from nginx-ssl.conf for ${DOMAIN}.` after a self-heal — so the operator always knows what just happened.
+
+- **Final verification results (this batch):**
+  - **Frontend build:** `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → `✓ built in 974ms`. No TS errors.
+  - **Frontend leak check:** `grep -rq 'http://localhost:8000' dist/assets` → no matches. The deploy.sh leak guard would still trigger if a regression is introduced.
+  - **Backend tests:** `cd backend && python -m pytest tests/ -q` → **296 passed, 871 warnings in 134.39s**. Same as previous batch (no regression).
+  - **SSL self-heal logic — simulated 2-run idempotency test:** Starting from a fresh HTTP-only `nginx.conf`, the first run triggers the rewrite; the second run leaves the file alone. Verified.
+  - **`smoke-check.sh` syntax:** `bash -n smoke-check.sh` → OK. `--help` prints the usage. Marked executable.
+  - **`deploy.sh` syntax:** `bash -n deploy.sh` → OK. `ssl-setup.sh` syntax → OK.
+  - **Manual inspection of preserved flows:** login flow untouched (`src/pages/LoginPage.tsx`), public complaint intake at `/complaints/new` untouched (`src/pages/ComplaintSubmitPage.tsx`), public complaint track at `/complaints/track` untouched (`src/pages/ComplaintTrackPage.tsx`), RBAC untouched (`src/utils/auth.ts` + backend), audit logging untouched (`backend/app/services/audit_service.py`), contract intelligence untouched (`backend/app/api/contract_intelligence.py`), map endpoints untouched, Arabic-RTL UI untouched. No backend code modified in this batch — the 296 passing tests confirm zero behavioural change.
+
+- **Remaining gaps (honest):**
+  - The SSL self-heal only covers the standard Let's Encrypt path. If an operator uses a different cert provider mounted via `${LETSENCRYPT_DIR}`, the self-heal won't trigger (the heuristic specifically checks `/etc/letsencrypt/live/$DOMAIN/fullchain.pem`). For non-Let's-Encrypt setups the operator still needs to run `cp nginx-ssl.conf nginx.conf` manually after each `git pull`. This is acceptable because the prompt explicitly targets the existing working `ssl-setup.sh + Let's Encrypt` flow.
+  - `smoke-check.sh` is not wired into CI and is not invoked by `deploy.sh` automatically. It is intentionally a separate, on-demand operator tool — adding it to `deploy.sh` would slow every deploy and would fail when no domain has been configured yet.
+  - The `nginx.conf`-vs-`nginx-ssl.conf` duplication is preserved (both files carry the same rate limits, gzip, upload split, healthcheck endpoint). This is the existing design and the prompt explicitly forbids broad rewrite. A future batch could collapse the shared parts into a third file using nginx `include`, but that is risky and unnecessary now.
+  - `index.html` SEO/meta tags for the public landing page are still not added (inherited from previous batch).
+  - End-to-end UI test of the public landing → submit → track → detail flow is still not added (inherited from previous batch).
+  - Backend secret detection / .env validation in `deploy.sh` only covers two well-known legacy values (`dummar_password`, `dummar-secret-key`); it does not enumerate every weak-password pattern. Acceptable — the random-secret generator handles new installs, and this guard catches the historical foot-gun.
+
+- **Done / Partial / Blocked:**
+  - **Done:** SSL self-heal in `deploy.sh`; HTTPS post-deploy verification when cert exists; `README.md` Vite table corrected; `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup + checklist rewritten to match reality; `smoke-check.sh` added; backend tests 296/296 still pass; frontend build still passes; localhost-leak guard still works; both handoff docs updated honestly.
+  - **Partial:** Self-heal is Let's-Encrypt-only by heuristic (other cert providers still need manual `cp`); `smoke-check.sh` is on-demand only.
+  - **Blocked:** None.
+
+- **Final recommendation: ✅ Safe to update VPS now.**
+  - The exact operator flow `git pull && ./deploy.sh --rebuild --domain=matrixtop.com` is now self-healing for HTTPS — losing the SSL `nginx.conf` to a `git pull` is no longer a failure mode.
+  - First-time SSL on a fresh VPS still works the same way: `./deploy.sh --rebuild --domain=matrixtop.com` (gets you on HTTP), then `sudo ./ssl-setup.sh matrixtop.com --auto` (gets you on HTTPS), then any future `./deploy.sh --rebuild --domain=matrixtop.com` keeps you on HTTPS without manual edits.
+  - All previously-shipped functionality (296 tests, frontend build, public/internal complaint flow, login, RBAC, audit, maps, contract intelligence) is verified intact.
+
+---
+
+### الدفعة السابقة: 2026-04-23T20:30 — Complaint-Intake-as-Entry-Point Batch (public landing + public submit/track polish + complaint↔task lifecycle visibility)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T20:30
+- **فهم النظام الحالي بناءً على فحص الكود الحقيقي (لا الوثائق):**
+  - Public complaint intake exists at `/complaints/new` (`ComplaintSubmitPage.tsx`) and tracking at `/complaints/track` (`ComplaintTrackPage.tsx`). Both are reachable directly by URL but **not discoverable from any landing surface**:
+    1. **Root URL `/` is owned by the internal dashboard**, behind `RoleProtectedRoute(INTERNAL_ROLES)`. An unauthenticated visitor (a citizen) is therefore redirected straight to `/login` — a generic admin login screen that contains no link to "Submit Complaint" or "Track Complaint" (verified `App.tsx:105` and `LoginPage.tsx`). The product literally hides its main user action behind an admin gate by default.
+    2. **The public submit and track pages are bare `Card`s on a blank background** with no header, no logo, no link between them, and no mention of the platform name. A citizen who lands on `/complaints/new` cannot navigate to `/complaints/track` (or vice versa) without typing a URL. Verified at `ComplaintSubmitPage.tsx:91-200` and `ComplaintTrackPage.tsx:25-65`.
+    3. **The track page renders the raw enum value** for status (`{complaint.status}` → e.g. `in_progress`), no Arabic label, no badge, no images, no activity history, no guidance about what the status means. Verified at `ComplaintTrackPage.tsx:54-60`.
+    4. **The submit success state** shows the tracking number and a "Track now" button but no copy-to-clipboard, no "what happens next" guidance, no advice to save the number. Verified at `ComplaintSubmitPage.tsx:67-89`.
+  - Internal complaint↔task lifecycle gaps:
+    5. **Complaint detail does not show its linked task(s).** `Task.complaint_id` exists and the conversion endpoint already populates it, but `ComplaintDetailsPage.tsx` only renders complaint fields + activity log; there is no card listing the tasks created from this complaint. So the operator sees "task_created" in the activity feed but cannot click through to the task. Verified at `ComplaintDetailsPage.tsx:224-414` (no linked-tasks UI).
+    6. **`GET /tasks/` does not accept `?complaint_id=`** (verified at `backend/app/api/tasks.py:86-135`). Even if the UI wanted to load linked tasks, the API doesn't expose the filter — a small, consistent gap in the existing filter set (`status_filter`, `area_id`, `location_id`, `project_id`, `team_id`, `assigned_to_id`, `search`).
+    7. **Task detail's linked-complaint indicator** shows only the bare numeric id `#{task.complaint_id}` (`TaskDetailsPage.tsx:236-238`), not the citizen-facing tracking number. So the operator on the task side cannot tell which citizen complaint is being executed without an extra click.
+  - Navigation/shell:
+    8. **`Layout.tsx` is internal-only** and contains no quick affordance for an intake officer to start a new public-form complaint on behalf of a walk-in/phone citizen. Today they must paste the URL `/complaints/new`.
+    9. The login screen offers no way to reach the public flow; an unauthenticated visitor who reaches `/login` is stuck unless they happen to know the public URLs.
+  - Verified things that are **already working** and must not be touched: the backend complaint lifecycle endpoints, the `POST /complaints/{id}/create-task` conversion endpoint and its activity logging, RBAC (`canManageComplaints`/`canManageTasks`), the complaints map / list source coherence, Projects/Teams modules from the previous two batches, audit logging, RTL Arabic UI, login flow, SSL/deploy assumptions.
+
+- **أهداف الدفعة (this batch's goals):**
+  - A) Make complaint submission and tracking obvious at the entry point: change `/` (signed-out) into a public Arabic-first landing page with two large CTAs and a small staff-login link; signed-in internal users still get the dashboard, citizens still get `/citizen`.
+  - B) Improve the public submit/track flow: shared lightweight public header with cross-links, success state with copy-tracking-number + "what happens next" guidance, track page that renders Arabic status badge + tracking number + type + dates + thumbnails + recent activity (only public-safe fields).
+  - C) Make complaint→task linkage visible from the complaint side: add `?complaint_id=` filter on `GET /tasks/` (with test) and a "المهام المرتبطة" card on `ComplaintDetailsPage` that lists each linked task with status badge + due date + click-through. Also: render the source complaint's `tracking_number` (not raw id) on `TaskDetailsPage`.
+  - D) Reduce ambiguity in navigation: in `Layout.tsx` add a clearly-labeled "تقديم شكوى نيابة عن مواطن" external link in the header for intake-capable internal roles, opening the public form in a new tab; in `LoginPage.tsx` add small footer links to the public submit/track pages.
+  - E) Preserve everything else verbatim: do not rename the product, do not redesign, do not add libraries, do not change RBAC/SSL/audit/contract-intelligence/map.
+
+**بعد التنفيذ (After Current Batch):**
+
+- **Backend changes (exact):**
+  - `backend/app/api/tasks.py` → `list_tasks` accepts a new `complaint_id: Optional[int] = None` query parameter; filter applied via `Task.complaint_id == complaint_id` (consistent with existing `project_id`/`team_id`/`location_id` filter pattern). RBAC unchanged (still `get_current_internal_user`).
+  - `backend/tests/test_projects_teams_settings.py` → +1 test `test_list_tasks_filtered_by_complaint` covering: 2 tasks linked to complaint A, 1 task linked to complaint B, 1 unrelated task → `?complaint_id=A` returns exactly the 2 A-tasks; `?complaint_id=B` returns exactly the 1 B-task.
+
+- **Frontend changes (exact):**
+  - `src/components/PublicHeader.tsx` *(new)* — exports `PublicHeader` (sticky Arabic-first header with logo + 3 links: تقديم شكوى / تتبع شكوى / دخول الموظفين, with active-route highlighting) and `PublicShell` (header + main + footer wrapper). Used by all citizen-facing pages.
+  - `src/pages/PublicLandingPage.tsx` *(new)* — Arabic landing page with hero text, two large CTAs ("تقديم شكوى جديدة" / "تتبع شكوى سابقة"), a 3-step "كيف تُعالَج شكواك" lifecycle explainer, and a subtle staff-login link at the bottom. Wrapped in `PublicShell`.
+  - `src/App.tsx` → new lazy import `PublicLandingPage`. New `RootRoute` component: if `apiService.isAuthenticated()` is false → renders `PublicLandingPage`; otherwise → `RoleProtectedRoute(INTERNAL_ROLES) → DashboardPage`. The `/` route now uses `<RootRoute />`. (Citizen role still falls through `RoleProtectedRoute` to `/citizen` as before; internal users still get the dashboard.)
+  - `src/pages/ComplaintSubmitPage.tsx` → wrapped in `PublicShell` (removed the bare `min-h-screen` blank background). Header card now links to `/complaints/track`. Location field gets a hint sub-text. Submit button shows a separate `submitting` state in addition to `uploading`. Success state rebuilt: green check icon, big mono tracking number with "نسخ الرقم" (clipboard copy) button, "ماذا يحدث بعد الآن" 3-step guidance, two CTAs (تتبع الشكوى الآن / العودة للرئيسية).
+  - `src/pages/ComplaintTrackPage.tsx` → fully rewritten: wrapped in `PublicShell`; form has placeholders + a cross-link to `/complaints/new`; result rendered in a card with the Arabic status badge (color-coded), tracking number, type, dates, location, and a per-status guidance message (one of 6 Arabic sentences explaining what each status means to the citizen); explicit "not found" inline panel when the search fails; a privacy footer line clarifying that internal execution details are not exposed.
+  - `src/pages/ComplaintDetailsPage.tsx` → fetches linked tasks via `apiService.getTasks({ complaint_id })`. New "المهام المرتبطة" card placed between "تحديث الشكوى" and "سجل النشاطات", showing each task as a clickable row with title, `#id`, due date and a colored Arabic status badge. Empty state explicitly tells managers to use "تحويل إلى مهمة" if they have permission. Makes the complaint→task lifecycle visible at a glance.
+  - `src/pages/TaskDetailsPage.tsx` → on load, if `task.complaint_id` is set, fetches the source complaint and stores it as `sourceComplaint`. The "Linked complaint/contract" row now shows "مصدر هذه المهمة — شكوى:" and renders the citizen `tracking_number` (e.g. `CMP12345678`) instead of bare `#id`, plus the citizen's name as a small caption. Falls back to `#id` if the fetch fails. Contract linkage unchanged.
+  - `src/components/Layout.tsx` → header gets a new "تقديم شكوى نيابة عن مواطن" anchor (opens `/complaints/new` in a new tab via `target="_blank"`), gated to `project_director`/`contracts_manager`/`complaints_officer`/`area_supervisor`. Hidden on extra-small screens; collapses to "شكوى مواطن" on small screens.
+  - `src/pages/LoginPage.tsx` → adds a divider + two small footer links to `/complaints/new` and `/complaints/track` so a citizen who lands on the staff-login page can still reach the public flow.
+  - `src/services/api.ts` → `getTasks` parameter type extended to accept `complaint_id?: number`; emitted as `complaint_id` query param when provided.
+
+- **Engineering decisions:**
+  - **Public landing is rendered, not redirected.** `RootRoute` returns the landing component directly when unauthenticated, so the URL stays `/` (no extra hop, shareable). Authenticated users still get the dashboard at `/`, preserving deep-link semantics for staff.
+  - **No new dependencies.** `PublicHeader`/`PublicShell` use existing `react-router-dom` and `@phosphor-icons/react`. Clipboard copy uses the standard `navigator.clipboard.writeText` API with a `try/catch` fallback toast.
+  - **Public pages stay strictly public.** `PublicShell` does not render `NotificationBell` or any auth-dependent UI; it does not call `useAuth`. So an unauthenticated visitor will not trigger any auth or `/auth/me` calls just from landing.
+  - **Track page only displays public-safe fields** — tracking number, type, status, dates, location_text, description. It deliberately does not show `assigned_to_id`, `notes`, `images`, `latitude/longitude`, or activity history (those remain internal). The trackComplaint API endpoint is unchanged; this batch only refines the rendering.
+  - **Linked tasks are loaded via the existing list endpoint with a new filter** rather than embedding `tasks` in `ComplaintResponse`. Keeps schemas backward-compatible and reuses the established list pattern; failures degrade gracefully (empty array via `.catch`).
+  - **Source-complaint fetch on task detail is best-effort.** If the fetch fails (e.g. permissions or network), the UI silently falls back to `#id`, never blocking the task page from rendering.
+  - **Intake shortcut is a `<a target="_blank">`, not a `<Link>`.** This guarantees that a staff session on the internal page is preserved while the public form opens in a new tab — important for intake officers helping citizens by phone.
+
+- **Complaint-intake UX improvements (concrete):**
+  - Public root URL now visibly invites complaint submission (was: silent redirect to staff login).
+  - Public submit page has a real header with cross-links and a guided post-submit success state.
+  - Public track page renders Arabic status labels + per-status guidance + clearer not-found state.
+  - Login page no longer dead-ends citizens.
+
+- **Complaint-lifecycle / task-linking improvements (concrete):**
+  - Complaint detail shows linked tasks list with status, opening the loop on the conversion workflow.
+  - Task detail shows the source complaint's tracking number — operators on the task side can now identify "whose complaint" they are executing.
+  - Backend `?complaint_id` filter on `/tasks/` enables (and is now used by) this UI; covered by a unit test.
+
+- **Navigation / entry-point improvements (concrete):**
+  - `/` (signed-out) → public landing with two giant Arabic CTAs.
+  - Public header on every public page exposes both the submit and track flows from any point.
+  - Internal `Layout` exposes a clearly-labeled "تقديم شكوى نيابة عن مواطن" external link for intake-capable roles, separating the public flow from internal admin pages without duplicating it inside the admin shell.
+  - LoginPage has explicit footer links to the public flow.
+
+- **Map/list/detail consistency:** No changes were necessary in this batch — the previous batch already aligned the complaints map default entity with the complaints list, and the new linked-tasks card uses the same statuses/colors as `TasksListPage` and `TaskDetailsPage`, so all three views agree on the Arabic status taxonomy.
+
+- **Preserved without changes:** login flow, JWT auth, RBAC backend rules and `useAuth` flags, audit logging, `POST /complaints/{id}/create-task` endpoint, contract intelligence, map foundation, RTL/Arabic UI shell of internal pages, SSL/deploy config, all 295 previously-passing backend tests.
+
+- **Remaining gaps (honest):**
+  - The track page does not yet show citizen-uploaded image thumbnails. The `trackComplaint` API does not return `images`; exposing them publicly is a privacy decision that belongs to a separate review.
+  - There is no public sitemap/SEO tag for the landing page yet; `index.html` was not modified.
+  - The `PublicLandingPage` is purely informational — it does not yet show statistics like "X complaints resolved this month". That is a content/transparency feature and out of scope for this batch.
+  - The "تقديم شكوى نيابة عن مواطن" intake shortcut opens the same anonymous form a citizen would fill, with no auto-fill of staff fields. Adding "submitted by staff #N" attribution would require a backend change and is deferred.
+  - The 4-tier landing → submit → track → detail flow is not yet covered by an end-to-end UI test.
+  - Migration 008 still needs to be applied via `alembic upgrade head` on first deploy after this batch (no schema change in this batch, so no new migration to run).
+
+- **Verification:**
+  - Backend tests: **296 passed** (was 295; +1 `test_list_tasks_filtered_by_complaint`). Run: `cd backend && python -m pytest tests/ -q`. Result: `296 passed, 871 warnings in 117.59s`.
+  - Frontend build: **passed** (`VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → `✓ built in 926ms`). No TS errors. New `ComplaintSubmitPage`, `ComplaintTrackPage`, `PublicLandingPage`, `PublicHeader` chunks built cleanly.
+  - Manual route check: `/` (anon) → landing; `/login` → login with public footer links; `/complaints/new` → public shell + submit form + improved success; `/complaints/track` → public shell + status badge + Arabic guidance; internal `/complaints/:id` → linked-tasks card; internal `/tasks/:id` → tracking number on source complaint row.
+
+- **Done / Partial / Blocked:**
+  - **Done:** Public landing at `/`; public header on submit/track; submit success rebuild with copy-tracking-number + guidance; track page with Arabic status badge + per-status guidance + not-found state; complaint detail "Linked Tasks" card; task detail tracking-number on source complaint; intake shortcut in internal layout for intake roles; login page footer links; `?complaint_id` filter on `GET /tasks/` + test; both docs updated.
+  - **Partial:** Track-page image thumbnails (intentionally deferred for privacy review); E2E UI test of the new public flow (none added — backend test covers the new filter only).
+  - **Blocked:** None.
+
+---
 
 ### الدفعة: 2026-04-23T19:42 — Operational-Coherence Deepening Batch (Projects/Teams cross-integration + filters + deep links + role coherence)
 

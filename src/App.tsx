@@ -37,6 +37,7 @@ const TeamDetailsPage = lazy(() => import('@/pages/TeamDetailsPage'));
 const UsersPage = lazy(() => import('@/pages/UsersPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const PublicLandingPage = lazy(() => import('@/pages/PublicLandingPage'));
 
 function PageLoader() {
   return (
@@ -91,6 +92,16 @@ const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
   'project_director', 'contracts_manager',
 ];
 
+function RootRoute() {
+  // Unauthenticated visitors see the public landing page so the complaint
+  // intake CTAs are the very first thing they see — not the staff login.
+  if (!apiService.isAuthenticated()) {
+    return <PublicLandingPage />;
+  }
+  // Authenticated users are routed to their role-appropriate home.
+  return <RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -102,7 +113,7 @@ function App() {
           <Route path="/complaints/new" element={<ComplaintSubmitPage />} />
           <Route path="/complaints/track" element={<ComplaintTrackPage />} />
           
-          <Route path="/" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
+          <Route path="/" element={<RootRoute />} />
           <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
           <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
           <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />

@@ -364,3 +364,48 @@ def test_list_contracts_filtered_by_project(client, director_token, db, director
     data = resp.json()
     assert data["total_count"] == 1
     assert data["items"][0]["contract_number"] == "C-PRJ-1"
+
+
+def test_list_tasks_filtered_by_complaint(client, director_token, db, sample_area):
+    """Tasks list endpoint must accept ?complaint_id so the complaint detail page
+    can show the tasks that were created from a given complaint."""
+    from app.models.complaint import Complaint, ComplaintType
+    from app.models.task import Task, TaskStatus, TaskPriority
+
+    c1 = Complaint(
+        tracking_number="CMPLNK001", full_name="X", phone="0991111111",
+        complaint_type=ComplaintType.ROADS, description="d",
+        status=ComplaintStatus.ASSIGNED, area_id=sample_area.id,
+    )
+    c2 = Complaint(
+        tracking_number="CMPLNK002", full_name="Y", phone="0992222222",
+        complaint_type=ComplaintType.ROADS, description="d",
+        status=ComplaintStatus.NEW, area_id=sample_area.id,
+    )
+    db.add_all([c1, c2])
+    db.commit()
+
+    t_a = Task(title="A1", description="d", status=TaskStatus.PENDING,
+               priority=TaskPriority.MEDIUM, complaint_id=c1.id)
+    t_b = Task(title="A2", description="d", status=TaskStatus.IN_PROGRESS,
+               priority=TaskPriority.MEDIUM, complaint_id=c1.id)
+    t_other = Task(title="B1", description="d", status=TaskStatus.PENDING,
+                   priority=TaskPriority.MEDIUM, complaint_id=c2.id)
+    t_unrelated = Task(title="N1", description="d", status=TaskStatus.PENDING,
+                       priority=TaskPriority.MEDIUM)
+    db.add_all([t_a, t_b, t_other, t_unrelated])
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {director_token}"}
+    resp = client.get(f"/tasks/?complaint_id={c1.id}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_count"] == 2
+    titles = sorted(item["title"] for item in data["items"])
+    assert titles == ["A1", "A2"]
+
+    # Other complaint returns only its own task
+    resp = client.get(f"/tasks/?complaint_id={c2.id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["total_count"] == 1
+    assert resp.json()["items"][0]["title"] == "B1"

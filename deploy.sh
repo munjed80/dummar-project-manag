@@ -221,6 +221,43 @@ if [ -n "$DOMAIN" ]; then
         sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=${SCHEME}://${DOMAIN}|" .env
         success "CORS_ORIGINS set to ${SCHEME}://${DOMAIN}"
     fi
+
+    # ---------------------------------------------------------------------
+    # SSL self-heal: if a Let's Encrypt cert already exists for this domain
+    # but nginx.conf is the HTTP-only template (which happens after every
+    # `git pull` — git restores the repo's nginx.conf and silently overwrites
+    # the on-VPS SSL version), automatically re-apply nginx-ssl.conf so the
+    # next nginx restart serves HTTPS instead of falling back to HTTP.
+    #
+    # This makes  `git pull && ./deploy.sh --rebuild --domain=X`  idempotent
+    # for HTTPS — no hidden manual edits required on the VPS.
+    # ---------------------------------------------------------------------
+    LE_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+    if [ -f "$LE_CERT" ] && [ -f nginx-ssl.conf ]; then
+        # Detect whether the live nginx.conf is already SSL-enabled. We look
+        # for the `listen 443 ssl` directive AND the substituted server_name
+        # (i.e. DOMAIN_PLACEHOLDER has been replaced with the real domain).
+        NEEDS_SSL_APPLY=true
+        if [ -f nginx.conf ] \
+           && grep -q 'listen 443 ssl' nginx.conf \
+           && grep -q "server_name ${DOMAIN}" nginx.conf \
+           && ! grep -q 'DOMAIN_PLACEHOLDER' nginx.conf; then
+            NEEDS_SSL_APPLY=false
+        fi
+
+        if [ "$NEEDS_SSL_APPLY" = true ]; then
+            warn "SSL cert exists for ${DOMAIN} but nginx.conf is not the SSL"
+            warn "version (likely overwritten by git pull). Re-applying SSL config…"
+            cp nginx-ssl.conf nginx.conf
+            sed -i "s/DOMAIN_PLACEHOLDER/${DOMAIN}/g" nginx.conf
+            success "nginx.conf re-generated from nginx-ssl.conf for ${DOMAIN}."
+        else
+            info "nginx.conf already configured for HTTPS on ${DOMAIN} — no change."
+        fi
+    elif [ -n "$DOMAIN" ] && [ ! -f "$LE_CERT" ]; then
+        info "No Let's Encrypt cert at ${LE_CERT} yet — staying on HTTP nginx.conf."
+        info "Run  sudo ./ssl-setup.sh ${DOMAIN} --auto  once to enable HTTPS."
+    fi
 fi
 
 # Source .env for local use (read only needed vars, not sensitive ones)
@@ -367,6 +404,14 @@ check_endpoint() {
 check_endpoint "Frontend (SPA)"     "$BASE_URL/"
 check_endpoint "API health/ready"   "$BASE_URL/api/health/ready"  200
 check_endpoint "API root"            "$BASE_URL/api/"              200
+
+# When --domain was passed AND a Let's Encrypt cert exists, also probe the
+# real public HTTPS endpoint. This catches "nginx is healthy locally but TLS
+# is broken" regressions (e.g. cert mount path wrong, HSTS issue).
+if [ -n "$DOMAIN" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+    check_endpoint "HTTPS frontend"      "https://${DOMAIN}/"                200
+    check_endpoint "HTTPS health/ready"  "https://${DOMAIN}/api/health/ready" 200
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

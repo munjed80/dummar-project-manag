@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -85,6 +85,17 @@ export default function LoginPage() {
                 تواصل مع مدير النظام للحصول على بيانات تسجيل الدخول الخاصة بك.
               </p>
             )}
+          </div>
+
+          {/* Public-flow shortcuts so a citizen who lands here can still
+              reach the complaint submit / track pages without typing URLs. */}
+          <div className="mt-6 pt-4 border-t text-center space-y-2">
+            <p className="text-xs text-muted-foreground">هل أنت مواطن وتريد تقديم أو تتبع شكوى؟</p>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <Link to="/complaints/new" className="text-sm text-primary hover:underline">تقديم شكوى جديدة</Link>
+              <span className="hidden sm:inline text-muted-foreground">·</span>
+              <Link to="/complaints/track" className="text-sm text-primary hover:underline">تتبع شكوى سابقة</Link>
+            </div>
           </div>
         </CardContent>
       </Card>

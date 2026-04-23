@@ -130,13 +130,14 @@ class ApiService {
   }
 
   // ── Tasks ──
-  async getTasks(params?: { status?: string; area_id?: number; location_id?: number; project_id?: number; team_id?: number; assigned_to_id?: number; search?: string; priority?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+  async getTasks(params?: { status?: string; area_id?: number; location_id?: number; project_id?: number; team_id?: number; complaint_id?: number; assigned_to_id?: number; search?: string; priority?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
     const qp = new URLSearchParams();
     if (params?.status) qp.append('status_filter', params.status);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
     if (params?.location_id) qp.append('location_id', params.location_id.toString());
     if (params?.project_id) qp.append('project_id', params.project_id.toString());
     if (params?.team_id) qp.append('team_id', params.team_id.toString());
+    if (params?.complaint_id) qp.append('complaint_id', params.complaint_id.toString());
     if (params?.assigned_to_id) qp.append('assigned_to_id', params.assigned_to_id.toString());
     if (params?.search) qp.append('search', params.search);
     if (params?.priority) qp.append('priority_filter', params.priority);

@@ -93,6 +93,7 @@ def list_tasks(
     location_id: Optional[int] = None,
     project_id: Optional[int] = None,
     team_id: Optional[int] = None,
+    complaint_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
     search: Optional[str] = None,
     current_user: User = Depends(get_current_internal_user),
@@ -117,6 +118,9 @@ def list_tasks(
 
     if team_id:
         query = query.filter(Task.team_id == team_id)
+
+    if complaint_id:
+        query = query.filter(Task.complaint_id == complaint_id)
 
     if assigned_to_id:
         query = query.filter(Task.assigned_to_id == assigned_to_id)

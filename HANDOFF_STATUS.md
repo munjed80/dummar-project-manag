@@ -1,11 +1,168 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T19:42
+## آخر تحديث: 2026-04-23T20:55
 
 ---
 
-## الدفعة الحالية: 2026-04-23T19:42 — Operational-Coherence Deepening Batch
+## الدفعة الحالية: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch
+
+**Scope:** This is intentionally NOT a feature batch. The product is functionally complete; the remaining risk is purely operational. Goal: make `git pull && ./deploy.sh --rebuild --domain=X` reliably preserve HTTPS without manual VPS edits, and align all docs with the actual current code so an operator reading the repo gets correct instructions.
+
+### Files changed this batch
+
+| File | Change |
+|---|---|
+| **Scripts — modified** | |
+| `deploy.sh` | (1) New SSL self-heal block: when `--domain=$DOMAIN` is passed AND `/etc/letsencrypt/live/$DOMAIN/fullchain.pem` exists, automatically re-applies `nginx-ssl.conf` → `nginx.conf` (with `DOMAIN_PLACEHOLDER` → `$DOMAIN`) if the live `nginx.conf` is not already serving HTTPS for that domain. Idempotent — does nothing on subsequent runs once the SSL config is in place. (2) Post-deploy verification additionally probes `https://$DOMAIN/` and `https://$DOMAIN/api/health/ready` when the cert exists, so "TLS broken but local healthy" regressions surface immediately. |
+| **Scripts — new** | |
+| `smoke-check.sh` | Standalone post-deploy operator-confidence probe. Checks SPA, public landing, `/api/health/ready`, `/api/`, `/api/auth/login` reachability (accepts 405/422 to confirm route exists without sending creds), public submit + track pages. With `--domain=X`: also probes `https://X/`, `https://X/api/health/ready`, public submit/login over TLS, and verifies `http://X/` returns 301/302. Exit code = number of failed checks. Marked executable. |
+| **Docs — modified** | |
+| `README.md` | Replaced misleading "Frontend Environment Variables" mini-table that claimed `VITE_API_BASE_URL` defaults to `http://localhost:8000` (real default in `src/config.ts:26` is `/api`). New table documents production-safe defaults, the deploy.sh `localhost:8000` build-leak guard, and the dev-server proxy fallback. |
+| `PRODUCTION_DEPLOYMENT_GUIDE.md` | (1) Rewrote "SSL/TLS Setup → Quick Setup" to use the actual one-command `sudo ./ssl-setup.sh $DOMAIN --auto` flow. Removed the obsolete "uncomment letsencrypt volume in docker-compose.yml" instruction (volumes are already unconditional). Documented that `deploy.sh` is now SSL self-healing. Kept manual flow as a clearly-labeled advanced fallback. (2) Rewrote "VPS Deployment Checklist → SSL/TLS Setup" sub-section to match. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New "Before / After" batch entry with concrete pre-batch failure modes, engineering decisions, and remaining gaps. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### What was NOT changed (preserved verbatim)
+
+- **Backend code:** zero files touched. All 296 tests still pass.
+- **Frontend code:** zero files touched. `npm run build` still passes.
+- `nginx.conf`, `nginx-ssl.conf`, `docker-compose.yml`, `ssl-setup.sh`, `.env.example`, `backend/.env.example`: unchanged. They were already correct from previous batches; the bug was only in `deploy.sh` not re-applying `nginx-ssl.conf` after a `git pull`, plus stale instructions in two docs.
+- Login flow, RBAC, audit logging, JWT auth, contract intelligence, map foundation, complaint intake/track/lifecycle, Projects/Teams, Arabic-RTL UI: all untouched.
+
+### Verification (this batch)
+
+| Check | Result |
+|---|---|
+| `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` | ✅ `✓ built in 974ms`, no TS errors |
+| `grep -rq 'http://localhost:8000' dist/assets` | ✅ no matches (deploy.sh leak guard would also catch any future regression) |
+| `cd backend && python -m pytest tests/ -q` | ✅ **296 passed, 871 warnings in 134.39s** (same as previous batch — zero regression) |
+| `bash -n deploy.sh && bash -n smoke-check.sh && bash -n ssl-setup.sh` | ✅ all pass syntax check |
+| SSL self-heal idempotency simulation (2-run test against a fresh `nginx.conf`) | ✅ first run rewrites; second run leaves it alone |
+| `smoke-check.sh --help` | ✅ prints usage |
+
+### ✅ مكتمل (Done — verified):
+
+| Required outcome | Status | Evidence |
+|---|---|---|
+| A) Final SSL/HTTPS/nginx/docker-compose alignment, no hidden manual VPS edits required | **Done** | `deploy.sh` now re-applies `nginx-ssl.conf` automatically when `git pull` overwrites the on-VPS SSL `nginx.conf`. The previously-aligned `docker-compose.yml` (unconditional letsencrypt mounts), `nginx-ssl.conf` (`/nginx-health` placed before catch-all redirect), and `ssl-setup.sh --auto` (cert + nginx + CORS in one command) are preserved verbatim. |
+| B) Frontend production base-path fixes preserved | **Done** | Verified by re-running `npm run build` with the production-safe envs and re-running the leak grep — clean. `README.md` is now also correct (was the last surface still telling operators the wrong default). |
+| C) Final nginx healthcheck/readiness correctness | **Done — already correct** | The `/nginx-health` endpoint added in the previous batch is preserved; placed before the HTTP→HTTPS redirect in `nginx-ssl.conf` so docker healthchecks succeed in both modes. No changes needed this batch. |
+| D) Final deployment-script and docs alignment | **Done** | `README.md` Vite table fixed; `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup + VPS checklist rewritten to match the `--auto` flow and the unconditional letsencrypt mounts. |
+| E) Final release-hardening sanity checks | **Done** | No `localhost:8000` leak; complaint intake / track / login routes still 200 by inspection (`PublicShell`-wrapped pages from previous batch unchanged); 296 backend tests still pass; RBAC/audit/contract-intelligence/maps/Arabic-RTL untouched. |
+| F) Optional smoke-check helper | **Done** | New `smoke-check.sh` covers homepage, login API path, `/health/ready`, HTTPS check (with `--domain`). Exit code = failure count. |
+| Frontend build passes | **Verified** | `✓ built in 974ms` |
+| Backend tests pass | **Verified** | 296/296 |
+| HTTPS / nginx / docker-compose alignment represented in repo | **Verified** | All four files (`deploy.sh`, `ssl-setup.sh`, `nginx-ssl.conf`, `docker-compose.yml`) cooperate without manual edits. |
+| `localhost:8000` fallback fully eliminated | **Verified** | Build leak grep clean; `src/config.ts:26` defaults to `/api`; `deploy.sh:261-266` guard preserved; README now documents this correctly. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` + `HANDOFF_STATUS.md` updated honestly | **Done** | This file + the new batch entry in PROJECT_REVIEW_AND_PROGRESS.md. |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| SSL self-heal for non-Let's-Encrypt cert providers | **Partial — Let's Encrypt only** | The heuristic specifically checks `/etc/letsencrypt/live/$DOMAIN/fullchain.pem`. Custom-cert setups using `${LETSENCRYPT_DIR}` overrides still need manual `cp nginx-ssl.conf nginx.conf` after each `git pull`. Acceptable — the prompt explicitly targets the existing `ssl-setup.sh + Let's Encrypt` flow. |
+| Wire `smoke-check.sh` into CI or `deploy.sh` | **Not done** | Intentionally on-demand. Adding it to `deploy.sh` would slow every deploy and would fail when no domain is configured yet. |
+| Collapse `nginx.conf` / `nginx-ssl.conf` duplication via `include` | **Not done** | Risky and unnecessary; prompt forbids broad rewrite. |
+| `index.html` SEO/meta tags for the public landing | **Not done — inherited** | Out of scope. |
+| End-to-end UI test of public landing → submit → track → detail | **Not done — inherited** | Tooling out of scope. |
+
+### Blocked: None
+
+### 🚦 Final go-live recommendation: **✅ Safe to update VPS now.**
+
+The exact operator flow specified in the prompt is now reliable:
+
+```bash
+git pull
+./deploy.sh --rebuild --domain=matrixtop.com
+# if the cert doesn't exist yet (first-ever HTTPS setup):
+sudo ./ssl-setup.sh matrixtop.com --auto
+```
+
+After this batch:
+- A `git pull` will no longer silently lose HTTPS on the VPS — `deploy.sh` re-applies `nginx-ssl.conf` automatically when it sees the cert.
+- A fresh `--rebuild` will fail loudly (not silently) if `dist/` carries `http://localhost:8000` — protecting against the historical login-broken-in-prod regression.
+- Post-deploy verification will additionally probe the live HTTPS URL when the cert exists, surfacing TLS regressions immediately.
+- Operator can run `./smoke-check.sh --domain=matrixtop.com` at any time for a 5-second confidence check across SPA / API / login / health / TLS / HTTP→HTTPS redirect.
+
+---
+
+## الدفعة السابقة: 2026-04-23T20:30 — Complaint-Intake-as-Entry-Point Batch
+
+**Scope:** Make complaint intake the obvious operational entry point of the product. Add a public Arabic landing at `/` (signed-out), a shared public header, polish the public submit/track pages, surface complaint↔task linkage on both detail pages, and clarify the public-vs-internal navigation boundary. No login flow change, no SSL/RBAC/audit/contract-intelligence/map change.
+
+### الملفات المُعدّلة في هذه الدفعة:
+
+| الملف | التغيير |
+|---|---|
+| **Backend — modified** | |
+| `backend/app/api/tasks.py` | `list_tasks` accepts new query param `complaint_id` (consistent with existing `project_id`/`team_id`/`location_id` filters). |
+| `backend/tests/test_projects_teams_settings.py` | +1 test: `test_list_tasks_filtered_by_complaint` (multi-complaint fixture, asserts only the target complaint's tasks are returned). |
+| **Frontend — new** | |
+| `src/components/PublicHeader.tsx` | Reusable public Arabic-RTL header (`PublicHeader`) + page wrapper (`PublicShell`) with logo + 3 nav links: تقديم شكوى / تتبع شكوى / دخول الموظفين. Active-route highlighting. No auth/notifications. |
+| `src/pages/PublicLandingPage.tsx` | Public landing page rendered at `/` for unauthenticated visitors. Hero text, two large CTA cards (submit / track), 3-step Arabic lifecycle explainer, subtle staff-login link. |
+| **Frontend — modified** | |
+| `src/App.tsx` | New lazy `PublicLandingPage`. New `RootRoute` component: returns `<PublicLandingPage />` if `!apiService.isAuthenticated()`, otherwise the existing role-protected dashboard. `/` route now uses `<RootRoute />`. |
+| `src/pages/ComplaintSubmitPage.tsx` | Wrapped in `PublicShell`. Header now links to `/complaints/track`. Location field has helper sub-text. Separate `submitting` state in addition to `uploading`. Success state rebuilt with green check, big mono tracking number, "نسخ الرقم" clipboard button, "ماذا يحدث بعد الآن" 3-step guidance, and 2 CTAs. |
+| `src/pages/ComplaintTrackPage.tsx` | Fully rewritten under `PublicShell`. Form has placeholders + cross-link to `/complaints/new`. Result card renders Arabic status badge + per-status guidance text (one of 6 sentences) + tracking number + type + dates + location + description. Inline "not found" panel on failed search. Privacy footer line. |
+| `src/pages/ComplaintDetailsPage.tsx` | Loads linked tasks via `getTasks({ complaint_id })`. New "المهام المرتبطة" card between update card and activity log, listing each task as a clickable row with title, `#id`, due date, and colored Arabic status badge. Empty state guides managers to "تحويل إلى مهمة" if permitted. |
+| `src/pages/TaskDetailsPage.tsx` | When `task.complaint_id` is set, fetches the source complaint and renders its citizen `tracking_number` + name in the linkage row, instead of bare `#id`. Falls back to `#id` on fetch error. Contract linkage unchanged. |
+| `src/components/Layout.tsx` | New "تقديم شكوى نيابة عن مواطن" anchor in the header (`target="_blank"` to `/complaints/new`), gated to project_director / contracts_manager / complaints_officer / area_supervisor. Hidden on extra-small screens. |
+| `src/pages/LoginPage.tsx` | Footer divider + 2 small links to `/complaints/new` and `/complaints/track` so a citizen who lands here can still reach the public flow. |
+| `src/services/api.ts` | `getTasks` parameter type extended to accept `complaint_id?: number`; emitted as `complaint_id` query param when set. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New "Before / After" batch entry with engineering decisions and honest residual-gaps list. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### Tests
+- Run: `cd backend && python -m pytest tests/ -q`
+- **296 passed** (was 295; +1 new filter test). Result: `296 passed, 871 warnings in 117.59s`.
+
+### Build
+- Run: `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build`
+- Passes (`tsc -b --noCheck && vite build`). `✓ built in 926ms`. No TS errors.
+
+### What is *NOT* changed in this batch (preserved):
+- Login flow (just a small footer-link addition; auth logic untouched).
+- SSL / nginx / docker-compose.
+- Backend RBAC, audit logging, JWT auth, all 295 previously-passing tests.
+- `POST /complaints/{id}/create-task` endpoint and its conversion logic.
+- Contract intelligence, map foundation, all map endpoints, GIS layers.
+- RTL/Arabic UI of all internal pages.
+- Internal Layout structure, sidebar items, role gates (only one extra anchor was added).
+- Citizen dashboard, internal dashboard, complaints list, tasks list, contracts list, projects, teams, settings, locations.
+
+### ✅ مكتمل ومُتحقق منه (Done — verified):
+
+| Goal | Status | Evidence |
+|---|---|---|
+| A) Make complaint submission obvious | **Done** | `/` (signed-out) shows `PublicLandingPage` with two large Arabic CTAs; public header on submit/track; LoginPage gets footer links to public flow. |
+| B) Improve public/citizen complaint flow | **Done** | Submit page wrapped in PublicShell, success state rebuilt (copy-tracking-number, "what happens next" guidance, two CTAs); Track page rewritten with Arabic status badge + per-status guidance + clearer not-found state. |
+| C) Make complaint lifecycle visible internally | **Done** | New "المهام المرتبطة" card on `ComplaintDetailsPage` lists every task created from this complaint with status badge + click-through. Empty-state copy guides toward "تحويل إلى مهمة". |
+| D) Strengthen complaint→task operational flow | **Done** | Conversion is unchanged; visibility is added on both ends — complaint side shows linked tasks; task side shows source complaint's `tracking_number` + name (not bare id). |
+| E) Remove ambiguity in navigation/landing | **Done** | Public-vs-internal split is now physical (PublicShell vs Layout); root URL no longer redirects citizens to a staff login; intake shortcut in Layout makes the boundary clear from the staff side. |
+| F) Map/list/detail consistency | **Verified** | No regression — new linked-tasks card uses the same Arabic status taxonomy/colors as `TasksListPage` and `TaskDetailsPage`. Map default entity (set in previous batch) unchanged. |
+| G) Preserve what already works | **Verified** | Login untouched (only footer additions). RBAC unchanged. Audit unchanged. Contract intelligence untouched. Map untouched. Projects/Teams from prior batch untouched. |
+| Frontend build passes | **Verified** | `✓ built in 926ms`. |
+| Backend tests pass | **Verified** | **296 passed, 0 failed**. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` + `HANDOFF_STATUS.md` updated honestly | **Done** | Full Before/After entry above. |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| Public track page image thumbnails | **Not done** | The `trackComplaint` API does not return `images`; exposing them publicly is a privacy decision that should go through a separate review. |
+| `index.html` SEO/meta tags for the landing page | **Not done** | Out of scope for this batch; the landing page is rendered client-side. |
+| Public landing transparency stats ("X complaints resolved this month") | **Not done** | Content/transparency feature, separate batch. |
+| Staff attribution on intake shortcut ("submitted by staff #N") | **Not done** | Would require a backend change to `POST /complaints/`; deferred. |
+| End-to-end UI test of landing → submit → track → detail | **Not done** | Backend test covers the new filter only; UI tests are out of scope of this batch's tooling. |
+| Migration 008 applied to running DB | **Inherited** | No schema change in this batch. Prior migration still needs `alembic upgrade head` on first deploy, handled by `entrypoint.sh`. |
+
+### Blocked: None
+
+---
+
+## الدفعة السابقة: 2026-04-23T19:42 — Operational-Coherence Deepening Batch
 
 **Scope:** Make the Projects and Teams entities (introduced in the previous batch) actually integrate into daily operational workflows. Add cross-entity filters on complaints/tasks/contracts list endpoints, surface the same filters on the UI, expose the linked project on complaint and contract detail pages with inline editing, turn the static project/team detail count cards into navigable deep links, and make all of this URL-shareable. No login/SSL/RBAC/map/Arabic-RTL changes.
 

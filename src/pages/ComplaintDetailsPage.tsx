@@ -54,6 +54,7 @@ export default function ComplaintDetailsPage() {
   const { canManageComplaints } = useAuth();
   const [complaint, setComplaint] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
+  const [linkedTasks, setLinkedTasks] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -89,14 +90,16 @@ export default function ComplaintDetailsPage() {
       apiService.getUsers({ limit: 100 }).catch(() => ({ items: [] })),
       apiService.getActiveTeams().catch(() => []),
       apiService.getProjects({ limit: 200 }).catch(() => ({ items: [] })),
+      apiService.getTasks({ complaint_id: numId, limit: 50 }).catch(() => ({ items: [], total_count: 0 })),
     ])
-      .then(([complaintData, activitiesData, areasData, usersData, teamsData, projectsData]) => {
+      .then(([complaintData, activitiesData, areasData, usersData, teamsData, projectsData, linkedTasksData]) => {
         setComplaint(complaintData);
         setActivities(Array.isArray(activitiesData) ? activitiesData : []);
         setAreas(areasData);
         setUsers(usersData.items || []);
         setTeams(Array.isArray(teamsData) ? teamsData : []);
         setProjects((projectsData as any).items || []);
+        setLinkedTasks((linkedTasksData as any).items || []);
         setProjectId(complaintData?.project_id ? String(complaintData.project_id) : '');
       })
       .catch(() => setError('فشل تحميل بيانات الشكوى'))
@@ -381,6 +384,63 @@ export default function ComplaintDetailsPage() {
           </CardContent>
         </Card>
         )}
+
+        {/* Linked tasks (created from this complaint) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListChecks size={20} />
+              المهام المرتبطة
+              <Badge variant="outline">{linkedTasks.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {linkedTasks.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">
+                لا توجد مهام مرتبطة بهذه الشكوى بعد.
+                {canConvertToTask && (
+                  <span className="block mt-1">
+                    استخدم زر "تحويل إلى مهمة" أعلى الصفحة لإنشاء مهمة تنفيذية مرتبطة.
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y">
+                {linkedTasks.map((t: any) => {
+                  const tStatusColors: Record<string, string> = {
+                    pending: 'bg-yellow-100 text-yellow-800',
+                    assigned: 'bg-orange-100 text-orange-800',
+                    in_progress: 'bg-purple-100 text-purple-800',
+                    completed: 'bg-green-100 text-green-800',
+                    cancelled: 'bg-red-100 text-red-800',
+                  };
+                  const tStatusLabels: Record<string, string> = {
+                    pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
+                    completed: 'مكتملة', cancelled: 'ملغاة',
+                  };
+                  return (
+                    <Link
+                      key={t.id}
+                      to={`/tasks/${t.id}`}
+                      className="flex items-center justify-between gap-3 py-3 hover:bg-muted/40 px-2 -mx-2 rounded transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{t.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          مهمة #{t.id}
+                          {t.due_date && ` • الاستحقاق ${format(new Date(t.due_date), 'yyyy/MM/dd')}`}
+                        </p>
+                      </div>
+                      <Badge className={tStatusColors[t.status] || 'bg-gray-100 text-gray-800'}>
+                        {tStatusLabels[t.status] || t.status}
+                      </Badge>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Activity History */}
         <Card>
