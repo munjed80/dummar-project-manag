@@ -1,11 +1,75 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T11:58
+## آخر تحديث: 2026-04-23T15:22
 
 ---
 
-## الدفعة الحالية: 2026-04-23T11:58 — Pre-Deployment Hardening Batch (Security, Secrets, Uploads, Docs, Health, Logs)
+## الدفعة الحالية: 2026-04-23T15:22 — Final Secret Rotation, Credential Hardening, Production-Safe Env Setup
+
+**Scope:** Finalization pass on top of the 2026-04-23T11:58 Pre-Deployment Hardening Batch. Closes residual documentation drift and an operator-ergonomics gap. No code-path changes to the security primitives themselves — those were already correct.
+
+### الملفات المُعدّلة في هذه الدفعة:
+
+| الملف | التغيير |
+|---|---|
+| `IMPLEMENTATION_SUMMARY.md` | Removed literal dangerous defaults (`password123`, `dummar_password`, `dummar-secret-key-change-in-production-32chars-min`) from the "Default Login" section and the "Backend (.env)" example. Replaced with safe pointers to `backend/.env.example`, the `openssl rand -base64 32` generation commands, and the real `/tmp/seed_credentials.txt` retrieval/deletion guidance. Rewrote "Security Notes" section to reflect the actually hardened state (bcrypt, JWT, RBAC, `${VAR:?}` enforcement, random per-user seed passwords, auth-gated uploads/docs/metrics, 127.0.0.1 backend binding). |
+| `README.md` | Path drift fix: `/app/seed_credentials.txt` and `backend/seed_credentials.txt` → `/tmp/seed_credentials.txt` (matches the actual default in `seed_data.py`). |
+| `PRODUCTION_DEPLOYMENT_GUIDE.md` | Same path drift fix in Quick Start, Seed Data Strategy, and Go-Live Checklist sections. |
+| `deploy.sh` | Added an always-on end-of-deploy reminder: after post-deployment verification, the script `exec`s `test -f /tmp/seed_credentials.txt` (path overridable via `SEED_CREDENTIALS_FILE`) inside the backend container. If the file exists, it prints the exact `cat` and `rm` commands and warns the operator to distribute and delete. This surfaces credentials even when `--seed` was NOT passed in the current run. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | Added the new "Before Current Batch" and "After Current Batch" entries per the workflow contract. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### ✅ مكتمل ومُتحقق منه (Done — verified):
+
+| Goal | Status | Evidence |
+|---|---|---|
+| A) Strong production secrets are generated/applied correctly | **Done (already)** | `docker-compose.yml` enforces `${SECRET_KEY:?}` / `${DB_PASSWORD:?}`. `deploy.sh` generates `openssl rand -base64 32` values into a fresh `.env` on first run and refuses legacy literal values. Docs no longer contradict this. |
+| B) Seeded users no longer rely on `password123` | **Done (already)** | `seed_users()` uses `secrets.token_urlsafe(18)` (~144 bits) per new user by default; `password123` is opt-in only via `SEED_DEFAULT_PASSWORDS=1` env or `--force-default-passwords` CLI. Verified via test run (279 passed). |
+| C) Seed credentials file flow works | **Done — verified this batch** | `seed_data.py` writes `/tmp/seed_credentials.txt` with `os.open(..., O_WRONLY|O_CREAT|O_TRUNC, 0o600)` + `os.fchmod(0o600)`, and raises (no stdout fallback) on failure. Docs now point to the correct path. `deploy.sh` surfaces retrieve+delete commands on every run if the file exists. |
+| D) Env/examples/fallbacks are materially safer | **Done (already)** | `backend/.env.example` has no literal secret values; `docker-compose.yml` has no fallback secrets; `IMPLEMENTATION_SUMMARY.md` cleaned of its leftover literal defaults this batch. |
+| E) Deployment/operator guidance is updated honestly | **Done — this batch** | `deploy.sh` prints retrieval/deletion commands every run (not only after `--seed`); docs reflect real paths; operator steps are explicit. |
+| F) Frontend build passes | **Verified** | `npm run build` → `✓ built in 936ms`, dist produced. |
+| G) Backend tests pass | **Verified** | `python -m pytest tests/ -q` → **279 passed**. |
+| H) `PROJECT_REVIEW_AND_PROGRESS.md` and `HANDOFF_STATUS.md` updated | **Done** | New batch entries with real verification evidence, not promises. |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| Rotating the `.env` secrets in this repo | **N/A by design** | The repo must never contain real secrets. Rotation happens per deployment via `./deploy.sh` (`openssl rand -base64 32`) into a gitignored `.env`. This is the only correct answer for a public repo. |
+| Frontend Dockerfile | **Partial** | Out of scope for this batch. Node 20+ on host is still required and documented. |
+| Dependency CVE pass (`python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0`) | **Not done** | Explicitly out of scope; flagged since the previous batch. Recommend a separate batch. |
+| Container content-scanning (ClamAV) on uploads | **Not done** | Out of scope. |
+| Real `/metrics` counters | **Not done** | Placeholders only; at least auth-gated now. |
+| `backend/tests/load_test.py` CLI `--password` default is `password123` | **Kept** | Intentional: load-test tool, not seeded credential; overridable via `--password=...`. |
+
+### 🚫 Blocked: none.
+
+### الفجوات المتبقية قبل النشر الحقيقي:
+
+1. **Frontend remains a host-built artifact.** Node 20+ on host, `npm run build` must run before `docker compose up`.
+2. **Aging tokens/hashing libs.** `python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0`. Recommend a dependency-upgrade batch.
+3. **No virus scanning** on uploaded files.
+4. **`/metrics` counters are placeholders** — not real request totals.
+
+### الخطوة التالية الموصى بها قبل النشر الحقيقي على VPS:
+
+1. Provision a fresh Ubuntu 22.04+ VPS, install Docker + Compose v2 + Node 20+ + Certbot.
+2. Clone the repo; run `./deploy.sh --seed --domain=<your.domain>`. `deploy.sh` will auto-generate a `.env` with strong random secrets and surface `/tmp/seed_credentials.txt` retrieval/deletion commands at the end.
+3. Copy the credentials from `/tmp/seed_credentials.txt` (inside the backend container), distribute via a secure channel, and delete:
+   ```bash
+   docker compose exec backend cat /tmp/seed_credentials.txt
+   docker compose exec backend rm  /tmp/seed_credentials.txt
+   ```
+4. Force every seeded user to rotate their password on first login.
+5. Run `./ssl-setup.sh <your.domain> --auto` to enable HTTPS.
+6. Apply the fail2ban + daily `pg_dump` snippets from `PRODUCTION_DEPLOYMENT_GUIDE.md`.
+7. Schedule a follow-up batch: frontend Dockerfile, dependency CVE pass, real `/metrics` counters, optional ClamAV on uploads.
+
+---
+
+## الدفعة السابقة: 2026-04-23T11:58 — Pre-Deployment Hardening Batch (Security, Secrets, Uploads, Docs, Health, Logs)
 
 **Scope:** Strict pre-deployment hardening before real VPS deployment. NOT a feature batch.
 

@@ -57,10 +57,10 @@ Migrations run automatically when the backend container starts. To run them manu
 docker compose exec backend alembic upgrade head
 
 # Load seed data (first deployment only). Generates strong random passwords
-# per account and writes them to /app/seed_credentials.txt inside the container.
+# per account and writes them to /tmp/seed_credentials.txt inside the container.
 docker compose exec backend python -m app.scripts.seed_data
-docker compose exec backend cat /app/seed_credentials.txt   # retrieve & distribute
-docker compose exec backend rm  /app/seed_credentials.txt   # delete after use
+docker compose exec backend cat /tmp/seed_credentials.txt   # retrieve & distribute
+docker compose exec backend rm  /tmp/seed_credentials.txt   # delete after use
 ```
 
 For local test/development workflows that need the legacy `password123` for every account, run with `--force-default-passwords` (NEVER use this in production):
@@ -119,7 +119,7 @@ python -m pytest tests/ -v
 
 > **Production seed mode (default):** when you run `python -m app.scripts.seed_data`,
 > each seeded account gets a strong random password (24 URL-safe chars, ≈144 bits)
-> written to `backend/seed_credentials.txt` (chmod 600). Distribute these via a
+> written to `/tmp/seed_credentials.txt` inside the backend container (chmod 600). Distribute these via a
 > secure channel and delete the file. The application logs a security warning at
 > startup if any account is still using the legacy `password123`.
 >

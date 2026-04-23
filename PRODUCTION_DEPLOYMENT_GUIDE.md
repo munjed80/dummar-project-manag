@@ -64,8 +64,8 @@ cd /var/www/dummar
 ./deploy.sh --seed --domain=dummar.example.com
 
 # 3. Retrieve the generated seed credentials and distribute them securely.
-docker compose exec backend cat /app/seed_credentials.txt
-docker compose exec backend rm  /app/seed_credentials.txt   # delete after distribution
+docker compose exec backend cat /tmp/seed_credentials.txt
+docker compose exec backend rm  /tmp/seed_credentials.txt   # delete after distribution
 ```
 
 If you prefer to run Compose directly:
@@ -333,13 +333,13 @@ This creates:
 - 5 sample tasks
 - 5 sample contracts
 
-The generated passwords are written to `/app/seed_credentials.txt` inside the
+The generated passwords are written to `/tmp/seed_credentials.txt` inside the
 backend container (file permissions 600). Retrieve and distribute them through
 a secure channel, then delete the file:
 
 ```bash
-docker compose exec backend cat /app/seed_credentials.txt
-docker compose exec backend rm  /app/seed_credentials.txt
+docker compose exec backend cat /tmp/seed_credentials.txt
+docker compose exec backend rm  /tmp/seed_credentials.txt
 ```
 
 If the credentials file cannot be written (e.g. permission denied), the script
@@ -766,7 +766,7 @@ These are now enforced by the Docker stack and code defaults; you get them for f
 
 - [ ] Run `./deploy.sh --seed` (or seed manually) and securely retrieve `seed_credentials.txt`
 - [ ] Distribute the random passwords via a secure channel; force first-login rotation
-- [ ] Delete `/app/seed_credentials.txt` from the backend container
+- [ ] Delete `/tmp/seed_credentials.txt` from the backend container
 - [ ] Set `CORS_ORIGINS` to ONLY your real https origin (deploy.sh does this with `--domain`)
 - [ ] Enable HTTPS via `./ssl-setup.sh <domain> --auto`
 - [ ] Open only ports 22, 80, 443 in `ufw`; set up `fail2ban` for SSH and `/api/auth/`
