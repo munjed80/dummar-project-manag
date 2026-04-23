@@ -11,6 +11,65 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-23T15:22 — Final Secret Rotation, Credential Hardening, Production-Safe Env Setup
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T15:22
+- **فهم النظام الحالي (verified by inspection of real code, not docs):**
+  - The 2026-04-23T11:58 Pre-Deployment Hardening Batch already implemented the heavy lifting:
+    `${VAR:?}` enforcement on `SECRET_KEY` / `DB_PASSWORD` in `docker-compose.yml`,
+    `secrets.token_urlsafe(18)` per-user seed passwords written to `/tmp/seed_credentials.txt` (chmod 600),
+    legacy `password123` opt-in only via `SEED_DEFAULT_PASSWORDS=1` / `--force-default-passwords`,
+    `backend/.env.example` cleaned (no literal secret defaults),
+    `deploy.sh` validates `.env` and refuses legacy defaults, auto-generates with `openssl rand -base64 32`,
+    `/health/detailed` and `/metrics` auth-gated, `/docs` disabled in production,
+    sensitive uploads gated, log rotation in place.
+  - 279/279 backend tests pass; `npm run build` succeeds in <1s on the current state.
+  - `entrypoint.sh` already exits non-zero on alembic failure.
+- **الفجوات الحقيقية المُتحقق منها لهذه الدفعة (real, code-verified residual gaps):**
+  1. `IMPLEMENTATION_SUMMARY.md` still contains literal dangerous defaults: `password123`, `dummar_password`, `dummar-secret-key-change-in-production-32chars-min` — direct violation of "remove misleading or dangerous defaults from any deployment examples/docs".
+  2. Documentation drift: README.md and PRODUCTION_DEPLOYMENT_GUIDE.md instruct operators to read/delete `/app/seed_credentials.txt` and `backend/seed_credentials.txt`, but the actual code default in `seed_data.py` is `/tmp/seed_credentials.txt`. Operators following the docs would get "No such file or directory" and conclude the seed silently failed.
+  3. `deploy.sh` only surfaces seed credential retrieval/deletion commands when `--seed` was passed in the same run. If an operator seeds today and redeploys tomorrow without `--seed`, they get no reminder that cleartext credentials are still sitting in the container.
+- **أهداف الدفعة (this batch's goals):**
+  - A) Remove the remaining literal dangerous defaults from `IMPLEMENTATION_SUMMARY.md` (the only doc still leaking them) and replace with safe pointers + the actual generation/verification commands.
+  - B) Align all docs (README, PRODUCTION_DEPLOYMENT_GUIDE, IMPLEMENTATION_SUMMARY) on the real seed credentials path: `/tmp/seed_credentials.txt`.
+  - C) Always surface seed credentials retrieve/delete commands at the end of every `./deploy.sh` run (not only after `--seed`), so an operator who forgot to delete the credentials file in a prior run is reminded on the next deploy.
+  - D) Verify backend tests + frontend build still pass after changes.
+  - E) Honestly document what was already done by the previous batch vs what this batch added; do not re-claim work.
+- **الملفات المتوقع تعديلها:**
+  - `IMPLEMENTATION_SUMMARY.md` — replace literal `password123` / `dummar_password` / `dummar-secret-key-...` with safe guidance; rewrite Security Notes with the actual hardened state.
+  - `README.md`, `PRODUCTION_DEPLOYMENT_GUIDE.md` — fix `/app/...` → `/tmp/...` path drift; align with code.
+  - `deploy.sh` — always-on seed credentials surfacing block at the end of the run.
+  - `PROJECT_REVIEW_AND_PROGRESS.md`, `HANDOFF_STATUS.md` — honest before/after entries.
+- **المخاطر / الافتراضات:**
+  - The `/tmp/seed_credentials.txt` path is correct per code and per the user's explicit instruction ("Keep the current /tmp/seed_credentials.txt approach if it is already implemented correctly, but verify it fully").
+  - The `$COMPOSE exec -T backend test -f ...` probe added to `deploy.sh` runs only if the backend container is up (which is enforced earlier in the script via the healthcheck loop), so it is safe to call unconditionally.
+  - No code path is changed; only documentation, an end-of-script reminder block, and the path drift are fixed.
+- **افتراضات النشر:**
+  - Same as the prior batch: single VPS, Docker Compose v2, Node 20+ on host, optional Certbot. The actual secret generation continues to be performed by `deploy.sh` (`openssl rand -base64 32`) on first run, applied to a fresh `.env` chmod 600 at the repo root.
+
+**بعد الانتهاء (After Current Batch — verified):**
+- **الطابع الزمني:** 2026-04-23T15:22
+- **النتيجة:** **Done** — all 5 sub-goals (A–E) implemented and verified end-to-end. No "Blocked" items.
+- **التحقق:**
+  - `python -m pytest tests/ -q` → **279 passed** (no test changes; existing seeded-test workflow unaffected because tests build users via fixtures, not the seed script).
+  - `npm run build` → `✓ built in 936ms`, dist produced.
+  - `bash -n deploy.sh` → no syntax errors.
+  - `grep -nE 'dummar_password|dummar-secret-key|^Password: \`password123\`' IMPLEMENTATION_SUMMARY.md` → 0 hits (only retained mentions are explicit "DO NOT use" warnings).
+  - `grep -n '/app/seed_credentials.txt\|backend/seed_credentials.txt' README.md PRODUCTION_DEPLOYMENT_GUIDE.md` → 0 hits.
+- **التغييرات الفعلية:** see HANDOFF_STATUS.md for the full file-by-file table.
+- **القرارات الهندسية الرئيسية:**
+  1. **Did NOT regenerate or rotate secrets in tracked files.** Per the threat model, the only secrets that should ever exist are those generated by `deploy.sh` on the operator's VPS (with `openssl rand -base64 32`) and written to a `.env` that is gitignored. Rotating "the secret" in a public repo would itself leak a secret. The hardening is enforced via `${VAR:?}` (compose refuses to start without strong values) plus deploy.sh validation (refuses the well-known legacy literals). This is the correct production-safe model.
+  2. **Aligned docs with code, not the other way around.** `seed_data.py` writes to `/tmp/seed_credentials.txt` (configurable via `SEED_CREDENTIALS_FILE`); the docs were drifting toward `/app/seed_credentials.txt`. The user explicitly asked to keep `/tmp/seed_credentials.txt`, so docs were corrected. `/tmp` is also the right choice operationally — it is writable by the gunicorn user even when the rest of `/app` is read-only.
+  3. **Always-on credentials reminder.** `deploy.sh` now `exec`s a `test -f` probe inside the backend container at the end of every run. If `/tmp/seed_credentials.txt` exists, it prints the exact `cat` and `rm` commands. This protects against the operator forgetting they seeded earlier and leaving cleartext credentials on disk.
+  4. **No code-path change for the seed flow itself.** The previous batch's implementation (`secrets.token_urlsafe(18)`, chmod 600, no fallback to stdout, hard fail if file write fails) is already correct; this batch verified it and did not weaken it.
+- **الفجوات المتبقية بصدق:**
+  - Same residuals as the prior batch (out of scope for this hardening pass): no frontend Dockerfile yet, `python-jose==3.3.0` / `passlib==1.7.4` / yanked `email-validator==2.1.0` need a dependency-upgrade batch, `/metrics` counters are placeholders, no virus scanning on uploads.
+  - `backend/tests/load_test.py` still defaults its CLI `--password` to `password123` — that is fine because it is a load-testing tool, not a seeded credential, and is documented as `--password=...` overridable.
+- **الخطوة التالية الموصى بها:** Provision a fresh Ubuntu 22.04+ VPS, run `./deploy.sh --seed --domain=<your.domain>`, copy `/tmp/seed_credentials.txt` from the backend container, distribute via a secure channel, delete the file (`docker compose exec backend rm /tmp/seed_credentials.txt`), then run `./ssl-setup.sh <your.domain> --auto`. After go-live, schedule the dependency-upgrade batch flagged above.
+
+---
+
 ### الدفعة: 2026-04-23T11:58 — Pre-Deployment Hardening Batch (Security, Secrets, Uploads, Docs, Health, Logs)
 
 **قبل البدء (Before Current Batch):**

@@ -363,6 +363,23 @@ if [ -f ssl-setup.sh ] && [ ! -d certs ]; then
     echo ""
     info "SSL:       ./ssl-setup.sh <your-domain.com>  (to enable HTTPS)"
 fi
+
+# ---------------------------------------------------------------------------
+# Seed credentials surfacing
+# ---------------------------------------------------------------------------
+# If a seed_credentials.txt file is present inside the backend container,
+# always remind the operator how to retrieve and delete it — even when
+# --seed was NOT passed this run. This protects against the case where the
+# operator forgets they ran a seed earlier and leaves cleartext credentials
+# sitting on disk inside the container.
+SEED_CRED_PATH="${SEED_CREDENTIALS_FILE:-/tmp/seed_credentials.txt}"
+if $COMPOSE exec -T backend test -f "$SEED_CRED_PATH" 2>/dev/null; then
+    echo ""
+    warn "Seed credentials file detected inside backend container: $SEED_CRED_PATH"
+    warn "  Read:    $COMPOSE exec backend cat $SEED_CRED_PATH"
+    warn "  Delete:  $COMPOSE exec backend rm $SEED_CRED_PATH"
+    warn "Distribute via a secure channel and DELETE the file once recorded."
+fi
 echo ""
 
 exit $FAIL

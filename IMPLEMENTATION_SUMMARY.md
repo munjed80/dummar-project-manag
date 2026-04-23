@@ -93,9 +93,9 @@ npm run dev
 
 **Default Login**:
 - Username: `director`
-- Password: `password123`
+- Password: generated per user on first seed and written to `/tmp/seed_credentials.txt` inside the backend container (chmod 600). DO NOT use the legacy `password123` in production. See README and PRODUCTION_DEPLOYMENT_GUIDE for the exact retrieval / deletion commands.
 
-(See README for all user accounts)
+(See README for all seeded user accounts)
 
 ## 🚀 Next Phase Features to Implement
 
@@ -207,23 +207,48 @@ npm run dev
 ## 📝 Environment Variables
 
 ### Backend (.env)
+
+The backend reads its configuration from the repo-root `.env` (auto-generated
+by `./deploy.sh` with strong random secrets) or from `backend/.env` when
+running outside Docker. NEVER commit a real `.env`. NEVER use literal example
+values.
+
+See `backend/.env.example` for the authoritative list of variables and
+generation hints. In short:
+
 ```env
-DATABASE_URL=postgresql://dummar:dummar_password@db:5432/dummar_db
-SECRET_KEY=dummar-secret-key-change-in-production-32chars-min
+# Generate strong values:
+#   DB_PASSWORD=$(openssl rand -base64 32)
+#   SECRET_KEY=$(openssl rand -base64 32)
+DATABASE_URL=postgresql://dummar:<STRONG_DB_PASSWORD>@db:5432/dummar_db
+SECRET_KEY=<STRONG_RANDOM_32+_CHARS>
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
+ACCESS_TOKEN_EXPIRE_MINUTES=480
 UPLOAD_DIR=/app/uploads
+ENVIRONMENT=production
+ENABLE_API_DOCS=false
 ```
+
+`docker-compose.yml` uses `${VAR:?}` for `DB_PASSWORD` and `SECRET_KEY`, so
+the stack refuses to start if either is missing.
 
 ## 🔐 Security Notes
 
 - ✅ Passwords hashed with bcrypt
-- ✅ JWT tokens with expiration
+- ✅ JWT tokens with expiration (default 480 min)
 - ✅ Role-based access control on all protected routes
 - ✅ SQL injection protection via SQLAlchemy
-- ⚠️ CHANGE SECRET_KEY before production deployment
-- ⚠️ Add rate limiting for production
-- ⚠️ Enable HTTPS in production
+- ✅ `SECRET_KEY` and `DB_PASSWORD` enforced via `${VAR:?}` in docker-compose
+  (stack refuses to start without strong values)
+- ✅ Seeded users get strong random per-user passwords (~144 bits) on first
+  seed; written to `/tmp/seed_credentials.txt` (chmod 600) inside the backend
+  container; legacy `password123` is opt-in only via
+  `--force-default-passwords` for tests
+- ✅ Sensitive `/uploads/contracts` and `/uploads/contract_intelligence` are
+  auth-gated; public categories served by nginx
+- ✅ `/docs`, `/redoc`, `/openapi.json` disabled when `ENVIRONMENT=production`
+- ✅ Backend bound to 127.0.0.1:8000 (nginx is the public entry point)
+- ⚠️ HTTPS must be enabled in production via `ssl-setup.sh` + Let's Encrypt
 
 ## 📊 Database Schema Highlights
 
