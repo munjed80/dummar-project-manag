@@ -90,6 +90,9 @@ def list_tasks(
     status_filter: Optional[TaskStatus] = None,
     priority_filter: Optional[TaskPriority] = None,
     area_id: Optional[int] = None,
+    location_id: Optional[int] = None,
+    project_id: Optional[int] = None,
+    team_id: Optional[int] = None,
     assigned_to_id: Optional[int] = None,
     search: Optional[str] = None,
     current_user: User = Depends(get_current_internal_user),
@@ -105,7 +108,16 @@ def list_tasks(
     
     if area_id:
         query = query.filter(Task.area_id == area_id)
-    
+
+    if location_id:
+        query = query.filter(Task.location_id == location_id)
+
+    if project_id:
+        query = query.filter(Task.project_id == project_id)
+
+    if team_id:
+        query = query.filter(Task.team_id == team_id)
+
     if assigned_to_id:
         query = query.filter(Task.assigned_to_id == assigned_to_id)
 

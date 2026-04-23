@@ -113,6 +113,8 @@ def list_complaints(
     limit: int = 100,
     status_filter: Optional[ComplaintStatus] = None,
     area_id: Optional[int] = None,
+    location_id: Optional[int] = None,
+    project_id: Optional[int] = None,
     search: Optional[str] = None,
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
@@ -124,6 +126,12 @@ def list_complaints(
     
     if area_id:
         query = query.filter(Complaint.area_id == area_id)
+
+    if location_id:
+        query = query.filter(Complaint.location_id == location_id)
+
+    if project_id:
+        query = query.filter(Complaint.project_id == project_id)
 
     if search:
         search_term = f"%{search}%"

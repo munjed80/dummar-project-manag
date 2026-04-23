@@ -12,9 +12,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash, ShieldWarning, Brain, Copy, MapPin, Plus, X } from '@phosphor-icons/react';
+import { Spinner, FilePdf, ClockCounterClockwise, Paperclip, Warning, Trash, ShieldWarning, Brain, Copy, MapPin, Plus, X, Briefcase } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 import { config } from '@/config';
 
@@ -58,6 +61,10 @@ export default function ContractDetailsPage() {
   const [availableLocations, setAvailableLocations] = useState<any[]>([]);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [linkingLocation, setLinkingLocation] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [editingProject, setEditingProject] = useState(false);
+  const [projectId, setProjectId] = useState('');
+  const [savingProject, setSavingProject] = useState(false);
 
   const fetchData = () => {
     if (!id) return;
@@ -69,12 +76,15 @@ export default function ContractDetailsPage() {
       apiService.getContractApprovals(numId).catch(() => []),
       apiService.getContractIntelligence(numId).catch(() => null),
       apiService.getContractLocations(numId).catch(() => ({ locations: [] })),
+      apiService.getProjects({ limit: 200 }).catch(() => ({ items: [] })),
     ])
-      .then(([contractData, approvalsData, intelligenceData, locData]) => {
+      .then(([contractData, approvalsData, intelligenceData, locData, projectsData]) => {
         setContract(contractData);
         setApprovals(Array.isArray(approvalsData) ? approvalsData : []);
         setIntelligence(intelligenceData);
         setLinkedLocations(locData?.locations || []);
+        setProjects((projectsData as any).items || []);
+        setProjectId(contractData?.project_id ? String(contractData.project_id) : '');
       })
       .catch(() => setError('فشل تحميل بيانات العقد'))
       .finally(() => setLoading(false));
@@ -159,6 +169,21 @@ export default function ContractDetailsPage() {
       fetchData();
     } catch {
       toast.error('فشل فك ربط الموقع');
+    }
+  };
+
+  const handleSaveProject = async () => {
+    if (!id) return;
+    setSavingProject(true);
+    try {
+      await apiService.updateContract(Number(id), { project_id: projectId ? Number(projectId) : null });
+      toast.success('تم تحديث المشروع المرتبط');
+      setEditingProject(false);
+      fetchData();
+    } catch {
+      toast.error('فشل تحديث المشروع المرتبط');
+    } finally {
+      setSavingProject(false);
     }
   };
 
@@ -395,6 +420,58 @@ export default function ContractDetailsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Linked Project */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Briefcase size={20} />
+                المشروع المرتبط
+              </div>
+              {canManageContracts && !editingProject && (
+                <Button variant="outline" size="sm" onClick={() => setEditingProject(true)}>
+                  تعديل
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editingProject ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
+                  <SelectTrigger className="w-full sm:w-[280px]"><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بدون مشروع —</SelectItem>
+                    {projects.map((p: any) => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleSaveProject} disabled={savingProject}>
+                  {savingProject && <Spinner className="animate-spin ml-2" size={16} />}
+                  حفظ
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setProjectId(contract.project_id ? String(contract.project_id) : '');
+                    setEditingProject(false);
+                  }}
+                  disabled={savingProject}
+                >
+                  إلغاء
+                </Button>
+              </div>
+            ) : contract.project_id ? (
+              <Link to={`/projects/${contract.project_id}`} className="font-medium text-primary hover:underline">
+                {projects.find((p: any) => p.id === contract.project_id)?.title || `#${contract.project_id}`}
+              </Link>
+            ) : (
+              <p className="text-muted-foreground text-sm">لا يوجد مشروع مرتبط</p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Linked Locations */}
         <Card>

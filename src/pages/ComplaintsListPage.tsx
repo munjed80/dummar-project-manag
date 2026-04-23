@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
@@ -44,18 +44,34 @@ const PAGE_SIZE = 15;
 
 export default function ComplaintsListPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialProject = searchParams.get('project_id') || 'all';
   const [complaints, setComplaints] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [areas, setAreas] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [areaFilter, setAreaFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState(initialProject);
   const [page, setPage] = useState(0);
+
+  // Keep URL in sync when project filter changes so deep links remain shareable.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (projectFilter === 'all') next.delete('project_id');
+    else next.set('project_id', projectFilter);
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectFilter]);
 
   useEffect(() => {
     apiService.getAreas().then(setAreas).catch(() => {});
+    apiService.getProjects({ limit: 200 })
+      .then((data) => setProjects(data.items || []))
+      .catch(() => setProjects([]));
   }, []);
 
   useEffect(() => {
@@ -64,6 +80,7 @@ export default function ComplaintsListPage() {
     const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
     if (areaFilter !== 'all') params.area_id = Number(areaFilter);
+    if (projectFilter !== 'all') params.project_id = Number(projectFilter);
     if (search) params.search = search;
     apiService.getComplaints(params)
       .then((data) => {
@@ -72,9 +89,10 @@ export default function ComplaintsListPage() {
       })
       .catch(() => setError('فشل تحميل الشكاوى'))
       .finally(() => setLoading(false));
-  }, [statusFilter, areaFilter, search, page]);
+  }, [statusFilter, areaFilter, projectFilter, search, page]);
 
   const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name_ar || a.name]));
+  const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -114,6 +132,15 @@ export default function ComplaintsListPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={projectFilter} onValueChange={(v) => { setProjectFilter(v); setPage(0); }}>
+                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="المشروع" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع المشاريع</SelectItem>
+                  {projects.map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -141,13 +168,14 @@ export default function ComplaintsListPage() {
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">الأولوية</TableHead>
                       <TableHead className="text-right">المنطقة</TableHead>
+                      <TableHead className="text-right">المشروع</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {complaints.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                           لا توجد شكاوى
                         </TableCell>
                       </TableRow>
@@ -172,6 +200,7 @@ export default function ComplaintsListPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
+                          <TableCell>{c.project_id ? (projectMap[c.project_id] || `#${c.project_id}`) : '-'}</TableCell>
                           <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                         </TableRow>
                       ))
@@ -208,6 +237,12 @@ export default function ComplaintsListPage() {
                           <>
                             <span>•</span>
                             <span>{areaMap[c.area_id]}</span>
+                          </>
+                        )}
+                        {c.project_id && (
+                          <>
+                            <span>•</span>
+                            <span>{projectMap[c.project_id] || `مشروع #${c.project_id}`}</span>
                           </>
                         )}
                         <span>•</span>

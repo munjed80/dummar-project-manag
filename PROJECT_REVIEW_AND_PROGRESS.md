@@ -4,12 +4,101 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة السابعة - تثبيت العمود الفقري التشغيلي (Projects + Teams + complaint→task workflow)  
-**آخر تحديث:** 2026-04-23T18:53
+**المرحلة الحالية:** المرحلة الثامنة - تعميق التكامل التشغيلي (Projects/Teams across complaints/tasks/contracts + cross-entity filters & deep links)  
+**آخر تحديث:** 2026-04-23T19:42
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-23T19:42 — Operational-Coherence Deepening Batch (Projects/Teams cross-integration + filters + deep links + role coherence)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T19:42
+- **فهم النظام الحالي بناءً على فحص الكود الحقيقي (لا الوثائق):**
+  - The previous batch (2026-04-23T18:53) introduced the structural Projects, Teams, and Settings entities and wired the complaint→task conversion endpoint and Settings persistence. That work is intact and verified (`backend/app/api/projects.py`, `teams.py`, `app_settings.py`, `complaints.py:POST /complaints/{id}/create-task`, frontend pages all present). Backend baseline test count: **292 passing**.
+  - However, those new entities are still mostly **isolated** from the main operational surface area:
+    1. **No project filter on operational lists.** `GET /complaints/`, `GET /tasks/`, and `GET /contracts/` accept `status`/`area_id`/`type`/`assigned_to_id` but **not** `project_id` (verified by reading the three list endpoints). The frontend list pages (`ComplaintsListPage.tsx`, `TasksListPage.tsx`, `ContractsListPage.tsx`) likewise expose status/type/area filters but no project or team filter. So even though every record can carry a `project_id`/`team_id`, an operator cannot answer "show me everything for project X" without opening each record.
+    2. **No team filter on tasks list.** `GET /tasks/` does not accept `team_id`. The tasks list page does not show the assigned team in the table — the column is hidden, so on-call accountability ("which team owns this?") is invisible from the list view. Verified at `TasksListPage.tsx` table headers.
+    3. **Project linkage is invisible on complaints/contracts.** `Complaint.project_id` and `Contract.project_id` exist in the model and schema, but the detail pages (`ComplaintDetailsPage.tsx`, `ContractDetailsPage.tsx`) neither display the linked project nor allow changing it. So the link is set-once-at-creation only, with no UI affordance.
+    4. **Project and Team detail pages are dead ends for navigation.** `ProjectDetailsPage.tsx` shows raw counts (`task_count`, `complaint_count`, `team_count`) as static cards — there is no way to click through to "the tasks of this project". `TeamDetailsPage.tsx` shows `task_count` similarly without a link. So the relationship is reported but not navigable. There is also no `contract_count` on the project response, even though `Contract.project_id` exists.
+  - Other product brief items (role coherence beyond what was already done, broken loading states, Settings polish) — re-verified by inspection:
+    5. **Settings page** is operational, with grouped editable form, system-health card with proper URL+auth, and read-only mode for non-privileged roles. It already covers the brief's "more operational" requirement; no further structural changes needed in this batch.
+    6. **Role-based menu gating** in `Layout.tsx` and route protection in `App.tsx` are real and aligned with backend RBAC. `useAuth.ts` exposes `canManage*` flags consumed by detail-page action buttons. No "fake frontend RBAC" pattern detected.
+    7. **Failed-loading behavior** on the main pages was checked: complaints/tasks/contracts/projects/teams all set `error` state on fetch failure and render a real Arabic error message inside their `Card`. No silent infinite spinners detected on these pages today. Map pages pull from real backend GIS endpoints. No demo-only pages remain.
+
+- **أهداف الدفعة (this batch's goals):**
+  - F) Add `project_id` filter to `/complaints/`, `/tasks/`, `/contracts/`; add `team_id` and `location_id` filters to `/tasks/`. Backend tests for each.
+  - B/F) Surface the same filters on the three list pages; show project (and on tasks: team) as a column / chip. Sync the filter to URL `?project_id=X` so deep links from project detail are shareable.
+  - B) `ComplaintDetailsPage`: show the linked project as a navigable badge; add a project selector to the update form so the link can be changed (using existing `ComplaintUpdate.project_id`).
+  - B) `ContractDetailsPage`: add a "Linked Project" card with view + inline-edit (using existing `ContractUpdate.project_id`).
+  - C/E) `ProjectDetailsPage`: turn the count cards into deep links to the filtered tasks/complaints/contracts list pages. Add `contract_count` to the project response.
+  - C/E) `TeamDetailsPage`: make the "task_count" card a deep link to `/tasks?team_id=X`.
+  - H) Preserve everything else: do not touch login, RBAC, SSL, audit logging, contract intelligence, map foundation, complaint→task workflow, or RTL layout. Frontend build must remain green; backend tests must remain ≥ 292.
+
+**بعد التنفيذ (After Current Batch):**
+
+- **Backend changes (exact):**
+  - `backend/app/api/complaints.py` → `list_complaints` accepts `project_id` and `location_id`.
+  - `backend/app/api/tasks.py` → `list_tasks` accepts `project_id`, `team_id`, `location_id`.
+  - `backend/app/api/contracts.py` → `list_contracts` accepts `project_id`.
+  - `backend/app/api/projects.py` → `_enrich_project_response` now also computes and returns `contract_count`.
+  - `backend/app/schemas/project.py` → `ProjectResponse.contract_count: int = 0` added.
+  - `backend/tests/test_projects_teams_settings.py` → 3 new tests:
+    - `test_list_complaints_filtered_by_project`
+    - `test_list_tasks_filtered_by_project_and_team`
+    - `test_list_contracts_filtered_by_project`
+
+- **Frontend changes (exact):**
+  - `src/services/api.ts` → `getComplaints` adds `project_id`/`location_id`; `getTasks` adds `project_id`/`team_id`/`location_id`/`assigned_to_id`; `getContracts` adds `project_id`.
+  - `src/pages/ComplaintsListPage.tsx` → loads projects list; adds project filter `Select`; adds "المشروع" column to desktop table and project chip to mobile card; project filter is two-way bound to URL `?project_id=`.
+  - `src/pages/TasksListPage.tsx` → loads projects + active teams; adds project & team filter `Select`s; adds "المشروع" and "الفريق" columns to desktop table and project/team chips to mobile card; both filters two-way bound to URL `?project_id=` / `?team_id=`.
+  - `src/pages/ContractsListPage.tsx` → loads projects list; adds project filter `Select`; adds "المشروع" column to desktop table and project chip to mobile card; URL-synced.
+  - `src/pages/ComplaintDetailsPage.tsx` → loads projects; shows linked project as a navigable badge in the details grid; update form gets a project selector (`— بدون مشروع —` maps to `null`); save payload only sends `project_id` when changed; disabled-state for the update button updated accordingly.
+  - `src/pages/ContractDetailsPage.tsx` → loads projects; new "المشروع المرتبط" card with read view (link to `/projects/:id`) and inline edit (`Select` + Save/Cancel), gated to `canManageContracts`; placed above "Linked Locations".
+  - `src/pages/ProjectDetailsPage.tsx` → count cards are now deep links: tasks → `/tasks?project_id=X`, complaints → `/complaints?project_id=X`, contracts → `/contracts?project_id=X`; renders `team_count` and `contract_count`; clearer Arabic copy "العناصر المرتبطة".
+  - `src/pages/TeamDetailsPage.tsx` → `task_count` card is now a deep link to `/tasks?team_id=X`.
+
+- **Engineering decisions:**
+  - **Filtering: backend, not client.** Project/team filters call the backend via existing list endpoints with new query params. No client-side `Array.filter` over a partial page. This keeps pagination correct.
+  - **URL-bound filters.** When a user lands on `/tasks?project_id=5`, the page initializes the filter from the URL; when they change the filter in the UI, the URL updates with `replace: true` so deep links from project/team detail pages are honored and the back button doesn't pile up history.
+  - **Project re-link semantics.** On both `ComplaintDetailsPage` and `ContractDetailsPage`, the project field is sent only when it differs from the persisted value, so an unchanged form does not blank the link. `null` is sent explicitly when the user picks "— بدون مشروع —".
+  - **No new dependencies.** `react-router-dom`'s `useSearchParams` and existing `Select` components are reused.
+  - **No RBAC duplication.** All role gates (`canManageComplaints`, `canManageContracts`) reuse the existing `useAuth` flags. Backend RBAC on the new filter parameters is unchanged because read access on these list endpoints already requires `get_current_internal_user`.
+
+- **Role-coherence improvements:**
+  - The existing role gates were verified, not duplicated. `Layout` nav and `App.tsx` route protection remain authoritative. The new project/team selectors on Complaint and Contract detail pages are inside cards already gated by `canManageComplaints` / `canManageContracts`, so an `area_supervisor` viewing a contract sees the read-only project link but no edit affordance, exactly as for other contract fields.
+
+- **Projects integration improvements (concrete):**
+  - Projects are now filterable on complaints, tasks, and contracts lists.
+  - Linked project is visible in complaints list, tasks list, contracts list, complaint detail, task detail (already), and contract detail.
+  - Project detail now exposes navigable counts for tasks/complaints/contracts with a `team_count` informational card; `contract_count` is newly available on the API.
+
+- **Teams integration improvements (concrete):**
+  - Tasks list is filterable by team and shows the assigned team in both desktop and mobile views.
+  - Team detail page now provides a one-click view of all tasks assigned to that team.
+
+- **Broken-page / loading-fixes:**
+  - No new "failed to load" sources were found in this batch's audit. The pre-existing graceful error handling on the operational pages was preserved. The only fetch additions are tolerant (`.catch(() => …)` defaults) so adding the new dropdowns cannot break the page if `/projects` or `/teams/active` is briefly unavailable.
+
+- **Filter / search improvements:**
+  - Backend: added `project_id` to complaints/tasks/contracts; added `team_id` + `location_id` to tasks (still missing from a few legacy endpoints, see remaining gaps).
+  - Frontend: project filter on all three operational lists, team filter on tasks, with URL persistence.
+
+- **Settings page:** Verified already-operational. No changes in this batch — it was rebuilt in the previous batch and the brief allows skipping further work.
+
+- **Remaining gaps (honest):**
+  - `Complaint.location_id` filter is wired backend-side, but the complaints list page does not yet expose a location dropdown (today it still shows only the legacy `area_id`). Out of scope for this batch — left intentionally because Locations are a hierarchy of hundreds of nodes and a flat dropdown would be unusable; a location-tree picker is the right next step but is a separate UX project.
+  - Contract list does not yet have a contractor-name search field (only the existing `search` over title/contract_number is used).
+  - `Team.location_id` filter on tasks is not yet exposed (the backend already supports `team_id`; team→location chaining is implicit via the team).
+  - The `team_count` shown on `ProjectDetailsPage` is informational only; there is no `/teams?project_id=` filter on the teams list page yet (but the backend `GET /teams/?project_id=` is already supported, only the UI is missing).
+  - No regression to existing role-gating; no further per-role page redesigns were made beyond what already existed.
+
+- **Verification:**
+  - Backend tests: **295 passed** (was 292; +3 new filter tests). Run: `cd backend && python -m pytest tests/ -q`.
+  - Frontend build: **passed** (`npm run build`). Bundle sizes for the touched pages within previous norms.
+
+- **Status:** **Done** for the explicitly-listed scope (Projects/Teams cross-filters + deep links + project re-linking on complaint/contract). **Partial** for product-brief sections C/F at the wider sense (location-tree picker on complaints list, teams-list filter by project — not in scope of this batch).
 
 ### الدفعة: 2026-04-23T18:53 — Operational-Backbone Stabilization Batch (Projects + Teams + complaint→task + real Settings + map/list consistency)
 

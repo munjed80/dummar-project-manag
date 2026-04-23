@@ -165,6 +165,7 @@ def _enrich_project_response(db: Session, project: Project) -> ProjectResponse:
     task_count = db.query(func.count(Task.id)).filter(Task.project_id == project.id).scalar() or 0
     complaint_count = db.query(func.count(Complaint.id)).filter(Complaint.project_id == project.id).scalar() or 0
     team_count = db.query(func.count(Team.id)).filter(Team.project_id == project.id).scalar() or 0
+    contract_count = db.query(func.count(Contract.id)).filter(Contract.project_id == project.id).scalar() or 0
     
     location_name = None
     if project.location_id:
@@ -194,6 +195,7 @@ def _enrich_project_response(db: Session, project: Project) -> ProjectResponse:
         task_count=task_count,
         complaint_count=complaint_count,
         team_count=team_count,
+        contract_count=contract_count,
         location_name=location_name,
         contract_number=contract_number,
     )

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Spinner, ArrowLeft } from '@phosphor-icons/react';
+import { Spinner, ArrowLeft, ListChecks } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -189,10 +189,22 @@ export default function TeamDetailsPage() {
 
             {!editing && team && (
               <div className="pt-4 border-t">
-                <Card>
-                  <CardHeader><CardTitle className="text-sm">المهام المسندة</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{team.task_count || 0}</p></CardContent>
-                </Card>
+                <Link to={`/tasks?team_id=${team.id}`} className="block">
+                  <Card className="hover:bg-muted/50 transition-colors">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <ListChecks size={16} />
+                        المهام المسندة
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">{team.task_count || 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        عرض كل المهام المسندة لهذا الفريق
+                      </p>
+                    </CardContent>
+                  </Card>
+                </Link>
               </div>
             )}
           </CardContent>
