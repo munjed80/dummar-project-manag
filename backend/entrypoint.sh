@@ -18,10 +18,13 @@ until pg_isready -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-dummar
 done
 
 echo "Running database migrations..."
-alembic upgrade head || {
-    echo "WARNING: Migrations failed. The application may not work correctly."
-    echo "Check DATABASE_URL and migration files."
-}
+if ! alembic upgrade head; then
+    echo "FATAL: Database migrations failed."
+    echo "FATAL: Refusing to start the API in an inconsistent schema state."
+    echo "FATAL: Check DATABASE_URL connectivity and migration files in alembic/versions/."
+    exit 1
+fi
+echo "Database migrations applied successfully."
 
 # Verify OCR/Tesseract availability for contract intelligence
 echo "=== OCR Engine Check ==="

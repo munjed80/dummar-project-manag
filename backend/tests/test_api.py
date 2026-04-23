@@ -559,9 +559,14 @@ class TestEmailService:
 class TestHealthEndpoints:
     """Test detailed health check and SMTP test endpoints."""
 
-    def test_detailed_health_returns_healthy(self, client):
-        """Detailed health should return healthy when DB is working."""
+    def test_detailed_health_requires_auth(self, client):
+        """Detailed health is restricted to internal staff."""
         resp = client.get("/health/detailed")
+        assert resp.status_code in (401, 403)
+
+    def test_detailed_health_returns_healthy(self, client, director_token):
+        """Detailed health returns healthy when DB is working (auth required)."""
+        resp = client.get("/health/detailed", headers=_auth_headers(director_token))
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
@@ -717,9 +722,14 @@ class TestAuditLogAPI:
 class TestMonitoringEndpoints:
     """Test monitoring-related endpoints."""
 
-    def test_metrics_endpoint(self, client):
-        """Metrics endpoint returns uptime and version."""
+    def test_metrics_requires_auth(self, client):
+        """Metrics endpoint requires internal-staff auth (operational data)."""
         resp = client.get("/metrics")
+        assert resp.status_code in (401, 403)
+
+    def test_metrics_endpoint(self, client, director_token):
+        """Metrics endpoint returns uptime and version when authenticated."""
+        resp = client.get("/metrics", headers=_auth_headers(director_token))
         assert resp.status_code == 200
         data = resp.json()
         assert "uptime_seconds" in data

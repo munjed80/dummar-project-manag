@@ -92,10 +92,16 @@ def _check_smtp() -> ComponentHealth:
 
 
 @router.get("/detailed", response_model=DetailedHealth)
-def detailed_health_check(db: Session = Depends(get_db)):
+def detailed_health_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_internal_user),
+):
     """
     Detailed health check — tests DB and SMTP connectivity.
-    Public endpoint (no auth) for monitoring tools / load balancers.
+    Restricted to authenticated internal staff: this endpoint exposes operational
+    detail (latency, SMTP host status) that should not be available to anonymous
+    callers in production. Use /health (liveness) and /health/ready (readiness)
+    for unauthenticated probes.
     """
     db_health = _check_db(db)
     smtp_health = _check_smtp()
