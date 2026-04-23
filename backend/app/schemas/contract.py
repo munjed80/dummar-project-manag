@@ -29,6 +29,7 @@ class ContractUpdate(BaseModel):
     contractor_contact: Optional[str] = None
     end_date: Optional[date] = None
     status: Optional[ContractStatus] = None
+    project_id: Optional[int] = None
     notes: Optional[str] = None
     attachments: Optional[List[str]] = None
 
@@ -36,6 +37,7 @@ class ContractUpdate(BaseModel):
 class ContractResponse(ContractBase):
     id: int
     status: ContractStatus
+    project_id: Optional[int] = None
     pdf_file: Optional[str]
     attachments: Optional[List[str]] = None
     notes: Optional[str]

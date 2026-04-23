@@ -4,6 +4,9 @@ from app.models.location import Area, Building, Street, Location, LocationType, 
 from app.models.complaint import Complaint, ComplaintActivity, ComplaintType, ComplaintStatus, ComplaintPriority
 from app.models.task import Task, TaskActivity, TaskStatus, TaskSourceType, TaskPriority
 from app.models.contract import Contract, ContractApproval, ContractType, ContractStatus
+from app.models.project import Project, ProjectStatus
+from app.models.team import Team, TeamType
+from app.models.app_setting import AppSetting
 from app.models.audit import AuditLog
 from app.models.notification import Notification, NotificationType
 from app.models.contract_intelligence import (
@@ -40,6 +43,11 @@ __all__ = [
     "ContractApproval",
     "ContractType",
     "ContractStatus",
+    "Project",
+    "ProjectStatus",
+    "Team",
+    "TeamType",
+    "AppSetting",
     "AuditLog",
     "Notification",
     "NotificationType",

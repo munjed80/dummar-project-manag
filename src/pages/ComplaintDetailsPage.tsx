@@ -16,9 +16,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Spinner, ClockCounterClockwise, MapPin, Image, Warning } from '@phosphor-icons/react';
+import { Spinner, ClockCounterClockwise, MapPin, Image, Warning, ListChecks } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 const statusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -47,11 +50,13 @@ const typeLabels: Record<string, string> = {
 
 export default function ComplaintDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { canManageComplaints } = useAuth();
   const [complaint, setComplaint] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
@@ -59,6 +64,16 @@ export default function ComplaintDetailsPage() {
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
+
+  // Convert-to-task dialog state
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertTitle, setConvertTitle] = useState('');
+  const [convertDescription, setConvertDescription] = useState('');
+  const [convertDueDate, setConvertDueDate] = useState('');
+  const [convertAssignee, setConvertAssignee] = useState('');
+  const [convertTeam, setConvertTeam] = useState('');
+  const [convertPriority, setConvertPriority] = useState('');
+  const [converting, setConverting] = useState(false);
 
   const fetchData = () => {
     if (!id) return;
@@ -70,12 +85,14 @@ export default function ComplaintDetailsPage() {
       apiService.getComplaintActivities(numId).catch(() => []),
       apiService.getAreas().catch(() => []),
       apiService.getUsers({ limit: 100 }).catch(() => ({ items: [] })),
+      apiService.getActiveTeams().catch(() => []),
     ])
-      .then(([complaintData, activitiesData, areasData, usersData]) => {
+      .then(([complaintData, activitiesData, areasData, usersData, teamsData]) => {
         setComplaint(complaintData);
         setActivities(Array.isArray(activitiesData) ? activitiesData : []);
         setAreas(areasData);
         setUsers(usersData.items || []);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
       })
       .catch(() => setError('فشل تحميل بيانات الشكوى'))
       .finally(() => setLoading(false));
@@ -116,6 +133,53 @@ export default function ComplaintDetailsPage() {
     }
   };
 
+  const openConvertDialog = () => {
+    if (!complaint) return;
+    setConvertTitle(`معالجة شكوى ${complaint.tracking_number || ''}`.trim());
+    setConvertDescription(complaint.description || '');
+    setConvertDueDate('');
+    setConvertAssignee('');
+    setConvertTeam('');
+    setConvertPriority(complaint.priority || '');
+    setConvertOpen(true);
+  };
+
+  const handleConvertSubmit = async () => {
+    if (!id || !convertTitle.trim() || !convertDescription.trim()) {
+      toast.error('العنوان والوصف مطلوبان');
+      return;
+    }
+    setConverting(true);
+    try {
+      const payload: any = {
+        title: convertTitle.trim(),
+        description: convertDescription.trim(),
+      };
+      if (convertDueDate) payload.due_date = convertDueDate;
+      if (convertAssignee) payload.assigned_to_id = Number(convertAssignee);
+      if (convertTeam) payload.team_id = Number(convertTeam);
+      if (convertPriority) payload.priority = convertPriority;
+      const newTask = await apiService.createTaskFromComplaint(Number(id), payload);
+      toast.success('تم إنشاء المهمة وتم ربطها بالشكوى');
+      setConvertOpen(false);
+      if (newTask?.id) {
+        navigate(`/tasks/${newTask.id}`);
+      } else {
+        fetchData();
+      }
+    } catch {
+      toast.error('فشل تحويل الشكوى إلى مهمة');
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  // Convert action is shown only while the complaint is still actionable.
+  const canConvertToTask =
+    canManageComplaints &&
+    complaint &&
+    (complaint.status === 'new' || complaint.status === 'under_review');
+
   if (loading) {
     return (
       <Layout>
@@ -153,15 +217,23 @@ export default function ComplaintDetailsPage() {
         {/* Header */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl flex items-center gap-3 flex-wrap">
-              تفاصيل الشكوى
-              <Badge className={statusColors[complaint.status] || 'bg-gray-100 text-gray-800'}>
-                {statusLabels[complaint.status] || complaint.status}
-              </Badge>
-              <Badge className={priorityColors[complaint.priority] || 'bg-gray-100 text-gray-800'}>
-                {priorityLabels[complaint.priority] || complaint.priority}
-              </Badge>
-            </CardTitle>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <CardTitle className="text-2xl flex items-center gap-3 flex-wrap">
+                تفاصيل الشكوى
+                <Badge className={statusColors[complaint.status] || 'bg-gray-100 text-gray-800'}>
+                  {statusLabels[complaint.status] || complaint.status}
+                </Badge>
+                <Badge className={priorityColors[complaint.priority] || 'bg-gray-100 text-gray-800'}>
+                  {priorityLabels[complaint.priority] || complaint.priority}
+                </Badge>
+              </CardTitle>
+              {canConvertToTask && (
+                <Button onClick={openConvertDialog} className="gap-2">
+                  <ListChecks size={18} />
+                  تحويل إلى مهمة
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -309,6 +381,74 @@ export default function ComplaintDetailsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Convert complaint to task dialog */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent dir="rtl" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>تحويل الشكوى إلى مهمة تنفيذية</DialogTitle>
+            <DialogDescription>
+              ستُنشأ مهمة جديدة مرتبطة بهذه الشكوى وسيتم تحديث حالة الشكوى إلى "مُعينة".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">عنوان المهمة *</label>
+              <Input value={convertTitle} onChange={(e) => setConvertTitle(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">وصف المهمة *</label>
+              <Textarea value={convertDescription} onChange={(e) => setConvertDescription(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">تاريخ الاستحقاق</label>
+                <Input type="date" value={convertDueDate} onChange={(e) => setConvertDueDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">الأولوية</label>
+                <Select value={convertPriority} onValueChange={setConvertPriority}>
+                  <SelectTrigger><SelectValue placeholder="الأولوية" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(priorityLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">تعيين إلى مستخدم</label>
+                <Select value={convertAssignee} onValueChange={setConvertAssignee}>
+                  <SelectTrigger><SelectValue placeholder="اختر المستخدم" /></SelectTrigger>
+                  <SelectContent>
+                    {users.filter((u: any) => u.is_active).map((u: any) => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">تعيين إلى فريق تنفيذي</label>
+                <Select value={convertTeam} onValueChange={setConvertTeam}>
+                  <SelectTrigger><SelectValue placeholder="اختر الفريق" /></SelectTrigger>
+                  <SelectContent>
+                    {teams.map((t: any) => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={converting}>إلغاء</Button>
+            <Button onClick={handleConvertSubmit} disabled={converting}>
+              {converting ? <Spinner className="animate-spin ml-2" size={16} /> : null}
+              إنشاء المهمة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog for destructive actions */}
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>

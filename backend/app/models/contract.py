@@ -44,6 +44,7 @@ class Contract(Base):
     attachments = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     qr_code = Column(String(255), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -52,6 +53,7 @@ class Contract(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     
+    project = relationship("Project", back_populates="contract", foreign_keys=[project_id])
     created_by_user = relationship("User", back_populates="created_contracts", foreign_keys=[created_by_id])
     approved_by_user = relationship("User", back_populates="approved_contracts", foreign_keys=[approved_by_id])
     tasks = relationship("Task", back_populates="contract")

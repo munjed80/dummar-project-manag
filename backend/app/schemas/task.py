@@ -11,6 +11,8 @@ class TaskBase(BaseModel):
     source_type: TaskSourceType = TaskSourceType.INTERNAL
     complaint_id: Optional[int] = None
     contract_id: Optional[int] = None
+    team_id: Optional[int] = None
+    project_id: Optional[int] = None
     assigned_to_id: Optional[int] = None
     area_id: Optional[int] = None
     location_id: Optional[int] = None
@@ -29,6 +31,8 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     assigned_to_id: Optional[int] = None
+    team_id: Optional[int] = None
+    project_id: Optional[int] = None
     due_date: Optional[date] = None
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None

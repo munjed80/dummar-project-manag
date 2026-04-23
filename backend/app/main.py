@@ -9,7 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from app.api import auth, complaints, tasks, contracts, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence
+from app.api import auth, complaints, tasks, contracts, projects, teams, app_settings, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence
 from app.api.deps import get_current_internal_user
 from app.core.config import settings
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -117,6 +117,9 @@ app.include_router(auth.router)
 app.include_router(complaints.router)
 app.include_router(tasks.router)
 app.include_router(contracts.router)
+app.include_router(projects.router)
+app.include_router(teams.router)
+app.include_router(app_settings.router)
 app.include_router(locations.router)
 app.include_router(dashboard.router)
 app.include_router(users.router)

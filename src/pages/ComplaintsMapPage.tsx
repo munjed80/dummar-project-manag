@@ -13,15 +13,29 @@ const entityFilters = [
   { value: 'task', label: 'المهام' },
 ];
 
-const statusFilters = [
+// Status options scoped per entity so the filter set always matches what the
+// list pages expose. Picking "complaint" hides task-only statuses, etc., so
+// users never see filters that would silently never match the current source.
+const COMPLAINT_STATUSES = [
   { value: '', label: 'جميع الحالات' },
   { value: 'new', label: 'جديدة' },
   { value: 'under_review', label: 'قيد المراجعة' },
   { value: 'assigned', label: 'تم التعيين' },
   { value: 'in_progress', label: 'قيد التنفيذ' },
   { value: 'resolved', label: 'تم الحل' },
+];
+
+const TASK_STATUSES = [
+  { value: '', label: 'جميع الحالات' },
   { value: 'pending', label: 'معلقة' },
+  { value: 'assigned', label: 'مُعينة' },
+  { value: 'in_progress', label: 'قيد التنفيذ' },
   { value: 'completed', label: 'مكتملة' },
+];
+
+const ALL_STATUSES = [
+  { value: '', label: 'جميع الحالات' },
+  { value: 'in_progress', label: 'قيد التنفيذ' },
 ];
 
 function ComplaintsMapPage() {
@@ -30,8 +44,22 @@ function ComplaintsMapPage() {
   const [polygons, setPolygons] = useState<AreaPolygon[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
-  const [entityFilter, setEntityFilter] = useState('');
+  // Default to "complaint" so the page entered from the "خريطة الشكاوى" sidebar
+  // entry is consistent with the complaints list. Users can still flip to
+  // tasks or all entities — but the default source matches the page label.
+  const [entityFilter, setEntityFilter] = useState('complaint');
   const [showZones, setShowZones] = useState(true);
+
+  // Reset status filter when entity changes so we never show a status the
+  // selected source doesn't understand.
+  useEffect(() => {
+    setStatusFilter('');
+  }, [entityFilter]);
+
+  const statusFilters =
+    entityFilter === 'complaint' ? COMPLAINT_STATUSES :
+    entityFilter === 'task' ? TASK_STATUSES :
+    ALL_STATUSES;
 
   // Load area boundaries once
   useEffect(() => {
