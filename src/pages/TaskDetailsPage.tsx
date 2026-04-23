@@ -53,6 +53,7 @@ export default function TaskDetailsPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [sourceComplaint, setSourceComplaint] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
@@ -87,6 +88,16 @@ export default function TaskDetailsPage() {
         // assignment without needing to re-pick.
         setTeamId(taskData?.team_id ? String(taskData.team_id) : '');
         setProjectId(taskData?.project_id ? String(taskData.project_id) : '');
+        // Fetch the linked complaint (if any) so we can render its tracking
+        // number instead of a bare numeric id — gives operators a citizen-
+        // facing identifier on the task page.
+        if (taskData?.complaint_id) {
+          apiService.getComplaint(taskData.complaint_id)
+            .then((c) => setSourceComplaint(c))
+            .catch(() => setSourceComplaint(null));
+        } else {
+          setSourceComplaint(null);
+        }
       })
       .catch(() => setError('فشل تحميل بيانات المهمة'))
       .finally(() => setLoading(false));
@@ -232,10 +243,13 @@ export default function TaskDetailsPage() {
                   {task.complaint_id && (
                     <div className="flex items-center gap-2">
                       <LinkSimple size={16} />
-                      <span className="text-sm text-muted-foreground">شكوى مرتبطة:</span>
-                      <Link to={`/complaints/${task.complaint_id}`} className="text-primary hover:underline text-sm">
-                        #{task.complaint_id}
+                      <span className="text-sm text-muted-foreground">مصدر هذه المهمة — شكوى:</span>
+                      <Link to={`/complaints/${task.complaint_id}`} className="text-primary hover:underline text-sm font-mono">
+                        {sourceComplaint?.tracking_number || `#${task.complaint_id}`}
                       </Link>
+                      {sourceComplaint?.full_name && (
+                        <span className="text-xs text-muted-foreground">— {sourceComplaint.full_name}</span>
+                      )}
                     </div>
                   )}
                   {task.contract_id && (

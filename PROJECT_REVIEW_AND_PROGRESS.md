@@ -4,12 +4,106 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة الثامنة - تعميق التكامل التشغيلي (Projects/Teams across complaints/tasks/contracts + cross-entity filters & deep links)  
-**آخر تحديث:** 2026-04-23T19:42
+**المرحلة الحالية:** المرحلة التاسعة - جعل استقبال الشكاوى نقطة الانطلاق التشغيلية (public landing + complaint↔task lifecycle visibility)  
+**آخر تحديث:** 2026-04-23T20:30
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة الحالية: 2026-04-23T20:30 — Complaint-Intake-as-Entry-Point Batch (public landing + public submit/track polish + complaint↔task lifecycle visibility)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T20:30
+- **فهم النظام الحالي بناءً على فحص الكود الحقيقي (لا الوثائق):**
+  - Public complaint intake exists at `/complaints/new` (`ComplaintSubmitPage.tsx`) and tracking at `/complaints/track` (`ComplaintTrackPage.tsx`). Both are reachable directly by URL but **not discoverable from any landing surface**:
+    1. **Root URL `/` is owned by the internal dashboard**, behind `RoleProtectedRoute(INTERNAL_ROLES)`. An unauthenticated visitor (a citizen) is therefore redirected straight to `/login` — a generic admin login screen that contains no link to "Submit Complaint" or "Track Complaint" (verified `App.tsx:105` and `LoginPage.tsx`). The product literally hides its main user action behind an admin gate by default.
+    2. **The public submit and track pages are bare `Card`s on a blank background** with no header, no logo, no link between them, and no mention of the platform name. A citizen who lands on `/complaints/new` cannot navigate to `/complaints/track` (or vice versa) without typing a URL. Verified at `ComplaintSubmitPage.tsx:91-200` and `ComplaintTrackPage.tsx:25-65`.
+    3. **The track page renders the raw enum value** for status (`{complaint.status}` → e.g. `in_progress`), no Arabic label, no badge, no images, no activity history, no guidance about what the status means. Verified at `ComplaintTrackPage.tsx:54-60`.
+    4. **The submit success state** shows the tracking number and a "Track now" button but no copy-to-clipboard, no "what happens next" guidance, no advice to save the number. Verified at `ComplaintSubmitPage.tsx:67-89`.
+  - Internal complaint↔task lifecycle gaps:
+    5. **Complaint detail does not show its linked task(s).** `Task.complaint_id` exists and the conversion endpoint already populates it, but `ComplaintDetailsPage.tsx` only renders complaint fields + activity log; there is no card listing the tasks created from this complaint. So the operator sees "task_created" in the activity feed but cannot click through to the task. Verified at `ComplaintDetailsPage.tsx:224-414` (no linked-tasks UI).
+    6. **`GET /tasks/` does not accept `?complaint_id=`** (verified at `backend/app/api/tasks.py:86-135`). Even if the UI wanted to load linked tasks, the API doesn't expose the filter — a small, consistent gap in the existing filter set (`status_filter`, `area_id`, `location_id`, `project_id`, `team_id`, `assigned_to_id`, `search`).
+    7. **Task detail's linked-complaint indicator** shows only the bare numeric id `#{task.complaint_id}` (`TaskDetailsPage.tsx:236-238`), not the citizen-facing tracking number. So the operator on the task side cannot tell which citizen complaint is being executed without an extra click.
+  - Navigation/shell:
+    8. **`Layout.tsx` is internal-only** and contains no quick affordance for an intake officer to start a new public-form complaint on behalf of a walk-in/phone citizen. Today they must paste the URL `/complaints/new`.
+    9. The login screen offers no way to reach the public flow; an unauthenticated visitor who reaches `/login` is stuck unless they happen to know the public URLs.
+  - Verified things that are **already working** and must not be touched: the backend complaint lifecycle endpoints, the `POST /complaints/{id}/create-task` conversion endpoint and its activity logging, RBAC (`canManageComplaints`/`canManageTasks`), the complaints map / list source coherence, Projects/Teams modules from the previous two batches, audit logging, RTL Arabic UI, login flow, SSL/deploy assumptions.
+
+- **أهداف الدفعة (this batch's goals):**
+  - A) Make complaint submission and tracking obvious at the entry point: change `/` (signed-out) into a public Arabic-first landing page with two large CTAs and a small staff-login link; signed-in internal users still get the dashboard, citizens still get `/citizen`.
+  - B) Improve the public submit/track flow: shared lightweight public header with cross-links, success state with copy-tracking-number + "what happens next" guidance, track page that renders Arabic status badge + tracking number + type + dates + thumbnails + recent activity (only public-safe fields).
+  - C) Make complaint→task linkage visible from the complaint side: add `?complaint_id=` filter on `GET /tasks/` (with test) and a "المهام المرتبطة" card on `ComplaintDetailsPage` that lists each linked task with status badge + due date + click-through. Also: render the source complaint's `tracking_number` (not raw id) on `TaskDetailsPage`.
+  - D) Reduce ambiguity in navigation: in `Layout.tsx` add a clearly-labeled "تقديم شكوى نيابة عن مواطن" external link in the header for intake-capable internal roles, opening the public form in a new tab; in `LoginPage.tsx` add small footer links to the public submit/track pages.
+  - E) Preserve everything else verbatim: do not rename the product, do not redesign, do not add libraries, do not change RBAC/SSL/audit/contract-intelligence/map.
+
+**بعد التنفيذ (After Current Batch):**
+
+- **Backend changes (exact):**
+  - `backend/app/api/tasks.py` → `list_tasks` accepts a new `complaint_id: Optional[int] = None` query parameter; filter applied via `Task.complaint_id == complaint_id` (consistent with existing `project_id`/`team_id`/`location_id` filter pattern). RBAC unchanged (still `get_current_internal_user`).
+  - `backend/tests/test_projects_teams_settings.py` → +1 test `test_list_tasks_filtered_by_complaint` covering: 2 tasks linked to complaint A, 1 task linked to complaint B, 1 unrelated task → `?complaint_id=A` returns exactly the 2 A-tasks; `?complaint_id=B` returns exactly the 1 B-task.
+
+- **Frontend changes (exact):**
+  - `src/components/PublicHeader.tsx` *(new)* — exports `PublicHeader` (sticky Arabic-first header with logo + 3 links: تقديم شكوى / تتبع شكوى / دخول الموظفين, with active-route highlighting) and `PublicShell` (header + main + footer wrapper). Used by all citizen-facing pages.
+  - `src/pages/PublicLandingPage.tsx` *(new)* — Arabic landing page with hero text, two large CTAs ("تقديم شكوى جديدة" / "تتبع شكوى سابقة"), a 3-step "كيف تُعالَج شكواك" lifecycle explainer, and a subtle staff-login link at the bottom. Wrapped in `PublicShell`.
+  - `src/App.tsx` → new lazy import `PublicLandingPage`. New `RootRoute` component: if `apiService.isAuthenticated()` is false → renders `PublicLandingPage`; otherwise → `RoleProtectedRoute(INTERNAL_ROLES) → DashboardPage`. The `/` route now uses `<RootRoute />`. (Citizen role still falls through `RoleProtectedRoute` to `/citizen` as before; internal users still get the dashboard.)
+  - `src/pages/ComplaintSubmitPage.tsx` → wrapped in `PublicShell` (removed the bare `min-h-screen` blank background). Header card now links to `/complaints/track`. Location field gets a hint sub-text. Submit button shows a separate `submitting` state in addition to `uploading`. Success state rebuilt: green check icon, big mono tracking number with "نسخ الرقم" (clipboard copy) button, "ماذا يحدث بعد الآن" 3-step guidance, two CTAs (تتبع الشكوى الآن / العودة للرئيسية).
+  - `src/pages/ComplaintTrackPage.tsx` → fully rewritten: wrapped in `PublicShell`; form has placeholders + a cross-link to `/complaints/new`; result rendered in a card with the Arabic status badge (color-coded), tracking number, type, dates, location, and a per-status guidance message (one of 6 Arabic sentences explaining what each status means to the citizen); explicit "not found" inline panel when the search fails; a privacy footer line clarifying that internal execution details are not exposed.
+  - `src/pages/ComplaintDetailsPage.tsx` → fetches linked tasks via `apiService.getTasks({ complaint_id })`. New "المهام المرتبطة" card placed between "تحديث الشكوى" and "سجل النشاطات", showing each task as a clickable row with title, `#id`, due date and a colored Arabic status badge. Empty state explicitly tells managers to use "تحويل إلى مهمة" if they have permission. Makes the complaint→task lifecycle visible at a glance.
+  - `src/pages/TaskDetailsPage.tsx` → on load, if `task.complaint_id` is set, fetches the source complaint and stores it as `sourceComplaint`. The "Linked complaint/contract" row now shows "مصدر هذه المهمة — شكوى:" and renders the citizen `tracking_number` (e.g. `CMP12345678`) instead of bare `#id`, plus the citizen's name as a small caption. Falls back to `#id` if the fetch fails. Contract linkage unchanged.
+  - `src/components/Layout.tsx` → header gets a new "تقديم شكوى نيابة عن مواطن" anchor (opens `/complaints/new` in a new tab via `target="_blank"`), gated to `project_director`/`contracts_manager`/`complaints_officer`/`area_supervisor`. Hidden on extra-small screens; collapses to "شكوى مواطن" on small screens.
+  - `src/pages/LoginPage.tsx` → adds a divider + two small footer links to `/complaints/new` and `/complaints/track` so a citizen who lands on the staff-login page can still reach the public flow.
+  - `src/services/api.ts` → `getTasks` parameter type extended to accept `complaint_id?: number`; emitted as `complaint_id` query param when provided.
+
+- **Engineering decisions:**
+  - **Public landing is rendered, not redirected.** `RootRoute` returns the landing component directly when unauthenticated, so the URL stays `/` (no extra hop, shareable). Authenticated users still get the dashboard at `/`, preserving deep-link semantics for staff.
+  - **No new dependencies.** `PublicHeader`/`PublicShell` use existing `react-router-dom` and `@phosphor-icons/react`. Clipboard copy uses the standard `navigator.clipboard.writeText` API with a `try/catch` fallback toast.
+  - **Public pages stay strictly public.** `PublicShell` does not render `NotificationBell` or any auth-dependent UI; it does not call `useAuth`. So an unauthenticated visitor will not trigger any auth or `/auth/me` calls just from landing.
+  - **Track page only displays public-safe fields** — tracking number, type, status, dates, location_text, description. It deliberately does not show `assigned_to_id`, `notes`, `images`, `latitude/longitude`, or activity history (those remain internal). The trackComplaint API endpoint is unchanged; this batch only refines the rendering.
+  - **Linked tasks are loaded via the existing list endpoint with a new filter** rather than embedding `tasks` in `ComplaintResponse`. Keeps schemas backward-compatible and reuses the established list pattern; failures degrade gracefully (empty array via `.catch`).
+  - **Source-complaint fetch on task detail is best-effort.** If the fetch fails (e.g. permissions or network), the UI silently falls back to `#id`, never blocking the task page from rendering.
+  - **Intake shortcut is a `<a target="_blank">`, not a `<Link>`.** This guarantees that a staff session on the internal page is preserved while the public form opens in a new tab — important for intake officers helping citizens by phone.
+
+- **Complaint-intake UX improvements (concrete):**
+  - Public root URL now visibly invites complaint submission (was: silent redirect to staff login).
+  - Public submit page has a real header with cross-links and a guided post-submit success state.
+  - Public track page renders Arabic status labels + per-status guidance + clearer not-found state.
+  - Login page no longer dead-ends citizens.
+
+- **Complaint-lifecycle / task-linking improvements (concrete):**
+  - Complaint detail shows linked tasks list with status, opening the loop on the conversion workflow.
+  - Task detail shows the source complaint's tracking number — operators on the task side can now identify "whose complaint" they are executing.
+  - Backend `?complaint_id` filter on `/tasks/` enables (and is now used by) this UI; covered by a unit test.
+
+- **Navigation / entry-point improvements (concrete):**
+  - `/` (signed-out) → public landing with two giant Arabic CTAs.
+  - Public header on every public page exposes both the submit and track flows from any point.
+  - Internal `Layout` exposes a clearly-labeled "تقديم شكوى نيابة عن مواطن" external link for intake-capable roles, separating the public flow from internal admin pages without duplicating it inside the admin shell.
+  - LoginPage has explicit footer links to the public flow.
+
+- **Map/list/detail consistency:** No changes were necessary in this batch — the previous batch already aligned the complaints map default entity with the complaints list, and the new linked-tasks card uses the same statuses/colors as `TasksListPage` and `TaskDetailsPage`, so all three views agree on the Arabic status taxonomy.
+
+- **Preserved without changes:** login flow, JWT auth, RBAC backend rules and `useAuth` flags, audit logging, `POST /complaints/{id}/create-task` endpoint, contract intelligence, map foundation, RTL/Arabic UI shell of internal pages, SSL/deploy config, all 295 previously-passing backend tests.
+
+- **Remaining gaps (honest):**
+  - The track page does not yet show citizen-uploaded image thumbnails. The `trackComplaint` API does not return `images`; exposing them publicly is a privacy decision that belongs to a separate review.
+  - There is no public sitemap/SEO tag for the landing page yet; `index.html` was not modified.
+  - The `PublicLandingPage` is purely informational — it does not yet show statistics like "X complaints resolved this month". That is a content/transparency feature and out of scope for this batch.
+  - The "تقديم شكوى نيابة عن مواطن" intake shortcut opens the same anonymous form a citizen would fill, with no auto-fill of staff fields. Adding "submitted by staff #N" attribution would require a backend change and is deferred.
+  - The 4-tier landing → submit → track → detail flow is not yet covered by an end-to-end UI test.
+  - Migration 008 still needs to be applied via `alembic upgrade head` on first deploy after this batch (no schema change in this batch, so no new migration to run).
+
+- **Verification:**
+  - Backend tests: **296 passed** (was 295; +1 `test_list_tasks_filtered_by_complaint`). Run: `cd backend && python -m pytest tests/ -q`. Result: `296 passed, 871 warnings in 117.59s`.
+  - Frontend build: **passed** (`VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → `✓ built in 926ms`). No TS errors. New `ComplaintSubmitPage`, `ComplaintTrackPage`, `PublicLandingPage`, `PublicHeader` chunks built cleanly.
+  - Manual route check: `/` (anon) → landing; `/login` → login with public footer links; `/complaints/new` → public shell + submit form + improved success; `/complaints/track` → public shell + status badge + Arabic guidance; internal `/complaints/:id` → linked-tasks card; internal `/tasks/:id` → tracking number on source complaint row.
+
+- **Done / Partial / Blocked:**
+  - **Done:** Public landing at `/`; public header on submit/track; submit success rebuild with copy-tracking-number + guidance; track page with Arabic status badge + per-status guidance + not-found state; complaint detail "Linked Tasks" card; task detail tracking-number on source complaint; intake shortcut in internal layout for intake roles; login page footer links; `?complaint_id` filter on `GET /tasks/` + test; both docs updated.
+  - **Partial:** Track-page image thumbnails (intentionally deferred for privacy review); E2E UI test of the new public flow (none added — backend test covers the new filter only).
+  - **Blocked:** None.
+
+---
 
 ### الدفعة: 2026-04-23T19:42 — Operational-Coherence Deepening Batch (Projects/Teams cross-integration + filters + deep links + role coherence)
 

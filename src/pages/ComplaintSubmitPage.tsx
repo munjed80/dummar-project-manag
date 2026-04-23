@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiService } from '@/services/api';
 import { toast } from 'sonner';
-import { UploadSimple, X } from '@phosphor-icons/react';
+import { UploadSimple, X, CheckCircle, Copy, ArrowLeft, Info } from '@phosphor-icons/react';
+import { PublicShell } from '@/components/PublicHeader';
 
 export default function ComplaintSubmitPage() {
   const [fullName, setFullName] = useState('');
@@ -16,11 +18,20 @@ export default function ComplaintSubmitPage() {
   const [description, setDescription] = useState('');
   const [locationText, setLocationText] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [uploadedPaths, setUploadedPaths] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const copyTracking = async () => {
+    try {
+      await navigator.clipboard.writeText(trackingNumber);
+      toast.success('تم نسخ رقم المتابعة');
+    } catch {
+      toast.error('تعذّر نسخ رقم المتابعة');
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -35,15 +46,15 @@ export default function ComplaintSubmitPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    setSubmitting(true);
     try {
-      let imagePaths: string[] = [];
+      const imagePaths: string[] = [];
       if (imageFiles.length > 0) {
         setUploading(true);
         for (const file of imageFiles) {
           const res = await apiService.uploadFilePublic(file);
           imagePaths.push(res.path);
         }
-        setUploadedPaths(imagePaths);
         setUploading(false);
       }
 
@@ -61,40 +72,84 @@ export default function ComplaintSubmitPage() {
       toast.success('تم تقديم الشكوى بنجاح');
     } catch (error) {
       toast.error('فشل تقديم الشكوى. حاول مرة أخرى.');
+    } finally {
+      setUploading(false);
+      setSubmitting(false);
     }
   };
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4" dir="rtl">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-center text-2xl">تم تقديم الشكوى بنجاح</CardTitle>
-          </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <div className="p-6 bg-accent/10 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2">رقم المتابعة</p>
-              <p className="text-3xl font-bold text-accent">{trackingNumber}</p>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              احتفظ بهذا الرقم لتتبع شكواك
-            </p>
-            <Button onClick={() => window.location.href = '/complaints/track'} className="w-full">
-              تتبع الشكوى الآن
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <PublicShell>
+        <div className="container mx-auto px-4 py-8 md:py-14 max-w-2xl" dir="rtl">
+          <Card>
+            <CardHeader className="items-center text-center">
+              <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-2">
+                <CheckCircle size={36} className="text-green-600" weight="fill" />
+              </div>
+              <CardTitle className="text-2xl">تم استلام شكواك بنجاح</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                احتفظ برقم المتابعة التالي — ستحتاجه لتتبع حالة شكواك لاحقاً.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="p-5 bg-accent/10 rounded-lg text-center">
+                <p className="text-xs text-muted-foreground mb-1">رقم المتابعة</p>
+                <p className="text-3xl font-bold text-accent font-mono tracking-wider">{trackingNumber}</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 gap-1"
+                  onClick={copyTracking}
+                >
+                  <Copy size={14} />
+                  نسخ الرقم
+                </Button>
+              </div>
+
+              <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-2">
+                <p className="font-bold flex items-center gap-2">
+                  <Info size={16} />
+                  ماذا يحدث بعد الآن؟
+                </p>
+                <ol className="list-decimal pr-5 space-y-1 text-muted-foreground">
+                  <li>سيقوم فريق الاستقبال بمراجعة شكواك خلال أيام العمل القادمة.</li>
+                  <li>عند تحويلها إلى مهمة تنفيذية، سيتم تعيين الفريق المختص لمعالجتها.</li>
+                  <li>يمكنك تتبع كل مرحلة برقم المتابعة ورقم هاتفك في صفحة "تتبع شكوى".</li>
+                </ol>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Link to="/complaints/track" className="block">
+                  <Button className="w-full gap-2">
+                    تتبع الشكوى الآن
+                    <ArrowLeft size={16} />
+                  </Button>
+                </Link>
+                <Link to="/" className="block">
+                  <Button variant="outline" className="w-full">العودة للرئيسية</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </PublicShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4" dir="rtl">
-      <div className="container mx-auto max-w-2xl py-8">
+    <PublicShell>
+      <div className="container mx-auto px-4 py-6 md:py-10 max-w-2xl" dir="rtl">
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">تقديم شكوى جديدة</CardTitle>
-            <p className="text-sm text-muted-foreground">قدم شكواك وسنتابعها بأسرع وقت</p>
+            <p className="text-sm text-muted-foreground">
+              املأ الحقول التالية بدقة لمساعدتنا في توجيه شكواك للجهة المعنية بأسرع وقت.
+              <Link to="/complaints/track" className="text-primary hover:underline mr-1">
+                لديك شكوى سابقة؟ تتبعها من هنا
+              </Link>
+            </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -155,6 +210,9 @@ export default function ComplaintSubmitPage() {
                   onChange={(e) => setLocationText(e.target.value)}
                   placeholder="مثال: جزيرة أ، البرج 1"
                 />
+                <p className="text-xs text-muted-foreground">
+                  حاول كتابة موقع واضح (الجزيرة/البرج/الشارع) ليصل الفريق بسرعة.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -189,13 +247,13 @@ export default function ComplaintSubmitPage() {
                 )}
               </div>
 
-              <Button type="submit" className="w-full" disabled={uploading}>
-                {uploading ? 'جارٍ رفع الملفات...' : 'تقديم الشكوى'}
+              <Button type="submit" className="w-full" disabled={submitting || uploading}>
+                {uploading ? 'جارٍ رفع الملفات...' : submitting ? 'جارٍ الإرسال...' : 'تقديم الشكوى'}
               </Button>
             </form>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PublicShell>
   );
 }

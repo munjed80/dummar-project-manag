@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, Globe, FolderOpen } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, Globe, FolderOpen, Plus } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -74,6 +74,22 @@ export function Layout({ children }: LayoutProps) {
             <h1 className="text-lg md:text-2xl font-bold truncate">منصة إدارة مشروع دمّر</h1>
           </div>
           <div className="flex items-center gap-1 md:gap-2">
+            {/* Intake shortcut for staff who help walk-in / phone citizens.
+                Opens the public submit form in a new tab so the staff session
+                stays intact. Visible only to roles that actually do intake. */}
+            {role && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(role) && (
+              <a
+                href="/complaints/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-md text-sm bg-primary-foreground/15 hover:bg-primary-foreground/25 transition-colors"
+                title="فتح نموذج تقديم شكوى للمواطنين في تبويب جديد"
+              >
+                <Plus size={16} />
+                <span className="hidden md:inline">تقديم شكوى نيابة عن مواطن</span>
+                <span className="md:hidden">شكوى مواطن</span>
+              </a>
+            )}
             <NotificationBell />
             <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary/90 px-2 md:px-4">
               <SignOut size={20} />

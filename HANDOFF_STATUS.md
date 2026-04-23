@@ -1,11 +1,85 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T19:42
+## آخر تحديث: 2026-04-23T20:30
 
 ---
 
-## الدفعة الحالية: 2026-04-23T19:42 — Operational-Coherence Deepening Batch
+## الدفعة الحالية: 2026-04-23T20:30 — Complaint-Intake-as-Entry-Point Batch
+
+**Scope:** Make complaint intake the obvious operational entry point of the product. Add a public Arabic landing at `/` (signed-out), a shared public header, polish the public submit/track pages, surface complaint↔task linkage on both detail pages, and clarify the public-vs-internal navigation boundary. No login flow change, no SSL/RBAC/audit/contract-intelligence/map change.
+
+### الملفات المُعدّلة في هذه الدفعة:
+
+| الملف | التغيير |
+|---|---|
+| **Backend — modified** | |
+| `backend/app/api/tasks.py` | `list_tasks` accepts new query param `complaint_id` (consistent with existing `project_id`/`team_id`/`location_id` filters). |
+| `backend/tests/test_projects_teams_settings.py` | +1 test: `test_list_tasks_filtered_by_complaint` (multi-complaint fixture, asserts only the target complaint's tasks are returned). |
+| **Frontend — new** | |
+| `src/components/PublicHeader.tsx` | Reusable public Arabic-RTL header (`PublicHeader`) + page wrapper (`PublicShell`) with logo + 3 nav links: تقديم شكوى / تتبع شكوى / دخول الموظفين. Active-route highlighting. No auth/notifications. |
+| `src/pages/PublicLandingPage.tsx` | Public landing page rendered at `/` for unauthenticated visitors. Hero text, two large CTA cards (submit / track), 3-step Arabic lifecycle explainer, subtle staff-login link. |
+| **Frontend — modified** | |
+| `src/App.tsx` | New lazy `PublicLandingPage`. New `RootRoute` component: returns `<PublicLandingPage />` if `!apiService.isAuthenticated()`, otherwise the existing role-protected dashboard. `/` route now uses `<RootRoute />`. |
+| `src/pages/ComplaintSubmitPage.tsx` | Wrapped in `PublicShell`. Header now links to `/complaints/track`. Location field has helper sub-text. Separate `submitting` state in addition to `uploading`. Success state rebuilt with green check, big mono tracking number, "نسخ الرقم" clipboard button, "ماذا يحدث بعد الآن" 3-step guidance, and 2 CTAs. |
+| `src/pages/ComplaintTrackPage.tsx` | Fully rewritten under `PublicShell`. Form has placeholders + cross-link to `/complaints/new`. Result card renders Arabic status badge + per-status guidance text (one of 6 sentences) + tracking number + type + dates + location + description. Inline "not found" panel on failed search. Privacy footer line. |
+| `src/pages/ComplaintDetailsPage.tsx` | Loads linked tasks via `getTasks({ complaint_id })`. New "المهام المرتبطة" card between update card and activity log, listing each task as a clickable row with title, `#id`, due date, and colored Arabic status badge. Empty state guides managers to "تحويل إلى مهمة" if permitted. |
+| `src/pages/TaskDetailsPage.tsx` | When `task.complaint_id` is set, fetches the source complaint and renders its citizen `tracking_number` + name in the linkage row, instead of bare `#id`. Falls back to `#id` on fetch error. Contract linkage unchanged. |
+| `src/components/Layout.tsx` | New "تقديم شكوى نيابة عن مواطن" anchor in the header (`target="_blank"` to `/complaints/new`), gated to project_director / contracts_manager / complaints_officer / area_supervisor. Hidden on extra-small screens. |
+| `src/pages/LoginPage.tsx` | Footer divider + 2 small links to `/complaints/new` and `/complaints/track` so a citizen who lands here can still reach the public flow. |
+| `src/services/api.ts` | `getTasks` parameter type extended to accept `complaint_id?: number`; emitted as `complaint_id` query param when set. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New "Before / After" batch entry with engineering decisions and honest residual-gaps list. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### Tests
+- Run: `cd backend && python -m pytest tests/ -q`
+- **296 passed** (was 295; +1 new filter test). Result: `296 passed, 871 warnings in 117.59s`.
+
+### Build
+- Run: `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build`
+- Passes (`tsc -b --noCheck && vite build`). `✓ built in 926ms`. No TS errors.
+
+### What is *NOT* changed in this batch (preserved):
+- Login flow (just a small footer-link addition; auth logic untouched).
+- SSL / nginx / docker-compose.
+- Backend RBAC, audit logging, JWT auth, all 295 previously-passing tests.
+- `POST /complaints/{id}/create-task` endpoint and its conversion logic.
+- Contract intelligence, map foundation, all map endpoints, GIS layers.
+- RTL/Arabic UI of all internal pages.
+- Internal Layout structure, sidebar items, role gates (only one extra anchor was added).
+- Citizen dashboard, internal dashboard, complaints list, tasks list, contracts list, projects, teams, settings, locations.
+
+### ✅ مكتمل ومُتحقق منه (Done — verified):
+
+| Goal | Status | Evidence |
+|---|---|---|
+| A) Make complaint submission obvious | **Done** | `/` (signed-out) shows `PublicLandingPage` with two large Arabic CTAs; public header on submit/track; LoginPage gets footer links to public flow. |
+| B) Improve public/citizen complaint flow | **Done** | Submit page wrapped in PublicShell, success state rebuilt (copy-tracking-number, "what happens next" guidance, two CTAs); Track page rewritten with Arabic status badge + per-status guidance + clearer not-found state. |
+| C) Make complaint lifecycle visible internally | **Done** | New "المهام المرتبطة" card on `ComplaintDetailsPage` lists every task created from this complaint with status badge + click-through. Empty-state copy guides toward "تحويل إلى مهمة". |
+| D) Strengthen complaint→task operational flow | **Done** | Conversion is unchanged; visibility is added on both ends — complaint side shows linked tasks; task side shows source complaint's `tracking_number` + name (not bare id). |
+| E) Remove ambiguity in navigation/landing | **Done** | Public-vs-internal split is now physical (PublicShell vs Layout); root URL no longer redirects citizens to a staff login; intake shortcut in Layout makes the boundary clear from the staff side. |
+| F) Map/list/detail consistency | **Verified** | No regression — new linked-tasks card uses the same Arabic status taxonomy/colors as `TasksListPage` and `TaskDetailsPage`. Map default entity (set in previous batch) unchanged. |
+| G) Preserve what already works | **Verified** | Login untouched (only footer additions). RBAC unchanged. Audit unchanged. Contract intelligence untouched. Map untouched. Projects/Teams from prior batch untouched. |
+| Frontend build passes | **Verified** | `✓ built in 926ms`. |
+| Backend tests pass | **Verified** | **296 passed, 0 failed**. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` + `HANDOFF_STATUS.md` updated honestly | **Done** | Full Before/After entry above. |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| Public track page image thumbnails | **Not done** | The `trackComplaint` API does not return `images`; exposing them publicly is a privacy decision that should go through a separate review. |
+| `index.html` SEO/meta tags for the landing page | **Not done** | Out of scope for this batch; the landing page is rendered client-side. |
+| Public landing transparency stats ("X complaints resolved this month") | **Not done** | Content/transparency feature, separate batch. |
+| Staff attribution on intake shortcut ("submitted by staff #N") | **Not done** | Would require a backend change to `POST /complaints/`; deferred. |
+| End-to-end UI test of landing → submit → track → detail | **Not done** | Backend test covers the new filter only; UI tests are out of scope of this batch's tooling. |
+| Migration 008 applied to running DB | **Inherited** | No schema change in this batch. Prior migration still needs `alembic upgrade head` on first deploy, handled by `entrypoint.sh`. |
+
+### Blocked: None
+
+---
+
+## الدفعة السابقة: 2026-04-23T19:42 — Operational-Coherence Deepening Batch
 
 **Scope:** Make the Projects and Teams entities (introduced in the previous batch) actually integrate into daily operational workflows. Add cross-entity filters on complaints/tasks/contracts list endpoints, surface the same filters on the UI, expose the linked project on complaint and contract detail pages with inline editing, turn the static project/team detail count cards into navigable deep links, and make all of this URL-shareable. No login/SSL/RBAC/map/Arabic-RTL changes.
 
