@@ -4,12 +4,80 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة السادسة - الجغرافيا التشغيلية للمواقع  
-**آخر تحديث:** 2026-04-23
+**المرحلة الحالية:** المرحلة السابعة - تثبيت العمود الفقري التشغيلي (Projects + Teams + complaint→task workflow)  
+**آخر تحديث:** 2026-04-23T18:53
 
 ---
 
 ## سجل الدفعات (Batch Log)
+
+### الدفعة: 2026-04-23T18:53 — Operational-Backbone Stabilization Batch (Projects + Teams + complaint→task + real Settings + map/list consistency)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T18:53
+- **فهم النظام الحالي (verified by inspection of real code, not docs):**
+  - The deploy-alignment batch from 2026-04-23T16:53 fixed the production deployment plumbing (frontend bases, nginx healthcheck, SSL mounts), and the platform now boots end-to-end. But the operational backbone is still incoherent in several user-visible ways:
+    1. **No Projects entity.** All work in the system (complaints, tasks, contracts) floats without a parent project. The platform is, by name, a "project management" platform but has no `Project` model anywhere — verified by `grep -ri "class Project" backend/app/models/` → 0 hits before this batch. Operators have no way to group work, no way to filter by project, no way to track project lifecycle.
+    2. **No Teams / Execution Units entity.** `Task.assigned_to_id` is a single `users.id` FK only (`backend/app/models/task.py:38`). There is no concept of a contractor crew, internal field team, or supervision unit a task can be assigned to as a group. Real on-site execution is done by crews, not by single users — so the model does not match operational reality.
+    3. **No complaint→task workflow.** `Task` has a nullable `complaint_id` FK (`backend/app/models/task.py:36`) so the data model can represent the link, but there is no backend endpoint to perform the conversion and no UI button on `ComplaintDetailsPage`. The flow described in the product brief — *complaint → opened → converted to task → assigned → tracked → closed* — is not actually wired. Operators have to manually create a task and manually fill `complaint_id`, which the UI does not even expose.
+    4. **Complaints map ≠ complaints list.** `ComplaintsMapPage.tsx:57` calls `apiService.getOperationsMapMarkers()` which hits `GET /gis/operations-map` — an endpoint that returns **both complaints and tasks** as a union. The default `entityFilter` is `''` (all), so the map labelled "خريطة الشكاوى" in the sidebar (`Layout.tsx:43`) shows tasks too, with a status filter list that mixes complaint statuses (`new`, `under_review`, `resolved`) and task statuses (`pending`, `completed`) in a single dropdown. Source-of-truth is incoherent with the complaints list page.
+    5. **Settings page is a static shell.** `SettingsPage.tsx:171-184` hard-codes the project name, organization, and region as Arabic string literals. There is no backend `/settings` endpoint, no editable values, no persistence. Worse, the system-health card (`SettingsPage.tsx:44`) calls `${config.API_BASE_URL}/health/detailed` — but `/health/*` is mounted at the root of the FastAPI app (`backend/app/main.py`), not under `/api`, so in production where `API_BASE_URL=/api` the call becomes `/api/health/detailed` and 404s. It also sends no `Authorization` header, while the endpoint requires `get_current_internal_user` (per the security batch from earlier). Both bugs combine to make the card silently empty in production.
+    6. **Role coherence is shallow.** `Layout.tsx` does role-gated menu filtering, but most pages render the same shell regardless of permission. Empty data returns `loading` spinners that never resolve into a clear empty-state message in Arabic. Action buttons (assign, convert, edit) are visible-but-non-functional for some role/state combinations.
+- **أهداف الدفعة (this batch's goals):**
+  - A) Repair the perceived "failed to load" feeling on complaints/tasks/contracts/locations/settings without rewriting them — fix the real bugs (Settings health URL+auth, source consistency).
+  - B) Make the complaint → task → assignment → progress → closure flow real: backend endpoint + frontend "تحويل إلى مهمة" button + activity logging + status flip.
+  - C) Default the complaints map to `entity_type=complaint`, scope status filters per entity so the map source matches what the complaints list shows.
+  - D) Replace static Settings with a real settings system: `app_settings` table + `GET/PUT /settings` API + grouped read/edit form on `SettingsPage`. Keep practical scope (project metadata, organization metadata, operational defaults). Fix the broken health-card URL+auth path.
+  - E) Add the minimum missing structural entities — `Project` and `Team` — with backend models + Pydantic schemas + alembic migration + paginated CRUD APIs + lightweight frontend list/detail pages. Wire `Task.team_id` and `Task.project_id` so tasks can be assigned to a team and grouped under a project. Wire `Contract.project_id` and `Complaint.project_id` for cross-entity linkage.
+  - F) Improve role coherence by gating new actions (Convert button, Settings edit form, Save button) to the right roles only and by adding clean Arabic empty-state cards on the new list pages.
+  - G) Preserve everything that already works: login, SSL/deploy, frontend API/files bases, RBAC primitives, map rendering, contract intelligence, Arabic-first RTL UI, and all 279 pre-existing backend tests.
+- **الملفات المتوقع تعديلها:**
+  - Backend new: `backend/app/models/project.py`, `backend/app/models/team.py`, `backend/app/models/app_setting.py`, `backend/app/schemas/project.py`, `backend/app/schemas/team.py`, `backend/app/schemas/app_setting.py`, `backend/app/api/projects.py`, `backend/app/api/teams.py`, `backend/app/api/app_settings.py`, `backend/alembic/versions/008_add_projects_teams_settings.py`, `backend/tests/test_projects_teams_settings.py`.
+  - Backend modified: `backend/app/models/__init__.py`, `backend/app/models/task.py` (+team_id, +project_id), `backend/app/models/contract.py` (+project_id), `backend/app/models/complaint.py` (+project_id), `backend/app/schemas/task.py`, `backend/app/schemas/contract.py`, `backend/app/schemas/complaint.py`, `backend/app/api/complaints.py` (+POST /create-task), `backend/app/main.py` (+3 routers), `backend/tests/conftest.py` (FK-off teardown for new circular FK Project↔Contract).
+  - Frontend new: `src/pages/ProjectsListPage.tsx`, `src/pages/ProjectDetailsPage.tsx`, `src/pages/TeamsListPage.tsx`, `src/pages/TeamDetailsPage.tsx`.
+  - Frontend modified: `src/services/api.ts` (+13 methods), `src/App.tsx` (+4 routes), `src/components/Layout.tsx` (+2 nav items), `src/pages/ComplaintsMapPage.tsx` (default `entity_type=complaint`, scoped status filters), `src/pages/ComplaintDetailsPage.tsx` (+Convert dialog), `src/pages/TaskDetailsPage.tsx` (+team/project selectors and detail rows), `src/pages/SettingsPage.tsx` (real settings form + fixed health URL+auth).
+- **المخاطر / الافتراضات:**
+  - The new circular FK (`projects.contract_id` ↔ `contracts.project_id`) creates a topological-sort cycle for `Base.metadata.drop_all` on SQLite. This was identified during test runs and addressed in `conftest.py` by toggling `PRAGMA foreign_keys=OFF` only during teardown; the runtime FK enforcement during tests is unaffected.
+  - On a real Postgres deployment, alembic migration `008` must be run (`alembic upgrade head`) before the new endpoints work; the migration is non-destructive (only adds tables and nullable FK columns).
+  - No new Python or npm dependencies. UI uses existing `@/components/ui/*` (Dialog, Input, Select) and `@phosphor-icons/react` icons.
+  - No existing API surface is removed or renamed.
+
+**بعد الانتهاء (After Current Batch — verified):**
+- **الطابع الزمني:** 2026-04-23T18:53
+- **النتيجة:** **Done** for goals A–G with one **Partial** noted under residual gaps.
+- **Backend test suite:** `cd backend && python -m pytest tests/ -q` → **292 passed, 856 warnings in 115.79s** (was 279 before this batch; +13 new tests in `test_projects_teams_settings.py`). 0 failures.
+- **Frontend build:** `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → **✓ built in 944ms**, no TypeScript errors.
+- **Engineering decisions made (exact):**
+  - `Project` model: 5-state enum (`planned`, `active`, `on_hold`, `completed`, `cancelled`); unique `code` field; nullable FKs to Location and Contract for soft linkage; `created_by_id` for audit.
+  - `Team` model: 4-type enum (`internal_team`, `contractor`, `field_crew`, `supervision_unit`); `is_active` flag for soft-deactivate (we never hard-delete teams that have task history); contact info denormalized on the team for quick display.
+  - `AppSetting` model: simple key/value/value_type/category store, seeded with 7 defaults on first GET (so a fresh deployment has a populated Settings page immediately, with the same Arabic strings the static UI used to display hard-coded). Avoids over-engineering a typed schema for a small set of values.
+  - Migration `008`: a single migration adds projects + teams + app_settings tables and 4 new nullable FK columns (`tasks.team_id`, `tasks.project_id`, `contracts.project_id`, `complaints.project_id`). Bundled to keep migration count low and to keep the new entities deployable atomically.
+  - `POST /complaints/{id}/create-task`: copies `area_id`, `location_id`, `latitude/longitude`, `priority` from the complaint, accepts an override body, sets `source_type='complaint'` + `complaint_id`, flips complaint status `NEW|UNDER_REVIEW → ASSIGNED`, writes one `ComplaintActivity` row (`task_created`) and one `TaskActivity` row (`created_from_complaint`). RBAC: project_director, contracts_manager, engineer_supervisor, complaints_officer, area_supervisor.
+  - Settings router named `app_settings.py` to avoid colliding with `app.core.config.settings`. URL prefix kept as `/settings`. Bulk PUT only — no per-key endpoints — keeps the surface tiny and the UI's "Save" button atomic.
+  - `ComplaintsMapPage` defaults `entityFilter = 'complaint'` and derives `statusFilters` from a per-entity list. Switching entity resets `statusFilter` to `''` so users never see a stale incompatible filter selection.
+  - `SettingsPage` health card: a small `buildHealthUrl()` helper strips a trailing `/api` from `config.API_BASE_URL` before appending `/health/detailed`, and the `fetch` call now sends `Authorization: Bearer <access_token>` from `localStorage`. On any non-2xx response (auth failure, 404, network) the card hides itself instead of showing a misleading "broken" label.
+  - `TaskDetailsPage` team/project selectors: the diff-aware update payload only sends `team_id` / `project_id` when the user actually changed them, so an unchanged form doesn't blank existing values. Both selectors include an explicit "— بدون فريق —" / "— بدون مشروع —" option that maps to `null`.
+  - `conftest.py` teardown: scoped FK-off only inside the teardown block; `PRAGMA foreign_keys=ON` is restored immediately after `drop_all`. Runtime FK enforcement during the test body is unchanged.
+- **ملخص الدفعة:**
+  | Goal | Status | Evidence |
+  |---|---|---|
+  | A) Core pages load with real data or clear empty states | **Done** | Settings now loads from `/settings` with seeded defaults; broken health-card URL fixed. Other pages (complaints/tasks/contracts/locations) were verified to already load correctly against their backend endpoints (paginated `{total_count, items}` shapes match). New empty-state cards on Projects + Teams. |
+  | B) Real complaint→task workflow | **Done** | `POST /complaints/{id}/create-task` endpoint + "تحويل إلى مهمة" dialog on `ComplaintDetailsPage` + activity logging on both sides + automatic status flip. Test `test_create_task_from_complaint` covers the full flow. |
+  | C) Map/list source consistency | **Done** | `ComplaintsMapPage` defaults `entityFilter='complaint'`, scoped per-entity status options, status reset on entity switch. Map and complaints list now reflect the same source by default. |
+  | D) Real Settings page | **Done** | `app_settings` table + `GET/PUT /settings` + grouped editable form gated to project_director/contracts_manager + system health card with corrected URL+auth. 7 default settings seeded on first GET. |
+  | E) Projects + Teams modules | **Done** | Both backend (model + schemas + paginated CRUD with filters + tests) and frontend (list + detail + create/edit) shipped. `Task.team_id`, `Task.project_id`, `Contract.project_id`, `Complaint.project_id` wired. `/teams/active` un-paginated dropdown endpoint added. |
+  | F) Role coherence | **Partial** | New "Convert to task" button is gated by `canManageComplaints`; new Settings save button is gated to project_director/contracts_manager; new pages show clean Arabic empty-state cards. The deeper "every role gets a tailored shell" refactor is intentionally out of scope. |
+  | G) Preserve what works | **Verified** | Login untouched. SSL/deploy/nginx/frontend bases untouched. Map rendering untouched. Contract intelligence untouched. RTL/Arabic UI untouched. All 279 pre-existing tests still pass; 13 new tests added; total 292 passing. |
+- **الفجوات المتبقية بصراحة (Remaining gaps, honestly stated):**
+  1. **Migration 008 not yet applied to any running database.** Production deploy must run `alembic upgrade head` before the new endpoints work. The deploy script's `entrypoint.sh` already runs migrations on container start, so a `./deploy.sh --rebuild` will handle it; a hot deploy without container restart will not.
+  2. **Project deletion cascade rules are minimal.** Deleting a project sets the FK to NULL on tasks/contracts/complaints (since the columns are nullable). There is no "archive instead of delete" UX layer.
+  3. **No frontend UI yet to filter complaints/tasks/contracts by `project_id` from the existing list pages.** The data linkage exists; a project-scoped filter on existing list pages is a follow-up.
+  4. **`Team.contact_*` fields are free-text** (no phone validation, no email validation beyond what Pydantic provides for `EmailStr`). Acceptable for a minimum-viable module.
+  5. **Settings UI is one flat form per category.** No type-aware widgets beyond string/number/boolean (no enum dropdowns for typed values like `defaults.task_priority`). Practical for v1.
+  6. **Role coherence (goal F)** is improved at the *new* surface but the wider audit-and-restyle of every existing page per role is out of scope.
+  7. **One SAWarning** during test teardown about Project↔Contract FK cycle — non-blocking; could be silenced by adding `use_alter=True` to one side of the FK pair in a follow-up cleanup.
+
+---
 
 ### الدفعة: 2026-04-23T16:53 — Deployment-Alignment & Production-Stability Batch (frontend API/files bases, deploy/env, nginx/SSL, healthcheck)
 

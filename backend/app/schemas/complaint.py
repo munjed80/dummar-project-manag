@@ -13,6 +13,7 @@ class ComplaintBase(BaseModel):
     location_text: Optional[str] = None
     area_id: Optional[int] = None
     location_id: Optional[int] = None
+    project_id: Optional[int] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -25,6 +26,7 @@ class ComplaintUpdate(BaseModel):
     status: Optional[ComplaintStatus] = None
     priority: Optional[ComplaintPriority] = None
     assigned_to_id: Optional[int] = None
+    project_id: Optional[int] = None
     notes: Optional[str] = None
     images: Optional[List[str]] = None
 

@@ -6,7 +6,10 @@ import { config } from '@/config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Spinner, GearSix, Buildings, Info, Upload, Database, Heartbeat, CheckCircle, XCircle, Warning } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Spinner, GearSix, Buildings, Info, Upload, Database, Heartbeat, CheckCircle, XCircle, Warning, FloppyDisk } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 
 interface HealthData {
   status: string;
@@ -15,24 +18,52 @@ interface HealthData {
   version: string;
 }
 
+interface SettingItem {
+  key: string;
+  value: string | null;
+  value_type: string;
+  category: string;
+  description?: string | null;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  project: 'بيانات المشروع',
+  organization: 'بيانات المنظمة',
+  defaults: 'القيم التشغيلية الافتراضية',
+  general: 'عام',
+};
+
+// Strip a trailing /api segment so /health/* (mounted at root) is reachable
+// even when the API is served under /api in production.
+function buildHealthUrl(): string {
+  const base = (config.API_BASE_URL || '').replace(/\/?api\/?$/, '').replace(/\/$/, '');
+  return `${base}/health/detailed`;
+}
+
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null);
   const [areas, setAreas] = useState<any[]>([]);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [settings, setSettings] = useState<Record<string, SettingItem[]>>({});
+  const [edited, setEdited] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { role } = useAuth();
+  const canEditSettings = role === 'project_director' || role === 'contracts_manager';
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
       apiService.getCurrentUser().catch(() => null),
       apiService.getAreas().catch(() => []),
+      apiService.getSettings().catch(() => ({})),
     ])
-      .then(([userData, areasData]) => {
+      .then(([userData, areasData, settingsData]) => {
         setUser(userData);
         setAreas(areasData);
+        setSettings(settingsData as Record<string, SettingItem[]>);
       })
       .catch(() => setError('فشل تحميل الإعدادات'))
       .finally(() => setLoading(false));
@@ -41,15 +72,24 @@ export default function SettingsPage() {
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
-      const resp = await fetch(
-        `${config.API_BASE_URL}/health/detailed`,
-        { headers: { 'Content-Type': 'application/json' } }
-      );
+      const resp = await fetch(buildHealthUrl(), {
+        headers: {
+          'Content-Type': 'application/json',
+          // Health endpoint requires authenticated internal user.
+          ...(localStorage.getItem('access_token')
+            ? { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+            : {}),
+        },
+      });
       if (resp.ok) {
         setHealthData(await resp.json());
+      } else {
+        // Quietly hide the card on auth/permission failure rather than show a
+        // misleading "broken" state.
+        setHealthData(null);
       }
     } catch {
-      // Health endpoint may not be available during development
+      setHealthData(null);
     } finally {
       setHealthLoading(false);
     }
@@ -60,6 +100,39 @@ export default function SettingsPage() {
       fetchHealth();
     }
   }, [role]);
+
+  const onFieldChange = (key: string, value: string) => {
+    setEdited((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveSettings = async () => {
+    if (Object.keys(edited).length === 0) {
+      toast.info('لا توجد تغييرات للحفظ');
+      return;
+    }
+    // Build merged items list: all known settings, with edited values applied.
+    const flat: SettingItem[] = Object.values(settings).flat();
+    const items = flat.map((s) => ({
+      key: s.key,
+      value: s.key in edited ? edited[s.key] : s.value,
+      value_type: s.value_type,
+      category: s.category,
+      description: s.description,
+    }));
+    setSaving(true);
+    try {
+      await apiService.updateSettings(items);
+      // Reload to reflect canonical persisted values.
+      const fresh = await apiService.getSettings();
+      setSettings(fresh as Record<string, SettingItem[]>);
+      setEdited({});
+      toast.success('تم حفظ الإعدادات');
+    } catch {
+      toast.error('فشل حفظ الإعدادات');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -95,6 +168,46 @@ export default function SettingsPage() {
     citizen: 'مواطن',
   };
 
+  const renderSettingInput = (item: SettingItem) => {
+    const currentValue = item.key in edited ? edited[item.key] : (item.value ?? '');
+    if (!canEditSettings) {
+      return <span className="font-medium text-sm">{currentValue || '-'}</span>;
+    }
+    if (item.value_type === 'boolean') {
+      return (
+        <select
+          className="border rounded-md px-2 py-1 text-sm bg-background"
+          value={currentValue}
+          onChange={(e) => onFieldChange(item.key, e.target.value)}
+        >
+          <option value="true">نعم</option>
+          <option value="false">لا</option>
+        </select>
+      );
+    }
+    if (item.value_type === 'number') {
+      return (
+        <Input
+          type="number"
+          value={currentValue}
+          onChange={(e) => onFieldChange(item.key, e.target.value)}
+          className="max-w-[12rem]"
+        />
+      );
+    }
+    return (
+      <Input
+        value={currentValue}
+        onChange={(e) => onFieldChange(item.key, e.target.value)}
+        className="max-w-md"
+      />
+    );
+  };
+
+  const categoryKeys = Object.keys(settings);
+  const hasSettings = categoryKeys.length > 0;
+  const hasUnsavedChanges = Object.keys(edited).length > 0;
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -104,7 +217,7 @@ export default function SettingsPage() {
         </h1>
 
         {/* System Health — visible to project_director and contracts_manager */}
-        {(role === 'project_director' || role === 'contracts_manager') && (
+        {(role === 'project_director' || role === 'contracts_manager') && healthData && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -115,7 +228,7 @@ export default function SettingsPage() {
             <CardContent>
               {healthLoading ? (
                 <div className="flex justify-center py-4"><Spinner className="animate-spin" size={24} /></div>
-              ) : healthData ? (
+              ) : (
                 <div className="space-y-1">
                   {detail('الحالة العامة', (
                     <Badge className={
@@ -150,36 +263,69 @@ export default function SettingsPage() {
                   ))}
                   {detail('إصدار API', healthData.version)}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  لا يمكن الاتصال بخدمة الصحة
-                </p>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* Organization Settings */}
+        {/* Configurable settings — read-only for non-privileged roles */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Buildings size={20} />
-              إعدادات المشروع
-            </CardTitle>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <Buildings size={20} />
+                إعدادات المشروع والمنظمة
+                {!canEditSettings && (
+                  <Badge variant="outline" className="text-xs">للقراءة فقط</Badge>
+                )}
+              </CardTitle>
+              {canEditSettings && hasSettings && (
+                <Button
+                  onClick={handleSaveSettings}
+                  disabled={saving || !hasUnsavedChanges}
+                  className="gap-2"
+                >
+                  {saving ? <Spinner className="animate-spin" size={16} /> : <FloppyDisk size={16} />}
+                  حفظ التغييرات
+                </Button>
+              )}
+            </div>
           </CardHeader>
-          <CardContent className="space-y-1">
-            {detail('اسم المشروع', 'مشروع دمّر السكني - دمشق')}
-            {detail('المنظمة', 'الهيئة العامة للإسكان')}
-            {detail('المنطقة', 'دمّر - ريف دمشق')}
-            <Separator className="my-2" />
-            {detail('عدد المناطق المسجلة', <Badge variant="secondary">{areas.length}</Badge>)}
-            {detail('قائمة المناطق', (
-              <div className="flex flex-wrap gap-1 justify-end max-w-md">
-                {areas.map((a: any) => (
-                  <Badge key={a.id} variant="outline" className="text-xs">{a.name_ar || a.name}</Badge>
-                ))}
+          <CardContent>
+            {!hasSettings ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                لا توجد إعدادات مُعرَّفة بعد.
               </div>
-            ))}
+            ) : (
+              <div className="space-y-6">
+                {categoryKeys.map((category) => (
+                  <div key={category}>
+                    <h3 className="text-sm font-semibold text-muted-foreground mb-2">
+                      {CATEGORY_LABELS[category] || category}
+                    </h3>
+                    <div className="space-y-2">
+                      {settings[category].map((item) => (
+                        <div key={item.key} className="flex items-start justify-between gap-3 py-2 border-b border-border/50 last:border-0">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium">
+                              {item.description || item.key}
+                            </div>
+                            <code className="text-xs text-muted-foreground">{item.key}</code>
+                          </div>
+                          <div className="flex-shrink-0">
+                            {renderSettingInput(item)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <Separator />
+                <div className="text-sm">
+                  {detail('عدد المناطق المسجلة', <Badge variant="secondary">{areas.length}</Badge>)}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

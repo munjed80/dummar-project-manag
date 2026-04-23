@@ -44,6 +44,7 @@ class Complaint(Base):
     location_text = Column(Text, nullable=True)
     area_id = Column(Integer, ForeignKey("areas.id"), nullable=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     geometry = Column(Geometry('POINT', srid=4326), nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -58,6 +59,7 @@ class Complaint(Base):
     
     area = relationship("Area", back_populates="complaints")
     location = relationship("Location", back_populates="complaints", foreign_keys=[location_id])
+    project = relationship("Project", back_populates="complaints")
     assigned_to_user = relationship("User", back_populates="complaints", foreign_keys=[assigned_to_id])
     tasks = relationship("Task", back_populates="complaint")
     activities = relationship("ComplaintActivity", back_populates="complaint")

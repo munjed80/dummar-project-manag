@@ -97,10 +97,17 @@ app.dependency_overrides[get_db] = _override_get_db
 
 @pytest.fixture(autouse=True)
 def reset_db():
-    """Re-create all tables for every test so tests are fully isolated."""
+    """Re-create all tables for every test so tests are fully isolated.
+
+    SQLite cannot drop tables with circular foreign keys (e.g. Project↔Contract)
+    while PRAGMA foreign_keys=ON, so we toggle it off for the teardown only.
+    """
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    with engine.begin() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        Base.metadata.drop_all(bind=conn)
+        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 @pytest.fixture()

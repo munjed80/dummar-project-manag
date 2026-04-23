@@ -51,10 +51,14 @@ export default function TaskDetailsPage() {
   const [activities, setActivities] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [teamId, setTeamId] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -69,12 +73,20 @@ export default function TaskDetailsPage() {
       apiService.getTaskActivities(numId).catch(() => []),
       apiService.getAreas().catch(() => []),
       apiService.getUsers({ limit: 100 }).catch(() => ({ items: [] })),
+      apiService.getActiveTeams().catch(() => []),
+      apiService.getProjects({ status: 'active', limit: 200 }).catch(() => ({ items: [] })),
     ])
-      .then(([taskData, activitiesData, areasData, usersData]) => {
+      .then(([taskData, activitiesData, areasData, usersData, teamsData, projectsData]) => {
         setTask(taskData);
         setActivities(Array.isArray(activitiesData) ? activitiesData : []);
         setAreas(areasData);
         setUsers(usersData.items || []);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setProjects((projectsData as any).items || []);
+        // Pre-fill selectors from current task values so the user sees current
+        // assignment without needing to re-pick.
+        setTeamId(taskData?.team_id ? String(taskData.team_id) : '');
+        setProjectId(taskData?.project_id ? String(taskData.project_id) : '');
       })
       .catch(() => setError('فشل تحميل بيانات المهمة'))
       .finally(() => setLoading(false));
@@ -90,6 +102,14 @@ export default function TaskDetailsPage() {
       if (newStatus) updateData.status = newStatus;
       if (notes) updateData.notes = notes;
       if (assignee) updateData.assigned_to_id = Number(assignee);
+      // Team and project: send only when value differs from the persisted task
+      // so an unchanged form does not blank existing values.
+      if (teamId !== (task?.team_id ? String(task.team_id) : '')) {
+        updateData.team_id = teamId ? Number(teamId) : null;
+      }
+      if (projectId !== (task?.project_id ? String(task.project_id) : '')) {
+        updateData.project_id = projectId ? Number(projectId) : null;
+      }
       await apiService.updateTask(Number(id), updateData);
       toast.success('تم تحديث المهمة بنجاح');
       setNewStatus('');
@@ -188,6 +208,16 @@ export default function TaskDetailsPage() {
               ) : '-')}
               {detail('الموقع', task.location_text)}
               {detail('المسؤول المعين', assignedUser ? assignedUser.full_name : '-')}
+              {detail('الفريق التنفيذي', task.team_id ? (
+                <Link to={`/teams/${task.team_id}`} className="text-primary hover:underline">
+                  {teams.find((t: any) => t.id === task.team_id)?.name || `#${task.team_id}`}
+                </Link>
+              ) : '-')}
+              {detail('المشروع', task.project_id ? (
+                <Link to={`/projects/${task.project_id}`} className="text-primary hover:underline">
+                  {projects.find((p: any) => p.id === task.project_id)?.title || `#${task.project_id}`}
+                </Link>
+              ) : '-')}
               {detail('تاريخ الاستحقاق', task.due_date ? format(new Date(task.due_date), 'yyyy/MM/dd') : '-')}
               {detail('تاريخ الإنجاز', task.completed_at ? format(new Date(task.completed_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ الإنشاء', task.created_at ? format(new Date(task.created_at), 'yyyy/MM/dd HH:mm') : '-')}
@@ -308,6 +338,30 @@ export default function TaskDetailsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">الفريق التنفيذي</label>
+                <Select value={teamId || '__none__'} onValueChange={(v) => setTeamId(v === '__none__' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="بدون فريق" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بدون فريق —</SelectItem>
+                    {teams.map((t: any) => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">المشروع</label>
+                <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بدون مشروع —</SelectItem>
+                    {projects.map((p: any) => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <Textarea
               placeholder="ملاحظات..."
@@ -322,7 +376,12 @@ export default function TaskDetailsPage() {
                   handleUpdate();
                 }
               }}
-              disabled={(!newStatus && !notes && !assignee) || updating}
+              disabled={
+                !newStatus && !notes && !assignee &&
+                teamId === (task?.team_id ? String(task.team_id) : '') &&
+                projectId === (task?.project_id ? String(task.project_id) : '') ||
+                updating
+              }
             >
               {updating ? <Spinner className="animate-spin ml-2" size={16} /> : null}
               تحديث المهمة

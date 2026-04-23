@@ -246,6 +246,133 @@ class ApiService {
     return response.json();
   }
 
+  // ── Projects ──
+  async getProjects(params?: { status?: string; location_id?: number; contract_id?: number; search?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status', params.status);
+    if (params?.location_id) qp.append('location_id', params.location_id.toString());
+    if (params?.contract_id) qp.append('contract_id', params.contract_id.toString());
+    if (params?.search) qp.append('search', params.search);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/projects?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch projects');
+    return response.json();
+  }
+
+  async getProject(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch project');
+    return response.json();
+  }
+
+  async createProject(data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/projects/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create project');
+    return response.json();
+  }
+
+  async updateProject(id: number, data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update project');
+    return response.json();
+  }
+
+  async deleteProject(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete project');
+    return response.json();
+  }
+
+  // ── Teams ──
+  async getTeams(params?: { team_type?: string; is_active?: boolean; project_id?: number; location_id?: number; search?: string; skip?: number; limit?: number }): Promise<PaginatedResponse<any>> {
+    const qp = new URLSearchParams();
+    if (params?.team_type) qp.append('team_type', params.team_type);
+    if (params?.is_active !== undefined) qp.append('is_active', params.is_active.toString());
+    if (params?.project_id) qp.append('project_id', params.project_id.toString());
+    if (params?.location_id) qp.append('location_id', params.location_id.toString());
+    if (params?.search) qp.append('search', params.search);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetch(`${API_BASE_URL}/teams?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch teams');
+    return response.json();
+  }
+
+  async getActiveTeams(): Promise<any[]> {
+    const response = await fetch(`${API_BASE_URL}/teams/active`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch active teams');
+    return response.json();
+  }
+
+  async getTeam(id: number): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/teams/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch team');
+    return response.json();
+  }
+
+  async createTeam(data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/teams/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create team');
+    return response.json();
+  }
+
+  async updateTeam(id: number, data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/teams/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to update team');
+    return response.json();
+  }
+
+  async deactivateTeam(id: number): Promise<any> {
+    return this.updateTeam(id, { is_active: false });
+  }
+
+  // ── Settings ──
+  async getSettings(): Promise<Record<string, any[]>> {
+    const response = await fetch(`${API_BASE_URL}/settings/`, { headers: this.getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch settings');
+    return response.json();
+  }
+
+  async updateSettings(items: any[]): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/settings/`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ items }),
+    });
+    if (!response.ok) throw new Error('Failed to update settings');
+    return response.json();
+  }
+
+  async createTaskFromComplaint(complaintId: number, data: any): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/complaints/${complaintId}/create-task`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Failed to create task from complaint');
+    return response.json();
+  }
+
   // ── Dashboard ──
   async getDashboardStats(): Promise<any> {
     const response = await fetch(`${API_BASE_URL}/dashboard/stats`, { headers: this.getAuthHeaders() });

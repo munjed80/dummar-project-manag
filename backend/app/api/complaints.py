@@ -287,3 +287,103 @@ def get_complaint_activities(
     ).order_by(ComplaintActivity.created_at.desc()).all()
     
     return activities
+
+
+@router.post("/{complaint_id}/create-task")
+def create_task_from_complaint(
+    complaint_id: int,
+    request: Request,
+    task_data: dict,
+    current_user: User = Depends(require_role(
+        UserRole.PROJECT_DIRECTOR,
+        UserRole.CONTRACTS_MANAGER,
+        UserRole.ENGINEER_SUPERVISOR,
+        UserRole.COMPLAINTS_OFFICER,
+        UserRole.AREA_SUPERVISOR,
+    )),
+    db: Session = Depends(get_db)
+):
+    from app.models.task import Task, TaskActivity, TaskSourceType
+    from app.schemas.task import TaskResponse
+    
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    
+    # Create task with data from complaint
+    new_task = Task(
+        title=task_data.get("title", f"Task from complaint {complaint.tracking_number}"),
+        description=task_data.get("description", complaint.description),
+        source_type=TaskSourceType.COMPLAINT,
+        complaint_id=complaint.id,
+        area_id=complaint.area_id,
+        location_id=complaint.location_id,
+        latitude=complaint.latitude,
+        longitude=complaint.longitude,
+        priority=task_data.get("priority", complaint.priority if complaint.priority else "medium"),
+        due_date=task_data.get("due_date"),
+        assigned_to_id=task_data.get("assigned_to_id"),
+        team_id=task_data.get("team_id"),
+        project_id=task_data.get("project_id"),
+    )
+    
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    
+    # Add task activity
+    task_activity = TaskActivity(
+        task_id=new_task.id,
+        user_id=current_user.id,
+        action="created_from_complaint",
+        description=f"Task created from complaint {complaint.tracking_number}",
+    )
+    db.add(task_activity)
+    
+    # Update complaint status if it was NEW or UNDER_REVIEW
+    if complaint.status in [ComplaintStatus.NEW, ComplaintStatus.UNDER_REVIEW]:
+        complaint.status = ComplaintStatus.ASSIGNED
+        
+        complaint_activity = ComplaintActivity(
+            complaint_id=complaint.id,
+            user_id=current_user.id,
+            action="task_created",
+            description=f"Task #{new_task.id} created from this complaint",
+        )
+        db.add(complaint_activity)
+    
+    db.commit()
+    db.refresh(new_task)
+    
+    write_audit_log(
+        db, action="task_create_from_complaint", entity_type="task",
+        entity_id=new_task.id, user_id=current_user.id,
+        description=f"Task created from complaint {complaint.tracking_number}",
+        request=request,
+    )
+    
+    return TaskResponse(
+        id=new_task.id,
+        title=new_task.title,
+        description=new_task.description,
+        source_type=new_task.source_type,
+        complaint_id=new_task.complaint_id,
+        contract_id=new_task.contract_id,
+        team_id=new_task.team_id,
+        project_id=new_task.project_id,
+        assigned_to_id=new_task.assigned_to_id,
+        area_id=new_task.area_id,
+        location_id=new_task.location_id,
+        location_text=new_task.location_text,
+        latitude=new_task.latitude,
+        longitude=new_task.longitude,
+        due_date=new_task.due_date,
+        priority=new_task.priority,
+        status=new_task.status,
+        before_photos=None,
+        after_photos=None,
+        notes=new_task.notes,
+        created_at=new_task.created_at,
+        updated_at=new_task.updated_at,
+        completed_at=new_task.completed_at,
+    )

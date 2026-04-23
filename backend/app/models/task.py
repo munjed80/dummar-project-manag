@@ -35,6 +35,8 @@ class Task(Base):
     source_type = Column(SQLEnum(TaskSourceType), nullable=False, default=TaskSourceType.INTERNAL)
     complaint_id = Column(Integer, ForeignKey("complaints.id"), nullable=True)
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     assigned_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     area_id = Column(Integer, ForeignKey("areas.id"), nullable=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
@@ -53,6 +55,8 @@ class Task(Base):
     
     complaint = relationship("Complaint", back_populates="tasks")
     contract = relationship("Contract", back_populates="tasks")
+    team = relationship("Team", back_populates="tasks")
+    project = relationship("Project", back_populates="tasks")
     assigned_to_user = relationship("User", back_populates="created_tasks", foreign_keys=[assigned_to_id])
     area = relationship("Area", back_populates="tasks")
     location = relationship("Location", back_populates="tasks", foreign_keys=[location_id])
