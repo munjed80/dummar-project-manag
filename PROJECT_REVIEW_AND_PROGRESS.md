@@ -4,14 +4,102 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة التاسعة - جعل استقبال الشكاوى نقطة الانطلاق التشغيلية (public landing + complaint↔task lifecycle visibility)  
-**آخر تحديث:** 2026-04-23T20:30
+**المرحلة الحالية:** المرحلة العاشرة - تثبيت ما قبل التحديث على الـ VPS (final SSL/nginx/docker-compose alignment + doc reality-sync + smoke-check)  
+**آخر تحديث:** 2026-04-23T20:55
 
 ---
 
 ## سجل الدفعات (Batch Log)
 
-### الدفعة الحالية: 2026-04-23T20:30 — Complaint-Intake-as-Entry-Point Batch (public landing + public submit/track polish + complaint↔task lifecycle visibility)
+### الدفعة الحالية: 2026-04-23T20:55 — Final Pre-VPS-Sync / Release-Hardening Batch (SSL self-healing in deploy.sh + doc reality-sync + smoke-check)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T20:55
+- **سياق هذه الدفعة:** This is intentionally NOT a feature batch. The product is functionally complete (296 backend tests, frontend build passing, public landing + complaint→task lifecycle visibility shipped in the previous batch). The remaining risk is purely operational: the VPS rollout has historically only worked after manual server-side hot-fixes, which means the repo is *not yet* the single source of truth for "what runs in production". The goal is to close that gap.
+- **فهم الواقع الحالي بناءً على فحص الكود الفعلي (لا الوثائق):**
+  - **`docker-compose.yml`** *is* already correct: it mounts `${LETSENCRYPT_DIR:-/etc/letsencrypt}` and `${CERTBOT_WEBROOT:-/var/www/certbot}` unconditionally, exposes ports 80 and 443, and the nginx healthcheck hits a dedicated `/nginx-health` endpoint that returns 200 on both server blocks. So no compose edits are needed on the VPS to enable SSL — confirmed at `docker-compose.yml:84-115`.
+  - **`nginx-ssl.conf`** *is* already correct: HTTP→HTTPS redirect on port 80, dedicated `/nginx-health` endpoint defined BEFORE the catch-all redirect (so docker healthcheck works in both modes), TLS 1.2/1.3, HSTS, OCSP stapling. ACME challenge path served over HTTP. `DOMAIN_PLACEHOLDER` is the substitution token used by ssl-setup.sh.
+  - **`ssl-setup.sh --auto`** correctly does the post-cert wiring: `cp nginx-ssl.conf nginx.conf`, `sed s/DOMAIN_PLACEHOLDER/$DOMAIN/`, updates `CORS_ORIGINS` to https, restarts nginx.
+  - **`deploy.sh`** correctly pins production-safe Vite envs in-process (`VITE_API_BASE_URL=/api`, `VITE_FILES_BASE_URL=`), refuses to deploy if the build leaks `http://localhost:8000`, and validates that `.env` doesn't carry the legacy default secrets.
+  - **`src/config.ts`** correctly defaults to `/api` and `''` for files, with a comment explaining why the localhost fallback was removed.
+- **الفجوات الفعلية الحرجة (concrete remaining risks for the VPS):**
+  1. **`deploy.sh` is NOT idempotent across `git pull` for SSL.** This is the single highest-impact problem. Concrete failure mode: the operator runs `ssl-setup.sh --auto` once, which modifies the on-VPS `nginx.conf` to be the SSL version (a copy of `nginx-ssl.conf` with `DOMAIN_PLACEHOLDER` replaced). The next `git pull` overwrites that file back to the HTTP-only repo version. The next `./deploy.sh --rebuild` then restarts nginx with HTTP-only config and HTTPS dies — exactly the "VPS only worked after manual hot-fix" pattern in the prompt. `deploy.sh` currently has no logic to detect "SSL was previously configured for this domain" and re-apply the SSL config from `nginx-ssl.conf`. Verified at `deploy.sh:212-224, 270-289` (only sets `CORS_ORIGINS` from `--domain`; never touches `nginx.conf`).
+  2. **`README.md:88` is wrong** and is the doc that originally caused the production breakage. It claims `VITE_API_BASE_URL` defaults to `http://localhost:8000`. The real default in `src/config.ts:26` is `/api`. An operator who reads the README in isolation and decides "I'll just leave it default" gets a working dev env but a broken production build. (This was already fixed in `src/config.ts` and in `.env.example`, but `README.md` was not updated, so the trap is still there.)
+  3. **`PRODUCTION_DEPLOYMENT_GUIDE.md` SSL "Quick Setup" (lines 837-863) and "VPS Deployment Checklist → SSL/TLS Setup" (lines 1310-1319)** still document the OLD manual flow: "uncomment letsencrypt volume in docker-compose.yml". That instruction is now actively misleading — the volumes are already unconditional. An operator following these steps will literally search for a `# - /etc/letsencrypt:...` comment that no longer exists. Need to replace with the simpler `ssl-setup.sh --auto` flow.
+  4. There is **no in-repo smoke-check script** for post-deploy operator confidence (Outcome F, optional but explicitly suggested in the prompt). `deploy.sh` does check 3 endpoints inline at the end but only on `http://localhost`; there's no separate, runnable command that an operator can execute on demand against `https://<domain>` to confirm the live site is working.
+- **أهداف الدفعة (this batch's exact goals):**
+  - A) **`deploy.sh` SSL self-healing**: when invoked with `--domain=X` AND `/etc/letsencrypt/live/X/fullchain.pem` exists, automatically re-apply `nginx-ssl.conf` to `nginx.conf` (with the placeholder replaced) before bringing nginx up. Ensures `git pull && ./deploy.sh --rebuild --domain=X` is idempotent and never loses HTTPS.
+  - B) **Doc reality-sync**: fix `README.md` Vite env table; rewrite `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup + checklist to reflect the `--auto` flow and the unconditional letsencrypt mounts.
+  - C) **`smoke-check.sh`** *(new, optional)*: short script that probes homepage, login API, `/health/ready`, and (when run with a domain) HTTPS reachability. Operator-confidence helper, not a test framework.
+  - D) Verify nothing regresses: backend tests still pass, frontend build still passes, `localhost:8000` leak detection still works, public complaint intake / track / login paths are still operational by inspection.
+  - E) Strict no-go: NO new product features; NO new dependencies; NO redesign; NO new framework; NO RBAC/audit/contract-intelligence/map changes; NO change to login flow; NO change to upload split.
+
+**بعد التنفيذ (After Current Batch):**
+
+- **Files changed (exact, this batch):**
+  - `deploy.sh` — added the SSL self-heal block after the `--domain` CORS update (lines around 213-271). When `--domain=$DOMAIN` is passed AND `/etc/letsencrypt/live/$DOMAIN/fullchain.pem` exists, the script now: (1) detects whether `nginx.conf` is already the SSL version (`listen 443 ssl` + `server_name $DOMAIN` + no `DOMAIN_PLACEHOLDER`); (2) if not, automatically copies `nginx-ssl.conf` to `nginx.conf` and substitutes the domain — otherwise leaves it alone (idempotent). Also extended post-deploy verification to additionally probe `https://$DOMAIN/` and `https://$DOMAIN/api/health/ready` when the cert exists.
+  - `README.md` — replaced the misleading "Frontend Environment Variables" mini-table that claimed `VITE_API_BASE_URL` defaults to `http://localhost:8000` (it doesn't — `src/config.ts:26` defaults to `/api`). New table explicitly documents the production-safe defaults, the `localhost:8000` build-leak guard inside `deploy.sh`, and the dev-server proxy fallback in `vite.config.ts`.
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` — rewrote the "SSL/TLS → Quick Setup" section (lines 837-) to reflect the actual one-command `--auto` flow and the unconditional letsencrypt mounts; rewrote the "VPS Deployment Checklist → SSL/TLS Setup" sub-section (lines 1310-) accordingly. Removed the obsolete "uncomment letsencrypt volume in docker-compose.yml" instruction that no longer matches the codebase. Kept the manual flow as a clearly-labeled advanced fallback.
+  - `smoke-check.sh` *(new)* — small standalone post-deploy probe (Outcome F). Checks: SPA, public landing, `/api/health/ready`, `/api/`, `/api/auth/login` reachability (accepts 405/422 — confirms route exists without supplying credentials), public submit + track pages. When invoked with `--domain=X`, additionally probes `https://X/` and `https://X/api/health/ready`, public submit/login over TLS, and verifies `http://X/` returns 301/302. Exit code = number of failed checks. Marked executable.
+  - `PROJECT_REVIEW_AND_PROGRESS.md` — Before / After entries for this batch (this section).
+  - `HANDOFF_STATUS.md` — new "current batch" entry (see file).
+
+- **Engineering decisions (exact):**
+  - **SSL self-heal is conditional on `--domain`, never silent.** The script will not touch `nginx.conf` unless the operator explicitly passes `--domain=X` *and* a cert exists at the standard Let's Encrypt path for that exact domain. This protects against accidentally clobbering a hand-crafted `nginx.conf` on systems where the operator deliberately customized it.
+  - **The detection is structural (not version-based).** We look for `listen 443 ssl` + the substituted `server_name $DOMAIN` + the absence of `DOMAIN_PLACEHOLDER`. This works even after future edits to `nginx-ssl.conf`, because the marker is "is the live nginx.conf already serving HTTPS for the right domain?", not "does it textually equal the template?".
+  - **Post-deploy HTTPS verification is conditional on the cert existing**, not on `--domain` alone. So calling `--domain=X` *before* certs exist (the bootstrap case) still works without false-failing on HTTPS checks.
+  - **No new dependencies.** `smoke-check.sh` uses only `curl` (already a deploy.sh prerequisite) and POSIX shell. No `jq`, no test framework. The whole script is ~120 lines.
+  - **`smoke-check.sh` accepts comma-separated allowed status codes** (e.g. `405,422` for unauthenticated POST routes) so it can confirm "the route exists end-to-end through nginx → backend" without sending credentials. This is enough to detect a broken nginx ↔ backend wire (which would surface as 502/504) without needing to know any password.
+  - **Docs were trimmed, not expanded.** The "Quick Setup (recommended)" + "Manual setup (advanced)" split replaces the older single procedure that mixed required and obsolete steps. The intent is to make the recommended flow trivially copy-pasteable and to keep the advanced flow honest about what it requires.
+
+- **SSL / nginx / docker-compose / ssl-setup alignment fixes (concrete):**
+  - **`deploy.sh` is now SSL-idempotent** across `git pull`. Concrete pre-batch failure mode: operator runs `ssl-setup.sh --auto` once → `nginx.conf` becomes the SSL version → next `git pull` resets `nginx.conf` to the HTTP-only repo template → next `./deploy.sh --rebuild` restarts nginx with HTTP-only config → HTTPS dies. Concrete post-batch behaviour: same sequence detects the cert at `/etc/letsencrypt/live/$DOMAIN/fullchain.pem`, automatically re-applies `nginx-ssl.conf` with `$DOMAIN` substituted, and HTTPS keeps working without any manual VPS edits.
+  - **Post-deploy verification now probes the real public HTTPS URL** when applicable. Catches "nginx healthy locally but TLS broken" regressions immediately instead of waiting for an external uptime monitor to flag them.
+  - **No actual nginx/compose/ssl-setup file changes were needed** — `docker-compose.yml` already mounts the letsencrypt volumes unconditionally, `nginx-ssl.conf` already has the `/nginx-health` endpoint placed before the catch-all redirect (so docker healthchecks succeed in both modes), and `ssl-setup.sh --auto` already does the post-cert wiring correctly. The previous batches had already aligned these pieces; the only gap was that `deploy.sh` didn't *re-apply* the SSL config after a `git pull` overwrite. That is now fixed.
+
+- **Frontend production base-path fixes — preservation status:**
+  - **`VITE_API_BASE_URL=/api`** in-process pinning in `deploy.sh:245-247` — preserved verbatim.
+  - **`VITE_FILES_BASE_URL=` (empty)** separation in `deploy.sh:246-247` and `src/config.ts:40-43` — preserved verbatim.
+  - **Removal of `http://localhost:8000` fallback** in `src/config.ts:26` — preserved verbatim.
+  - **`deploy.sh` build-leak guard** at `deploy.sh:261-266` — preserved verbatim. Verified at the end of this batch by running `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` and `grep -rq 'http://localhost:8000' dist/assets` → no matches.
+  - **`README.md` Vite env table** — fixed (was the last surface still telling operators the wrong default).
+
+- **Deployment-script and docs alignment fixes (concrete):**
+  - `README.md` Vite env table now matches `src/config.ts` reality.
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup matches `ssl-setup.sh --auto` reality.
+  - `PRODUCTION_DEPLOYMENT_GUIDE.md` VPS Deployment Checklist SSL section matches the current docker-compose.yml reality (no more "uncomment letsencrypt volume").
+  - `deploy.sh` self-heal documents itself in the user-visible output: prints `[INFO] No Let's Encrypt cert at ... yet — staying on HTTP nginx.conf. Run sudo ./ssl-setup.sh ${DOMAIN} --auto once to enable HTTPS.` if no cert is present yet, or `[OK] nginx.conf re-generated from nginx-ssl.conf for ${DOMAIN}.` after a self-heal — so the operator always knows what just happened.
+
+- **Final verification results (this batch):**
+  - **Frontend build:** `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → `✓ built in 974ms`. No TS errors.
+  - **Frontend leak check:** `grep -rq 'http://localhost:8000' dist/assets` → no matches. The deploy.sh leak guard would still trigger if a regression is introduced.
+  - **Backend tests:** `cd backend && python -m pytest tests/ -q` → **296 passed, 871 warnings in 134.39s**. Same as previous batch (no regression).
+  - **SSL self-heal logic — simulated 2-run idempotency test:** Starting from a fresh HTTP-only `nginx.conf`, the first run triggers the rewrite; the second run leaves the file alone. Verified.
+  - **`smoke-check.sh` syntax:** `bash -n smoke-check.sh` → OK. `--help` prints the usage. Marked executable.
+  - **`deploy.sh` syntax:** `bash -n deploy.sh` → OK. `ssl-setup.sh` syntax → OK.
+  - **Manual inspection of preserved flows:** login flow untouched (`src/pages/LoginPage.tsx`), public complaint intake at `/complaints/new` untouched (`src/pages/ComplaintSubmitPage.tsx`), public complaint track at `/complaints/track` untouched (`src/pages/ComplaintTrackPage.tsx`), RBAC untouched (`src/utils/auth.ts` + backend), audit logging untouched (`backend/app/services/audit_service.py`), contract intelligence untouched (`backend/app/api/contract_intelligence.py`), map endpoints untouched, Arabic-RTL UI untouched. No backend code modified in this batch — the 296 passing tests confirm zero behavioural change.
+
+- **Remaining gaps (honest):**
+  - The SSL self-heal only covers the standard Let's Encrypt path. If an operator uses a different cert provider mounted via `${LETSENCRYPT_DIR}`, the self-heal won't trigger (the heuristic specifically checks `/etc/letsencrypt/live/$DOMAIN/fullchain.pem`). For non-Let's-Encrypt setups the operator still needs to run `cp nginx-ssl.conf nginx.conf` manually after each `git pull`. This is acceptable because the prompt explicitly targets the existing working `ssl-setup.sh + Let's Encrypt` flow.
+  - `smoke-check.sh` is not wired into CI and is not invoked by `deploy.sh` automatically. It is intentionally a separate, on-demand operator tool — adding it to `deploy.sh` would slow every deploy and would fail when no domain has been configured yet.
+  - The `nginx.conf`-vs-`nginx-ssl.conf` duplication is preserved (both files carry the same rate limits, gzip, upload split, healthcheck endpoint). This is the existing design and the prompt explicitly forbids broad rewrite. A future batch could collapse the shared parts into a third file using nginx `include`, but that is risky and unnecessary now.
+  - `index.html` SEO/meta tags for the public landing page are still not added (inherited from previous batch).
+  - End-to-end UI test of the public landing → submit → track → detail flow is still not added (inherited from previous batch).
+  - Backend secret detection / .env validation in `deploy.sh` only covers two well-known legacy values (`dummar_password`, `dummar-secret-key`); it does not enumerate every weak-password pattern. Acceptable — the random-secret generator handles new installs, and this guard catches the historical foot-gun.
+
+- **Done / Partial / Blocked:**
+  - **Done:** SSL self-heal in `deploy.sh`; HTTPS post-deploy verification when cert exists; `README.md` Vite table corrected; `PRODUCTION_DEPLOYMENT_GUIDE.md` SSL Quick Setup + checklist rewritten to match reality; `smoke-check.sh` added; backend tests 296/296 still pass; frontend build still passes; localhost-leak guard still works; both handoff docs updated honestly.
+  - **Partial:** Self-heal is Let's-Encrypt-only by heuristic (other cert providers still need manual `cp`); `smoke-check.sh` is on-demand only.
+  - **Blocked:** None.
+
+- **Final recommendation: ✅ Safe to update VPS now.**
+  - The exact operator flow `git pull && ./deploy.sh --rebuild --domain=matrixtop.com` is now self-healing for HTTPS — losing the SSL `nginx.conf` to a `git pull` is no longer a failure mode.
+  - First-time SSL on a fresh VPS still works the same way: `./deploy.sh --rebuild --domain=matrixtop.com` (gets you on HTTP), then `sudo ./ssl-setup.sh matrixtop.com --auto` (gets you on HTTPS), then any future `./deploy.sh --rebuild --domain=matrixtop.com` keeps you on HTTPS without manual edits.
+  - All previously-shipped functionality (296 tests, frontend build, public/internal complaint flow, login, RBAC, audit, maps, contract intelligence) is verified intact.
+
+---
+
+### الدفعة السابقة: 2026-04-23T20:30 — Complaint-Intake-as-Entry-Point Batch (public landing + public submit/track polish + complaint↔task lifecycle visibility)
 
 **قبل البدء (Before Current Batch):**
 - **الطابع الزمني:** 2026-04-23T20:30

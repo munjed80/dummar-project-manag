@@ -83,11 +83,23 @@ Backend API docs (dev only — disabled in production): http://localhost:8000/do
 
 ### Frontend Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend API URL (no trailing slash) |
+Vite bakes `VITE_*` variables into the bundle at **build time**. The defaults
+in `src/config.ts` are deliberately *production-safe* (same-origin via nginx);
+override them only for non-standard deployments.
 
-For deployment, set `VITE_API_BASE_URL` to your production backend URL before building.
+| Variable | Default (production-safe) | Description |
+|----------|--------------------------|-------------|
+| `VITE_API_BASE_URL`   | `/api` | Backend API base path. nginx proxies `/api/*` to the backend, so the bundle works on any host/scheme/port without a rebuild. **Do NOT set this to `http://localhost:8000` for a production build — login/auth will break.** |
+| `VITE_FILES_BASE_URL` | (empty — same-origin) | Base URL for public file links returned by the API as root-relative paths (e.g. `/uploads/complaints/foo.jpg`). Leave empty in production. |
+
+For the standard Docker deployment, `./deploy.sh` exports the safe values
+in-process before `npm run build`, so any stray `.env.local` on the VPS is
+ignored. `deploy.sh` also refuses to start nginx if `dist/` ends up
+containing `http://localhost:8000` — protecting against operator mistakes.
+
+For local development, `vite.config.ts` already proxies `/api` and
+`/uploads` to `http://localhost:8000`, so the production-safe defaults
+work out of the box without any `.env` file.
 
 ### Local Backend Development (without Docker)
 

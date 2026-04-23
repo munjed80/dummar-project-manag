@@ -834,31 +834,53 @@ The project includes ready-to-use scripts and configuration for securing the pla
 3. Port 80 and 443 open in your firewall
 4. `certbot` installed on the server
 
-### Quick Setup
+### Quick Setup (recommended — `--auto` flow)
 
 ```bash
-# 1. Install certbot
+# 1. Install certbot on the host
 sudo apt update && sudo apt install -y certbot
 
 # 2. Ensure DNS is configured (A record → your server IP)
-dig +short dummar.example.com  # Should show your server IP
+dig +short dummar.example.com  # should show your server IP
 
-# 3. Run the SSL setup script
-sudo ./ssl-setup.sh dummar.example.com
+# 3. Obtain the cert AND auto-configure nginx, docker-compose, and .env
+sudo ./ssl-setup.sh dummar.example.com --auto
+```
 
-# 4. Switch to SSL nginx config
+That single `--auto` command does ALL of the following for you:
+- Stops nginx briefly, runs `certbot --standalone` to get the cert
+- Copies `nginx-ssl.conf` → `nginx.conf` and replaces `DOMAIN_PLACEHOLDER`
+- Updates `CORS_ORIGINS` in `.env` to `https://<domain>`
+- Adds a daily renewal cron job (`certbot renew` at 03:00) that reloads nginx
+- Restarts the nginx container with the new SSL config
+
+The Let's Encrypt certificate volumes (`/etc/letsencrypt`, `/var/www/certbot`)
+are **already mounted unconditionally** by `docker-compose.yml` — there is
+nothing to uncomment. Once the cert exists at the standard path, the next
+`nginx` container restart picks it up.
+
+After this, the standard update flow is:
+
+```bash
+git pull
+./deploy.sh --rebuild --domain=dummar.example.com
+```
+
+`deploy.sh` is **SSL self-healing**: when it detects a Let's Encrypt cert
+exists for the domain but the on-disk `nginx.conf` is the HTTP-only repo
+template (because `git pull` overwrote it), it automatically re-applies
+`nginx-ssl.conf`. You will not silently lose HTTPS after a `git pull`.
+
+### Manual setup (advanced — only if `--auto` is unsuitable)
+
+If you need to run the steps individually (e.g. webroot mode, or you
+already have a cert):
+
+```bash
+sudo ./ssl-setup.sh dummar.example.com           # cert only, no auto-config
 cp nginx-ssl.conf nginx.conf
 sed -i 's/DOMAIN_PLACEHOLDER/dummar.example.com/g' nginx.conf
-
-# 5. Update docker-compose.yml — uncomment the letsencrypt volume:
-#   volumes:
-#     - /etc/letsencrypt:/etc/letsencrypt:ro
-#     - /var/www/certbot:/var/www/certbot:ro
-
-# 6. Update CORS_ORIGINS in .env
-# CORS_ORIGINS=https://dummar.example.com
-
-# 7. Restart nginx
+sed -i 's|^CORS_ORIGINS=.*|CORS_ORIGINS=https://dummar.example.com|' .env
 docker compose up -d --build nginx
 ```
 
@@ -1310,13 +1332,12 @@ Use this checklist when deploying to a new VPS for the first time:
 ### SSL/TLS Setup
 
 - [ ] Install certbot: `sudo apt install certbot`
-- [ ] Run `sudo ./ssl-setup.sh your-domain.com`
-- [ ] Copy SSL config: `cp nginx-ssl.conf nginx.conf`
-- [ ] Replace domain: `sed -i 's/DOMAIN_PLACEHOLDER/your-domain.com/g' nginx.conf`
-- [ ] Uncomment letsencrypt volume in `docker-compose.yml`
-- [ ] Update `CORS_ORIGINS` in `.env` to `https://your-domain.com`
-- [ ] Restart: `docker compose up -d --build nginx`
+- [ ] Run `sudo ./ssl-setup.sh your-domain.com --auto`
+      (does cert + nginx.conf + CORS + restart in one step; the letsencrypt
+      volumes are already unconditional in docker-compose.yml)
 - [ ] Verify HTTPS: `curl -I https://your-domain.com`
+- [ ] On future updates use `./deploy.sh --rebuild --domain=your-domain.com` —
+      it will self-heal nginx.conf back to the SSL version after `git pull`.
 
 ### SMTP Configuration (Optional)
 
