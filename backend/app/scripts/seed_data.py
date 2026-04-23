@@ -111,10 +111,15 @@ def seed_users(db: Session, credentials_file: str = _DEFAULT_CREDENTIALS_FILE):
     #     through a secure channel and immediately delete the file
     #   - NEVER falling back to stdout/log printing if the file write fails
     #     (we raise instead, so the credentials are not leaked into logs)
+    #
+    # We intentionally use O_TRUNC (not O_EXCL) so re-running the seed
+    # script after adding a new operator account overwrites any prior
+    # credentials file in place. Note that seed_users only generates a
+    # password for newly created accounts, so an "overwrite" only occurs
+    # when there are genuinely new credentials to record.
     try:
-        # Open with O_EXCL so we never silently overwrite an existing
-        # credentials file, and create with mode 0600 from the start
-        # (avoiding a brief world-readable window between create and chmod).
+        # Create with mode 0600 from the start (avoiding a brief
+        # world-readable window between create and chmod).
         fd = os.open(
             credentials_file,
             os.O_WRONLY | os.O_CREAT | os.O_TRUNC,

@@ -52,9 +52,8 @@ def _safe_filepath(category: str, filename: str) -> str:
     category_root = os.path.realpath(os.path.join(upload_root, category))
     candidate = os.path.realpath(os.path.join(category_root, filename))
 
-    # The resolved path must live strictly inside the category directory,
-    # which itself must live inside the upload root.
-    if not category_root.startswith(upload_root + os.sep) and category_root != upload_root:
+    # The category directory must live inside (or be) the upload root.
+    if not (category_root.startswith(upload_root + os.sep) or category_root == upload_root):
         raise HTTPException(status_code=400, detail="Invalid file path")
     if not (candidate == os.path.join(category_root, filename)
             or candidate.startswith(category_root + os.sep)):

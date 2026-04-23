@@ -342,8 +342,11 @@ docker compose exec backend cat /app/seed_credentials.txt
 docker compose exec backend rm  /app/seed_credentials.txt
 ```
 
-If the credentials file cannot be written for any reason, the script falls back
-to printing the credentials to stdout — they are never silently lost.
+If the credentials file cannot be written (e.g. permission denied), the script
+**raises a RuntimeError** and exits non-zero. It never falls back to printing
+the credentials to stdout, because that would leak them into container /
+journald / aggregator logs. Fix the path/permissions and re-run; you can also
+override the destination with `SEED_CREDENTIALS_FILE=/some/writable/path`.
 
 ### Test / development workflow only
 
