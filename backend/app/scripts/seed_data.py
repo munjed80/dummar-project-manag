@@ -5,7 +5,7 @@ import secrets
 sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from sqlalchemy.orm import Session
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 
 import json
@@ -102,28 +102,49 @@ def seed_users(db: Session, credentials_file: str = _DEFAULT_CREDENTIALS_FILE):
         print("No new accounts were created (all already existed). No credentials file written.")
         return
 
-    # Write credentials file with restrictive permissions
+    # Write credentials file with restrictive permissions.
+    # NOTE (security review): writing the freshly-generated passwords is
+    # unavoidable — there is otherwise no way to deliver them to the
+    # operator who runs the seed script. We mitigate by:
+    #   - writing to a single file with mode 0600
+    #   - documenting that the operator must distribute the credentials
+    #     through a secure channel and immediately delete the file
+    #   - NEVER falling back to stdout/log printing if the file write fails
+    #     (we raise instead, so the credentials are not leaked into logs)
     try:
-        with open(credentials_file, "w", encoding="utf-8") as f:
+        # Open with O_EXCL so we never silently overwrite an existing
+        # credentials file, and create with mode 0600 from the start
+        # (avoiding a brief world-readable window between create and chmod).
+        fd = os.open(
+            credentials_file,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError:
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write("# Dummar — Seeded user credentials (generated)\n")
-            f.write(f"# Generated at: {datetime.utcnow().isoformat()}Z\n")
+            f.write(f"# Generated at: {datetime.now(timezone.utc).isoformat()}\n")
             f.write("# These passwords were created with secrets.token_urlsafe(18) (~144 bits).\n")
             f.write("# Distribute them to operators via a secure channel and DELETE this file.\n")
             f.write("# Each operator should rotate their password on first login.\n\n")
             for username, password in created_credentials:
                 f.write(f"{username}\t{password}\n")
-        try:
-            os.chmod(credentials_file, 0o600)
-        except OSError:
-            pass
         print(f"✓ Credentials for {len(created_credentials)} new account(s) written to:")
         print(f"    {credentials_file}")
         print("⚠️  Distribute these passwords securely and DELETE the file afterwards.")
     except OSError as exc:
-        # Fall back to printing on stdout — never silently lose generated passwords
-        print("⚠️  Could not write credentials file ({}). Printing instead:".format(exc))
-        for username, password in created_credentials:
-            print(f"  {username}\t{password}")
+        # Do NOT print the passwords to stdout/logs as a fallback — that would
+        # leak them into container logs / journald / log aggregators. Fail
+        # loudly so the operator can fix permissions and retry.
+        raise RuntimeError(
+            f"Could not write seed credentials file '{credentials_file}': {exc}. "
+            "Refusing to print generated passwords to stdout. "
+            "Fix the path/permissions and re-run the seed script. "
+            "Override location with SEED_CREDENTIALS_FILE=/some/writable/path."
+        ) from exc
 
 
 def check_default_passwords(db: Session):

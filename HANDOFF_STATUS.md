@@ -1,11 +1,82 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-18T00:30
+## آخر تحديث: 2026-04-23T11:58
 
 ---
 
-## الدفعة الحالية: 2026-04-18T00:11 — Advanced Location Operations Batch (Boundary Editor, Geo Dashboard, Contract-Location UI, Notifications, Haversine)
+## الدفعة الحالية: 2026-04-23T11:58 — Pre-Deployment Hardening Batch (Security, Secrets, Uploads, Docs, Health, Logs)
+
+**Scope:** Strict pre-deployment hardening before real VPS deployment. NOT a feature batch.
+
+### الملفات المُعدّلة في هذه الدفعة:
+
+| الملف | التغيير |
+|---|---|
+| `docker-compose.yml` | A) Backend port now bound to `${BACKEND_BIND:-127.0.0.1}:8000:8000` (was `8000:8000` on all interfaces). B) `DB_PASSWORD` and `SECRET_KEY` use `${VAR:?}` — stack refuses to start if unset. H) `json-file` log rotation (10m × 5) added to db, backend, nginx. New env vars surfaced: `ENVIRONMENT`, `ENABLE_API_DOCS`, `BACKEND_BIND`. |
+| `backend/.env.example` | B) Removed insecure literal defaults (`dummar_password`, `dummar-secret-key-...`). Now contains placeholders, generation hints, and the new `ENVIRONMENT`/`ENABLE_API_DOCS` knobs. |
+| `backend/app/core/config.py` | E) Added `ENVIRONMENT` and `ENABLE_API_DOCS` settings + `is_production()` and `docs_enabled()` helpers. |
+| `backend/app/main.py` | D) Removed unauthenticated `app.mount("/uploads", StaticFiles)` mount. E) `/docs`, `/redoc`, `/openapi.json` URLs are `None` unless `docs_enabled()`. G) `/metrics` now requires `get_current_internal_user`. Logs env + docs status at startup. |
+| `backend/app/api/uploads.py` | D) Added `PUBLIC_CATEGORIES` / `SENSITIVE_CATEGORIES` split. New auth-gated GET handlers `/uploads/contracts/{filename}` and `/uploads/contract_intelligence/{filename}` with `_safe_filepath()` traversal defense. |
+| `backend/app/api/health.py` | G) `/health/detailed` now requires `get_current_internal_user`. `/health`, `/health/ready` remain public for orchestrator probes. |
+| `backend/app/scripts/seed_data.py` | C) `seed_users()` now generates `secrets.token_urlsafe(18)` per user by default and writes them to `seed_credentials.txt` (chmod 600). Legacy `password123` is opt-in via `SEED_DEFAULT_PASSWORDS=1` env or `--force-default-passwords` CLI flag. |
+| `backend/entrypoint.sh` | F) `alembic upgrade head` failure is now FATAL (`exit 1`) — container exits non-zero, Docker restarts it; API never serves an inconsistent schema. |
+| `nginx.conf` | D) Sensitive uploads (`contracts`, `contract_intelligence`) now proxied to backend (auth required). Public uploads still served as static. G) Updated comments to reflect that `/health/detailed` and `/metrics` now require backend auth. |
+| `nginx-ssl.conf` | Same as nginx.conf for the SSL variant. |
+| `deploy.sh` | B) Hardened `.env` validation: refuses to launch if `DB_PASSWORD` or `SECRET_KEY` is missing OR uses the legacy default values. New auto-generated `.env` includes `ENVIRONMENT`, `ENABLE_API_DOCS`, `BACKEND_BIND`. C) Seed-data step now describes random-password mode and how to retrieve `seed_credentials.txt`. |
+| `backend/tests/test_api.py` | Updated `TestHealthEndpoints` and `TestMonitoringEndpoints` to reflect new auth requirements on `/health/detailed` and `/metrics`. Added 2 new tests asserting unauthenticated access returns 401/403. |
+| `README.md` | I) Rewrote Prerequisites table to reflect real Docker-path requirements (Node on host, no host PG/nginx/Python). Removed the "default password123 for everyone" table; added security-posture summary. Updated env-var section. |
+| `PRODUCTION_DEPLOYMENT_GUIDE.md` | I) Rewrote Prerequisites and Quick Start sections. Updated File Upload section with public/private split. Rewrote Seed Data Strategy with random-password mode. Replaced Security Checklist with built-in/operator split. Added fail2ban + daily pg_dump backup snippets. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | Added "Before Current Batch" entry (per workflow rules) and this batch's "After" summary. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### ✅ مكتمل ومُتحقق منه (Done — verified):
+
+| Goal | Status | Evidence |
+|---|---|---|
+| A) Backend not publicly exposed | **Done** | `docker-compose.yml: ports: "${BACKEND_BIND:-127.0.0.1}:8000:8000"` |
+| B) Unsafe secret fallbacks removed | **Done** | `${DB_PASSWORD:?...}` and `${SECRET_KEY:?...}`; deploy.sh refuses legacy defaults; `backend/.env.example` cleaned |
+| C) Seed account hardening | **Done** | `seed_users` generates random per-user passwords by default; credentials file (chmod 600); legacy mode opt-in only |
+| D) Sensitive uploads gated | **Done** | StaticFiles mount removed from main.py; nginx proxies `/uploads/(contracts\|contract_intelligence)/*` to backend; backend handlers require `get_current_internal_user`; path-traversal defense in `_safe_filepath()` |
+| E) /docs disabled in prod | **Done** | `docs_url=None` etc. when `ENVIRONMENT=production` and `ENABLE_API_DOCS=false`. Both flags surfaced in compose + .env.example + docs |
+| F) Migration failure fatal | **Done** | `entrypoint.sh`: `if ! alembic upgrade head; then exit 1; fi` |
+| G) Health/metrics protected | **Done** | `/health/detailed` and `/metrics` now require `get_current_internal_user`; `/health` and `/health/ready` remain public for probes |
+| H) Docker log rotation | **Done** | `logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }` on all 3 services |
+| I) Docs/scripts aligned | **Done** | README + PRODUCTION_DEPLOYMENT_GUIDE rewritten for the real Docker path; deploy.sh validates env |
+| J) fail2ban + backup guidance | **Done** | Added concrete jail config and `cron.daily` pg_dump snippet (with 14-day retention + restore command) to PRODUCTION_DEPLOYMENT_GUIDE |
+| Frontend build | **Verified** | `npm run build` → `✓ built in 1.90s`, dist produced |
+| Backend tests | **Verified** | `python -m pytest tests/ -q` → **279 passed** |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| Frontend Dockerfile (eliminate Node-on-host requirement) | **Partial** | Out of scope for this batch. Frontend is still built on the host and bind-mounted into nginx. Documented as a host requirement in README + guide. |
+| Dependency CVE pass (`python-jose 3.3.0`, `passlib 1.7.4`, yanked `email-validator 2.1.0`) | **Not done** | Out of scope (was flagged in the previous review). Recommended next batch. |
+| Container content-scanning (e.g. ClamAV) on uploads | **Not done** | Out of scope; no virus scanning on uploads today. |
+| Real /metrics counters (currently always zero) | **Not done** | Out of scope; counters are placeholders in `_Metrics`. They are now at least auth-gated so they don't mislead anonymous callers. |
+
+### 🚫 Blocked: none.
+
+### الفجوات المتبقية قبل النشر الحقيقي:
+
+1. **Frontend remains a host-built artifact.** Until a frontend Dockerfile exists, Node 20+ on the host is mandatory and forgetting `npm run build` will result in nginx serving an empty directory.
+2. **Aging dependencies.** `python-jose==3.3.0`, `passlib==1.7.4`, and the yanked `email-validator==2.1.0` should be reviewed/upgraded.
+3. **No virus scanning** on uploaded files (especially the public anonymous `/uploads/public` endpoint).
+4. **`/metrics` counters are placeholders** — they don't reflect real request totals. Replace with a real instrument (e.g. middleware-level counters or `prometheus_fastapi_instrumentator`) when monitoring is set up.
+
+### الخطوة التالية الموصى بها قبل النشر الحقيقي على VPS:
+
+1. Provision a fresh Ubuntu 22.04+ VPS, install Docker, Compose v2, Node 20+, Certbot.
+2. Clone the repo, run `./deploy.sh --seed --domain=<your.domain>`.
+3. Retrieve `/app/seed_credentials.txt` from the backend container, distribute, then delete it.
+4. Run `./ssl-setup.sh <your.domain> --auto` to enable HTTPS.
+5. Apply the fail2ban + pg_dump snippets from PRODUCTION_DEPLOYMENT_GUIDE.
+6. Schedule a follow-up batch for: frontend Dockerfile, dependency upgrade pass, real metrics, and (optionally) ClamAV on uploads.
+
+---
+
+## الدفعة السابقة: 2026-04-18T00:11 — Advanced Location Operations Batch (Boundary Editor, Geo Dashboard, Contract-Location UI, Notifications, Haversine)
 
 ### الملفات المُعدّلة/الجديدة في هذه الدفعة:
 | الملف | التغيير |

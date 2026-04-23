@@ -13,30 +13,63 @@ A comprehensive platform for managing the Damascus Dummar Project, combining int
 ## Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose
-- Node.js 18+ and npm
 
-### 1. Start the database and backend
+For VPS / production deployment via the provided `deploy.sh`:
+
+| Tool                | Required? | Notes                                              |
+|---------------------|-----------|----------------------------------------------------|
+| Docker Engine 20+   | yes       | Runs db / backend / nginx                          |
+| Docker Compose v2   | yes       | `docker compose` plugin (or standalone)            |
+| Node.js 20+ + npm   | yes       | Frontend is built on the host (Vite 8 + Tailwind 4)|
+| Certbot             | optional  | Only if you use the bundled Let's Encrypt script   |
+| PostgreSQL on host  | **no**    | Runs inside the `db` container (`postgis/postgis`) |
+| nginx on host       | **no**    | Runs inside the `nginx` container                  |
+| Python on host      | **no**    | Backend runs inside the `backend` container        |
+
+For local frontend development only:
+
+| Tool                | Required? | Notes                                              |
+|---------------------|-----------|----------------------------------------------------|
+| Node.js 20+         | yes       | Vite dev server                                    |
+| Docker              | yes       | For database + backend                             |
+
+### 1. Start the stack
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts:
-- PostgreSQL with PostGIS on port 5432
-- FastAPI backend on port 8000
+- PostgreSQL with PostGIS (no external port — internal only)
+- FastAPI backend on `127.0.0.1:8000` (localhost only — nginx is the public entry)
+- nginx on port 80 (and 443 once SSL is set up)
+
+> **Note:** the stack will refuse to start if `DB_PASSWORD` and `SECRET_KEY` are
+> not set in `.env`. Run `./deploy.sh` once to auto-generate a safe `.env`,
+> or copy values manually from `PRODUCTION_DEPLOYMENT_GUIDE.md`.
 
 ### 2. Initialize the database
 
-```bash
-# Run migrations
-docker-compose exec backend alembic upgrade head
+Migrations run automatically when the backend container starts. To run them manually or to load seed data:
 
-# Load seed data
-docker-compose exec backend python -m app.scripts.seed_data
+```bash
+# Run migrations explicitly (already auto-run on container start)
+docker compose exec backend alembic upgrade head
+
+# Load seed data (first deployment only). Generates strong random passwords
+# per account and writes them to /app/seed_credentials.txt inside the container.
+docker compose exec backend python -m app.scripts.seed_data
+docker compose exec backend cat /app/seed_credentials.txt   # retrieve & distribute
+docker compose exec backend rm  /app/seed_credentials.txt   # delete after use
 ```
 
-### 3. Start the frontend
+For local test/development workflows that need the legacy `password123` for every account, run with `--force-default-passwords` (NEVER use this in production):
+
+```bash
+docker compose exec backend python -m app.scripts.seed_data --force-default-passwords
+```
+
+### 3. Start the frontend (dev)
 
 ```bash
 npm install
@@ -45,8 +78,8 @@ cp .env.example .env
 npm run dev
 ```
 
-Frontend: http://localhost:5173
-Backend API docs: http://localhost:8000/docs
+Frontend (dev): http://localhost:5173
+Backend API docs (dev only — disabled in production): http://localhost:8000/docs
 
 ### Frontend Environment Variables
 
@@ -84,16 +117,28 @@ python -m pytest tests/ -v
 
 ## Default Login Credentials
 
-| Username | Password | Role | الاسم |
-|----------|----------|------|-------|
-| director | password123 | project_director | م. أحمد الخطيب |
-| contracts_mgr | password123 | contracts_manager | م. سامر القاسم |
-| engineer | password123 | engineer_supervisor | م. ليلى حسن |
-| complaints_off | password123 | complaints_officer | عمر المصري |
-| area_sup | password123 | area_supervisor | خالد الأحمد |
-| field_user | password123 | field_team | يوسف العلي |
-| contractor | password123 | contractor_user | شركة البناء الحديث |
-| citizen1 | password123 | citizen | مواطن — سمير الحسن |
+> **Production seed mode (default):** when you run `python -m app.scripts.seed_data`,
+> each seeded account gets a strong random password (24 URL-safe chars, ≈144 bits)
+> written to `backend/seed_credentials.txt` (chmod 600). Distribute these via a
+> secure channel and delete the file. The application logs a security warning at
+> startup if any account is still using the legacy `password123`.
+>
+> **Test / development mode (opt-in only):** the legacy fixed password
+> `password123` is used for all accounts when you pass `--force-default-passwords`
+> or set `SEED_DEFAULT_PASSWORDS=1`. NEVER use this mode in production.
+
+The seeded usernames and roles are:
+
+| Username | Role | الاسم |
+|----------|------|-------|
+| director | project_director | م. أحمد الخطيب |
+| contracts_mgr | contracts_manager | م. سامر القاسم |
+| engineer | engineer_supervisor | م. ليلى حسن |
+| complaints_off | complaints_officer | عمر المصري |
+| area_sup | area_supervisor | خالد الأحمد |
+| field_user | field_team | يوسف العلي |
+| contractor | contractor_user | شركة البناء الحديث |
+| citizen1 | citizen | مواطن — سمير الحسن |
 
 > **Note:** The citizen account shares phone `+963911234567` with complaint CMP00000001,
 > so it will show that complaint in the citizen dashboard.
@@ -184,12 +229,41 @@ python -m pytest tests/ -v
 ## Environment Variables
 
 ```
-DATABASE_URL=postgresql://dummar:dummar_password@db:5432/dummar_db
-SECRET_KEY=dummar-secret-key-change-in-production-32chars-min
+DATABASE_URL=postgresql://dummar:<STRONG_PASSWORD>@db:5432/dummar_db
+SECRET_KEY=<32+ random chars — generate with `openssl rand -base64 32`>
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
+ACCESS_TOKEN_EXPIRE_MINUTES=480
 UPLOAD_DIR=/app/uploads
+ENVIRONMENT=production           # disables /docs, /redoc, /openapi.json
+ENABLE_API_DOCS=false            # set true to re-enable docs (e.g. behind auth proxy)
+CORS_ORIGINS=https://dummar.example.com
+LOG_LEVEL=info
 ```
+
+> The Docker stack will refuse to start if `DB_PASSWORD` or `SECRET_KEY`
+> is missing from `.env` (see `docker-compose.yml`).
+
+## Security Posture (Production Defaults)
+
+- `/docs`, `/redoc`, `/openapi.json` — **disabled** in production
+  (`ENVIRONMENT=production`). Set `ENABLE_API_DOCS=true` to re-enable
+  (do this only behind an authenticated reverse proxy).
+- `/health` and `/health/ready` — public (used by container orchestrators
+  and load balancers).
+- `/health/detailed`, `/health/smtp`, `/health/ocr`, `/metrics` — require
+  authenticated internal staff (`get_current_internal_user`).
+- `/uploads/contracts/*` and `/uploads/contract_intelligence/*` — proxied
+  to the backend and require internal-staff auth (sensitive documents).
+- `/uploads/complaints/*`, `/uploads/profiles/*`, `/uploads/general/*`,
+  `/uploads/tasks/*` — served as static files by nginx (citizen-facing,
+  random-UUID filenames; do NOT place confidential data here).
+- Backend port `8000` is bound to `127.0.0.1` only — nginx is the public
+  entry point. Override with `BACKEND_BIND=0.0.0.0` only behind an
+  external load balancer.
+- Database port is **not** published.
+- Migrations are **fatal**: if `alembic upgrade head` fails the container
+  exits non-zero and Docker restarts it; the API never serves traffic
+  against an inconsistent schema.
 
 ## Technology Stack
 

@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -20,32 +21,43 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 _PUBLIC_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf"}
 
 # Categories that may be served WITHOUT authentication.
-# Citizen-facing flows (anonymous complaint submission, public profile photos)
-# rely on these being accessible by URL. Filenames are random UUIDs which
-# provides a degree of unguessability but is NOT a substitute for auth — do
-# not put confidential data here.
 PUBLIC_CATEGORIES = {"complaints", "profiles", "general", "tasks"}
 
-# Categories that contain sensitive operational data (contract documents,
-# OCR-extracted contract intelligence). GET access requires an authenticated
-# internal staff user.
+# Categories that contain sensitive operational data.
 SENSITIVE_CATEGORIES = {"contracts", "contract_intelligence"}
+
+# Strict allowlist regex for stored filenames. We only ever write filenames
+# of the form `<uuid4().hex><ext>` so this is sufficient and cannot match
+# any path-traversal sequence.
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}\.[A-Za-z0-9]{1,8}$")
 
 
 def _safe_filepath(category: str, filename: str) -> str:
     """Resolve a stored file path while defending against path traversal.
-    Raises HTTPException(400) for any traversal attempt or unknown category."""
+
+    Defense in depth:
+      1. Category must be in the static ALLOWED_CATEGORIES set.
+      2. Filename must match a strict allowlist regex (no separators, no dots
+         other than the single extension dot, no spaces, no unicode tricks).
+      3. The realpath of the resolved file must be inside the configured
+         upload root.
+    """
     if category not in ALLOWED_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid file category")
-    # Reject any filename that contains path separators or parent refs
-    if "/" in filename or "\\" in filename or filename in ("", ".", "..") or filename.startswith("."):
+
+    if not _SAFE_FILENAME_RE.match(filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     upload_root = os.path.realpath(settings.UPLOAD_DIR)
-    candidate = os.path.realpath(os.path.join(upload_root, category, filename))
-    # Ensure the resolved path stays inside the configured upload root
-    if not (candidate == os.path.join(upload_root, category, filename)
-            or candidate.startswith(upload_root + os.sep)):
+    category_root = os.path.realpath(os.path.join(upload_root, category))
+    candidate = os.path.realpath(os.path.join(category_root, filename))
+
+    # The resolved path must live strictly inside the category directory,
+    # which itself must live inside the upload root.
+    if not category_root.startswith(upload_root + os.sep) and category_root != upload_root:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    if not (candidate == os.path.join(category_root, filename)
+            or candidate.startswith(category_root + os.sep)):
         raise HTTPException(status_code=400, detail="Invalid file path")
     return candidate
 

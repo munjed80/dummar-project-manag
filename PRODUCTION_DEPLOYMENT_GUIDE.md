@@ -34,59 +34,82 @@
 
 ## Prerequisites
 
-| Component       | Minimum Version | Notes                                      |
-|-----------------|-----------------|---------------------------------------------|
-| Python          | 3.12+           | Required for backend                        |
-| Node.js         | 20+             | Required for frontend build (Vite 8 + Tailwind 4) |
-| PostgreSQL      | 15+             | Primary database                            |
-| PostGIS         | 3.3+            | Extension for spatial/GIS data              |
-| nginx (or similar) | latest      | Reverse proxy for production serving        |
-| Docker (optional) | 20+           | For containerized deployment                |
+The recommended deployment path is **Docker Compose on a single Ubuntu VPS**. With this path, only Docker, Docker Compose v2, and Node.js need to be installed on the host. PostgreSQL/PostGIS and nginx run inside containers.
+
+| Component | Required on host? | Where it runs | Notes |
+|-----------|------------------|---------------|-------|
+| Docker Engine 20+ | **yes** | host | Runs all three services |
+| Docker Compose v2 | **yes** | host | `docker compose` plugin (or standalone) |
+| Node.js 20+ + npm | **yes** | host | Frontend is built on the host (`npm run build` → `./dist`), then bind-mounted into the nginx container. There is no frontend Dockerfile yet. |
+| Certbot | optional | host | Only needed if you use the bundled `ssl-setup.sh` (Let's Encrypt). Skip if you terminate TLS upstream. |
+| `git`, `curl`, `openssl`, `dig` | yes | host | Used by `deploy.sh` and `ssl-setup.sh` |
+| PostgreSQL 15 + PostGIS 3.3 | **no** | container (`postgis/postgis:15-3.3`) | Do NOT install on the host. |
+| nginx | **no** | container (`nginx:alpine`) | Do NOT install host nginx — it would conflict with the container on port 80. |
+| Python 3.12 | **no** | container (`python:3.12-slim`) | Backend ships with Tesseract OCR + Arabic fonts pre-installed. |
+
+If you choose the manual (non-Docker) path described later in this guide, then PostgreSQL, Python, and nginx must be installed on the host. That path is **not** the default and is intended only for advanced operators.
 
 ---
 
 ## Quick Start (Docker)
 
-The fastest way to deploy uses Docker Compose:
+The fastest path uses `deploy.sh`, which does pre-flight checks, generates a safe `.env` with strong random secrets if one is missing, builds the frontend, brings up the stack, and waits for health checks.
 
 ```bash
 # 1. Clone the repository
 git clone <repo-url> /var/www/dummar
 cd /var/www/dummar
 
-# 2. Create a production .env file (critical: change defaults!)
-cat > .env <<EOF
-DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
-CORS_ORIGINS=https://dummar.example.com
-SMTP_ENABLED=false
-LOG_LEVEL=info
-ACCESS_TOKEN_EXPIRE_MINUTES=480
-EOF
+# 2. First deployment WITH seed data and your domain
+./deploy.sh --seed --domain=dummar.example.com
 
-# 3. Build and start
-docker compose up -d
-
-# 4. Run migrations
-docker compose exec backend alembic upgrade head
-
-# 5. Load initial seed data (first deployment only)
-docker compose exec backend python -m app.scripts.seed_data
-
-# 6. Verify health
-curl http://localhost:8000/health
-curl http://localhost:8000/health/detailed
-curl http://localhost:8000/health/ready
-
-# 7. IMPORTANT: Change default passwords immediately!
+# 3. Retrieve the generated seed credentials and distribute them securely.
+docker compose exec backend cat /app/seed_credentials.txt
+docker compose exec backend rm  /app/seed_credentials.txt   # delete after distribution
 ```
 
-The `docker-compose.yml` includes:
-- Health checks for both PostgreSQL and backend
-- Automatic restart on failure
-- Environment variable overrides via `.env` file
-- Persistent volumes for database and uploads
-- Non-root container user for backend
+If you prefer to run Compose directly:
+
+```bash
+# 2a. Create a .env file (REQUIRED — the stack will refuse to start without
+#     DB_PASSWORD and SECRET_KEY)
+cat > .env <<EOF
+DB_PASSWORD=$(openssl rand -base64 32)
+SECRET_KEY=$(openssl rand -base64 32)
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+CORS_ORIGINS=https://dummar.example.com
+ENVIRONMENT=production
+ENABLE_API_DOCS=false
+BACKEND_BIND=127.0.0.1
+SMTP_ENABLED=false
+LOG_LEVEL=info
+EOF
+
+# 2b. Build the frontend (required — nginx serves ./dist as a bind mount)
+npm ci && npm run build
+
+# 2c. Start the stack
+docker compose up -d
+```
+
+The compose stack:
+
+- Refuses to start if `DB_PASSWORD` or `SECRET_KEY` is missing from `.env`.
+- Binds the backend to `127.0.0.1:8000` (override only with `BACKEND_BIND=0.0.0.0`).
+- Does NOT publish the database port.
+- Auto-runs `alembic upgrade head` on backend container start; **fails fatally** if migrations fail.
+- Configures `json-file` log rotation (10 MB × 5 files) on every service.
+- Disables the Swagger UI / ReDoc / OpenAPI schema unless `ENABLE_API_DOCS=true`.
+
+After deploy, verify:
+
+```bash
+curl http://localhost/api/                       # public API root
+curl http://localhost/api/health                 # public liveness
+curl http://localhost/api/health/ready           # public readiness
+# /api/health/detailed and /api/metrics now require an authenticated
+# internal-staff JWT — they no longer return data anonymously.
+```
 
 ---
 
@@ -299,30 +322,58 @@ alembic upgrade head
 ### Initial seed (first deployment only)
 
 ```bash
-cd /var/www/dummar/backend
-python -m app.scripts.seed_data
+docker compose exec backend python -m app.scripts.seed_data
 ```
 
 This creates:
-- 8 default users (with insecure default passwords — **change immediately**)
+- 8 default users — each with a **strong random per-user password** (24 URL-safe chars)
 - 8 project areas (Dummar zones)
 - 12 buildings
 - 7 sample complaints
 - 5 sample tasks
 - 5 sample contracts
 
+The generated passwords are written to `/app/seed_credentials.txt` inside the
+backend container (file permissions 600). Retrieve and distribute them through
+a secure channel, then delete the file:
+
+```bash
+docker compose exec backend cat /app/seed_credentials.txt
+docker compose exec backend rm  /app/seed_credentials.txt
+```
+
+If the credentials file cannot be written for any reason, the script falls back
+to printing the credentials to stdout — they are never silently lost.
+
+### Test / development workflow only
+
+If you need the legacy fixed `password123` for every account (e.g. to run
+existing test suites or local dev fixtures), opt in explicitly:
+
+```bash
+docker compose exec backend python -m app.scripts.seed_data --force-default-passwords
+# or:
+SEED_DEFAULT_PASSWORDS=1 docker compose exec backend python -m app.scripts.seed_data
+```
+
+Do NOT use this mode in production. The application logs a security warning at
+startup whenever any account is still using `password123`.
+
 ### Production strategy
 
-1. **Run seed once** on first deployment to create admin users and areas
-2. **Immediately change all passwords** via the UI or direct DB update
-3. **Do not re-run seed** on subsequent deployments — it's idempotent for users but will duplicate other data
-4. New areas/buildings should be added through the API or admin interface
+1. **Run seed once** on first deployment to create operator users, areas, and sample data
+2. **Distribute generated passwords** securely; force first-login rotation
+3. **Delete `seed_credentials.txt`** from the backend container
+4. **Do not re-run seed** on subsequent deployments — it is idempotent for users
+   (it will only generate passwords for newly created accounts, not for existing ones)
+5. New areas/buildings/users should be added through the API or admin UI
 
-### Changing default passwords
+### Changing passwords later
 
-The system warns at startup if any accounts still use the default seed password (`password123`). Change passwords through:
+The system logs a security warning at startup if any accounts still use the
+legacy `password123`. Change passwords through:
 - The `/settings` page in the UI
-- Or direct API call: `PUT /users/{id}` with `password` field (requires project_director role)
+- Or `PUT /users/{id}` with the `password` field (requires project_director role)
 
 ---
 
@@ -500,18 +551,40 @@ CORS_ORIGINS=https://dummar.example.com
 ### Configuration
 
 ```bash
-UPLOAD_DIR=/var/www/dummar/uploads
+UPLOAD_DIR=/app/uploads          # inside the backend container
+                                 # backed by the named volume `backend_uploads`
+                                 # also mounted read-only into nginx at /usr/share/nginx/uploads
 ```
 
-### Directory structure
+### Directory structure and access policy
 
 ```
 uploads/
-├── complaints/    # Citizen complaint attachments
-├── tasks/         # Task before/after photos
-├── contracts/     # Contract documents
-└── general/       # Other uploads
+├── complaints/             # PUBLIC — citizen complaint attachments
+├── profiles/               # PUBLIC — profile photos
+├── general/                # PUBLIC — generic attachments
+├── tasks/                  # PUBLIC — task photos
+├── contracts/              # PRIVATE — contract documents (auth required)
+└── contract_intelligence/  # PRIVATE — OCR-processed contract documents (auth required)
 ```
+
+**Public** categories are served by nginx as static files for performance.
+Filenames are random UUIDs (`uuid4().hex`), which provides unguessability
+but is **not** authorization. Do not put confidential data in these folders.
+
+**Private** categories are NOT served as static files. nginx is configured
+to proxy `/uploads/contracts/*` and `/uploads/contract_intelligence/*` to the
+backend, where `app.api.uploads` enforces `get_current_internal_user` before
+returning the file. Anonymous requests get 401/403.
+
+This split is enforced in two places — change both if you adjust it:
+
+- `backend/app/api/uploads.py` (`PUBLIC_CATEGORIES`, `SENSITIVE_CATEGORIES`)
+- `nginx.conf` and `nginx-ssl.conf` (`location ~ ^/uploads/(contracts|contract_intelligence)/`)
+
+The unauthenticated `app.mount("/uploads", StaticFiles)` mount that previously
+existed in `app/main.py` has been **removed**; all file access now goes
+through the explicit handlers above.
 
 ### Considerations
 
@@ -669,19 +742,81 @@ curl -H "Authorization: Bearer <token>" \
 
 ## Security Checklist
 
-- [ ] **Change all seed passwords** before going live
-- [ ] **Generate a strong `SECRET_KEY`** (at least 32 characters, random)
-- [ ] **Configure `CORS_ORIGINS`** to only allow your production frontend domain
-- [ ] **Enable HTTPS** with a valid SSL certificate (Let's Encrypt recommended)
-- [ ] **Set `ACCESS_TOKEN_EXPIRE_MINUTES`** to a reasonable value (e.g., 480 = 8 hours)
-- [ ] **Restrict database access** — only allow connections from the API server
-- [ ] **Enable PostgreSQL SSL** for encrypted database connections
-- [ ] **Review file upload limits** — current max is 10MB per file
-- [ ] **Set up firewall** — only expose ports 80, 443 publicly
-- [ ] **Run as non-root** — use a dedicated system user (e.g., `www-data`)
-- [ ] **Back up database** — set up automated PostgreSQL backups (pg_dump)
-- [ ] **Monitor logs** — set up log rotation and alerting
-- [ ] **Review audit logs** — check `/audit-logs/` regularly for suspicious activity
+### Built-in production hardening (verified — no operator action required)
+
+These are now enforced by the Docker stack and code defaults; you get them for free:
+
+- [x] Backend bound to `127.0.0.1:8000` — nginx is the only public entry point
+- [x] Database port not published
+- [x] `DB_PASSWORD` and `SECRET_KEY` are required in `.env` (compose uses `${VAR:?}`)
+- [x] `deploy.sh` refuses to launch with the legacy default values
+- [x] `/docs`, `/redoc`, `/openapi.json` disabled when `ENVIRONMENT=production`
+- [x] `/health/detailed`, `/health/smtp`, `/health/ocr`, `/metrics` require internal-staff auth
+- [x] `/uploads/contracts/*` and `/uploads/contract_intelligence/*` require auth (proxied to backend)
+- [x] `alembic upgrade head` failure is fatal (container exits non-zero)
+- [x] Docker `json-file` log rotation (10 MB × 5) on every service
+- [x] Seed accounts get strong random per-user passwords (legacy `password123` is opt-in only)
+- [x] Backend container runs as non-root user `appuser`
+- [x] Rate limits at both app (slowapi) and nginx (`api_limit`, `auth_limit`, `upload_limit`)
+
+### Operator must-do before exposing publicly
+
+- [ ] Run `./deploy.sh --seed` (or seed manually) and securely retrieve `seed_credentials.txt`
+- [ ] Distribute the random passwords via a secure channel; force first-login rotation
+- [ ] Delete `/app/seed_credentials.txt` from the backend container
+- [ ] Set `CORS_ORIGINS` to ONLY your real https origin (deploy.sh does this with `--domain`)
+- [ ] Enable HTTPS via `./ssl-setup.sh <domain> --auto`
+- [ ] Open only ports 22, 80, 443 in `ufw`; set up `fail2ban` for SSH and `/api/auth/`
+- [ ] Configure recurring `pg_dump` backups of the `db` container volume
+- [ ] If SMTP is needed, test with `POST /health/smtp/test-send` before relying on notifications
+- [ ] Rotate SSH keys, disable root login, disable password SSH
+
+### Optional fail2ban (Ubuntu)
+
+```bash
+sudo apt install -y fail2ban
+sudo tee /etc/fail2ban/jail.d/dummar.local <<'EOF'
+[sshd]
+enabled = true
+maxretry = 4
+bantime = 1h
+
+# Optional: ban IPs that hammer /api/auth/login.
+# Requires nginx access logs to be readable by fail2ban.
+[nginx-dummar-auth]
+enabled = false
+filter = nginx-dummar-auth
+logpath = /var/lib/docker/containers/*/*.log
+maxretry = 10
+findtime = 5m
+bantime = 1h
+EOF
+sudo systemctl restart fail2ban
+```
+
+### Daily PostgreSQL backup snippet
+
+```bash
+sudo tee /etc/cron.daily/dummar-pgdump <<'EOF'
+#!/bin/sh
+set -e
+BACKUP_DIR=/var/backups/dummar
+mkdir -p "$BACKUP_DIR"
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+docker compose -f /var/www/dummar/docker-compose.yml exec -T db \
+    pg_dump -U dummar dummar_db | gzip > "$BACKUP_DIR/dummar-$TS.sql.gz"
+# Keep last 14 days
+find "$BACKUP_DIR" -type f -name 'dummar-*.sql.gz' -mtime +14 -delete
+EOF
+sudo chmod +x /etc/cron.daily/dummar-pgdump
+```
+
+Restore:
+
+```bash
+gunzip -c /var/backups/dummar/dummar-<TS>.sql.gz \
+  | docker compose -f /var/www/dummar/docker-compose.yml exec -T db psql -U dummar dummar_db
+```
 
 ---
 

@@ -5,7 +5,7 @@
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
 **المرحلة الحالية:** المرحلة السادسة - الجغرافيا التشغيلية للمواقع  
-**آخر تحديث:** 2026-04-17
+**آخر تحديث:** 2026-04-23
 
 ---
 
@@ -69,6 +69,31 @@
   - No frontend Dockerfile is added in this batch (out of scope — node-on-host stays, but is now properly documented).
 - **افتراضات النشر:**
   - Single VPS, Ubuntu 22.04+ LTS, Docker Compose v2, Node 20+ on host (for `npm run build`), Certbot only if Let's Encrypt is desired. No host Postgres, no host nginx.
+
+**بعد الانتهاء (After Current Batch — verified):**
+- **الطابع الزمني:** 2026-04-23T11:58
+- **النتيجة:** **Done** — all 10 hardening goals (A–J) implemented and verified end-to-end. No "Blocked" items.
+- **التحقق:**
+  - `npm run build` → `✓ built in 1.90s`, dist produced.
+  - `python -m pytest tests/ -q` → **279 passed** (78 API + 43 E2E + 86 contract intelligence + 70 locations + 2 new auth-gating tests).
+  - `bash -n entrypoint.sh deploy.sh` → no syntax errors.
+  - `python -c "import ast; ast.parse(...)"` for `main.py`, `seed_data.py` → OK.
+- **التغييرات الفعلية:** see HANDOFF_STATUS.md for the full file-by-file table.
+- **القرارات الهندسية الرئيسية:**
+  1. Backend port binding made env-driven (`BACKEND_BIND`, default `127.0.0.1`) instead of hardcoded — preserves single-box dev usability while making the safe choice the default.
+  2. Secrets moved from `${VAR:-default}` to `${VAR:?explanation}` — Docker Compose itself refuses to start the stack with missing/empty values; deploy.sh additionally rejects the legacy default literals (defense in depth).
+  3. Seed passwords switched to `secrets.token_urlsafe(18)` (≈144 bits) per user, written to `seed_credentials.txt` (chmod 600). Legacy `password123` mode is opt-in only via env or CLI flag; tests are unaffected because they create users via `_create_user` fixtures, not via seed.
+  4. Uploads architecture changed from "everything served as static" to a category-aware split: PUBLIC categories (complaints/profiles/general/tasks) stay as fast nginx static (UUID filenames provide unguessability); SENSITIVE categories (contracts/contract_intelligence) are routed by nginx to the backend, which enforces `get_current_internal_user`. The unauthenticated `app.mount("/uploads", StaticFiles)` in `main.py` is REMOVED.
+  5. API docs are gated by a single setting `docs_enabled() = ENABLE_API_DOCS or not is_production()` — keeps developer ergonomics in dev, secures by default in prod.
+  6. Migration failures in `entrypoint.sh` now `exit 1`. Combined with `restart: unless-stopped`, Docker will keep retrying — surfacing the failure in container status rather than silently serving against a broken schema.
+  7. `/health/detailed`, `/health/smtp`, `/health/ocr`, and `/metrics` all require `get_current_internal_user`. `/health` and `/health/ready` remain anonymous so that orchestrators (Docker healthcheck, load balancers, uptime monitors) work without credentials.
+  8. Docker `json-file` log rotation (10 MB × 5 files) added to all three services — bounds disk usage on long-lived VPS.
+- **الفجوات المتبقية بصدق:**
+  - Frontend still requires Node 20+ on the host (no frontend Dockerfile yet) — out of scope for this hardening batch.
+  - `python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0` — should be reviewed in a separate dependency-upgrade batch.
+  - `/metrics` counters are placeholders (always zero); now at least auth-gated so they don't mislead anonymous callers.
+  - No virus scanning (e.g. ClamAV) on uploaded files.
+- **الخطوة التالية الموصى بها:** فعلاً نشر على VPS تجريبي وتطبيق checklist الموجود في HANDOFF_STATUS.md. ثم batch مستقل لـ: frontend Dockerfile، ترقية tokens deps، instrumentation حقيقي للـ metrics.
 
 ---
 

@@ -134,15 +134,28 @@ if [ ! -f .env ]; then
 # Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # =============================================================================
 
-# Database
+# Database — REQUIRED. Stack refuses to start if unset.
 DB_PASSWORD=${DB_PASS}
 
-# Application secret — keep this safe!
+# Application secret — REQUIRED. Keep this safe! Stack refuses to start if unset.
 SECRET_KEY=${SECRET}
 ACCESS_TOKEN_EXPIRE_MINUTES=480
 
 # CORS — set to your public domain
 CORS_ORIGINS=http://localhost
+
+# Deployment environment.
+# In "production" the API documentation (/docs, /redoc, /openapi.json) is
+# disabled by default. Set ENABLE_API_DOCS=true to re-enable, or set
+# ENVIRONMENT=development for local work.
+ENVIRONMENT=production
+ENABLE_API_DOCS=false
+
+# Backend port binding.
+# Default 127.0.0.1 means the backend is reachable ONLY from the local host
+# (i.e. through nginx). Set to 0.0.0.0 only if you intentionally want to
+# expose port 8000 directly (e.g. behind an external load balancer).
+BACKEND_BIND=127.0.0.1
 
 # Nginx port (change if fronted by another reverse proxy)
 HTTP_PORT=80
@@ -167,6 +180,33 @@ EOF
     warn "Review .env and update CORS_ORIGINS with your domain before going live."
 else
     success ".env file present."
+
+    # Validate required secrets are non-empty (not just present as keys)
+    if ! grep -qE '^DB_PASSWORD=.+' .env; then
+        error ".env is missing DB_PASSWORD. The stack will refuse to start."
+        error "Add a strong value: DB_PASSWORD=\$(openssl rand -base64 32)"
+        exit 1
+    fi
+    if ! grep -qE '^SECRET_KEY=.+' .env; then
+        error ".env is missing SECRET_KEY. The stack will refuse to start."
+        error "Add a strong value: SECRET_KEY=\$(openssl rand -base64 32)"
+        exit 1
+    fi
+
+    # Refuse to launch with the well-known insecure values that older versions
+    # of this script and older docs may have produced or that someone may have
+    # copied from .env.example.
+    if grep -qE '^DB_PASSWORD=dummar_password\s*$' .env; then
+        error ".env contains the legacy default DB_PASSWORD=dummar_password — refusing to deploy."
+        error "Rotate it: sed -i 's|^DB_PASSWORD=.*|DB_PASSWORD='\"\$(openssl rand -base64 32)\"'|' .env"
+        exit 1
+    fi
+    if grep -qE '^SECRET_KEY=dummar-secret-key' .env; then
+        error ".env contains the legacy default SECRET_KEY — refusing to deploy."
+        error "Rotate it: sed -i 's|^SECRET_KEY=.*|SECRET_KEY='\"\$(openssl rand -base64 32)\"'|' .env"
+        exit 1
+    fi
+    success ".env secrets look safe (no legacy defaults detected)."
 fi
 
 # If --domain was specified, update CORS_ORIGINS in .env
@@ -261,14 +301,15 @@ if [ "$SEED_DATA" = true ]; then
 
     if [ "$FIRST_DEPLOY" = true ] || [ "$FORCE_REBUILD" = true ]; then
         info "Running seed script inside backend container…"
-        $COMPOSE exec -T backend python -m app.scripts.seed_data 2>&1 | tail -5
+        info "Mode: STRONG RANDOM PASSWORDS (production-safe). Credentials will"
+        info "be written to /app/seed_credentials.txt inside the backend container."
+        $COMPOSE exec -T backend python -m app.scripts.seed_data 2>&1 | tail -10
         success "Seed data loaded."
-        warn "IMPORTANT: Change all default seed passwords before going live!"
-        warn "Seed accounts use password 'password123'. Verify with:"
-        warn "  $COMPOSE exec backend python -c \\"
-        warn "    'from app.scripts.seed_data import check_default_passwords;"
-        warn "     from app.core.database import SessionLocal;"
-        warn "     check_default_passwords(SessionLocal())'"
+        warn "IMPORTANT: Retrieve and securely distribute the generated passwords:"
+        warn "  $COMPOSE exec backend cat /app/seed_credentials.txt"
+        warn "Then DELETE the file:"
+        warn "  $COMPOSE exec backend rm /app/seed_credentials.txt"
+        warn "Force operators to rotate their passwords on first login."
     else
         warn "Skipping seed data — not a first-time deployment. Use --rebuild to force."
     fi
