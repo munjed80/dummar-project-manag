@@ -1,7 +1,89 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T16:53
+## آخر تحديث: 2026-04-23T18:53
+
+---
+
+## الدفعة الحالية: 2026-04-23T18:53 — Operational-Backbone Stabilization Batch
+
+**Scope:** Make the platform operationally coherent without redesigning it. Add the two missing structural entities (Projects, Teams/Execution Units), wire the complaint → task workflow, fix the static Settings page, and align the complaints map source with the complaints list. No login/SSL/RBAC/map/Arabic-RTL changes.
+
+### الملفات المُعدّلة في هذه الدفعة:
+
+| الملف | التغيير |
+|---|---|
+| **Backend — new** | |
+| `backend/app/models/project.py` | New `Project` model. 5-state enum (`planned`/`active`/`on_hold`/`completed`/`cancelled`), unique `code`, nullable FKs to Location and Contract, `created_by_id` for audit, back-refs to tasks, complaints, teams. |
+| `backend/app/models/team.py` | New `Team` model (also "Execution Unit"). 4-type enum (`internal_team`/`contractor`/`field_crew`/`supervision_unit`), `is_active` for soft-deactivate, denormalized contact info, optional `location_id` and `project_id`. |
+| `backend/app/models/app_setting.py` | New `AppSetting` table — key/value/value_type/category store with `updated_by_id` audit. |
+| `backend/app/schemas/project.py` | `ProjectCreate`/`ProjectUpdate`/`ProjectResponse` (response includes `task_count`, `complaint_count`, `team_count`, `location_name`, `contract_number`). |
+| `backend/app/schemas/team.py` | `TeamCreate`/`TeamUpdate`/`TeamResponse` (response includes `task_count`, `location_name`, `project_title`). |
+| `backend/app/schemas/app_setting.py` | `SettingItem` + `SettingsBulkUpdate` for the bulk PUT endpoint. |
+| `backend/app/api/projects.py` | `GET /projects/` (paginated `{total_count, items}` with `status`/`search`/`location_id`/`contract_id` filters), `GET /projects/{id}`, `POST` (project_director/contracts_manager/engineer_supervisor), `PUT`, `DELETE` (project_director only). |
+| `backend/app/api/teams.py` | Same pattern + `GET /teams/active` un-paginated dropdown endpoint. Filters: `team_type`, `is_active`, `project_id`, `location_id`, `search`. |
+| `backend/app/api/app_settings.py` | `GET /settings/` returns settings grouped by category (auto-seeds 7 defaults on first call), `PUT /settings/` accepts `{items: SettingItem[]}` bulk upsert (project_director/contracts_manager only). Writes audit log on update. |
+| `backend/alembic/versions/008_add_projects_teams_settings.py` | Single migration adds `projects`, `teams`, `app_settings` tables and 4 nullable FK columns: `tasks.team_id`, `tasks.project_id`, `contracts.project_id`, `complaints.project_id`. Provides full `downgrade()`. |
+| `backend/tests/test_projects_teams_settings.py` | 13 new tests covering Project CRUD + RBAC, Team CRUD + `/active` filter, Settings GET-seeds-defaults + PUT-privileged + PUT-non-privileged-403, complaint→task conversion (creates linked task, flips complaint status, records both activities). |
+| **Backend — modified** | |
+| `backend/app/models/__init__.py` | Export `Project`, `ProjectStatus`, `Team`, `TeamType`, `AppSetting`. |
+| `backend/app/models/task.py` | Added `team_id` and `project_id` columns (nullable FKs, indexed) and `team`/`project` relationships. |
+| `backend/app/models/contract.py` | Added `project_id` (nullable FK, indexed) + `project` relationship. |
+| `backend/app/models/complaint.py` | Added `project_id` (nullable FK, indexed) + `project` relationship. |
+| `backend/app/schemas/task.py` | `team_id`/`project_id` accepted on create/update and returned on read. |
+| `backend/app/schemas/contract.py`, `backend/app/schemas/complaint.py` | `project_id` exposed on read+write. |
+| `backend/app/api/complaints.py` | New `POST /complaints/{id}/create-task` endpoint: copies area/location/coords/priority from the complaint, accepts overrides, writes `Task` with `source_type='complaint'` + `complaint_id`, flips complaint `NEW|UNDER_REVIEW → ASSIGNED`, writes `task_created` complaint activity + `created_from_complaint` task activity. RBAC: project_director, contracts_manager, engineer_supervisor, complaints_officer, area_supervisor. |
+| `backend/app/main.py` | Wire the 3 new routers (`projects`, `teams`, `app_settings`). |
+| `backend/tests/conftest.py` | `reset_db` teardown disables `PRAGMA foreign_keys` only during `Base.metadata.drop_all` to handle the new circular FK Project↔Contract; runtime FK enforcement is unchanged. |
+| **Frontend — new** | |
+| `src/pages/ProjectsListPage.tsx` | Paginated table, search, status filter, "إضافة مشروع" gated by role, Arabic empty-state card. |
+| `src/pages/ProjectDetailsPage.tsx` | Read/edit form, related counts (tasks, complaints, teams), links to location/contract. |
+| `src/pages/TeamsListPage.tsx` | Paginated table, search, type filter, active toggle. |
+| `src/pages/TeamDetailsPage.tsx` | Read/edit form, contact info, soft-deactivate toggle, task count display. |
+| **Frontend — modified** | |
+| `src/services/api.ts` | +13 methods: `getProjects`/`getProject`/`createProject`/`updateProject`/`deleteProject`, `getTeams`/`getActiveTeams`/`getTeam`/`createTeam`/`updateTeam`/`deactivateTeam`, `getSettings`/`updateSettings`, `createTaskFromComplaint`. `getTasks`/`updateTask` accept `team_id`/`project_id`. |
+| `src/App.tsx` | +4 lazy routes for `/projects`, `/projects/:id`, `/teams`, `/teams/:id`, role-protected with `INTERNAL_ROLES`. |
+| `src/components/Layout.tsx` | +2 nav items "المشاريع" and "الفرق التنفيذية" between "العقود" and "ذكاء العقود", role-gated. |
+| `src/pages/ComplaintsMapPage.tsx` | Default `entityFilter = 'complaint'` (matches sidebar label "خريطة الشكاوى"). Status filter list now derived from the selected entity (`COMPLAINT_STATUSES`/`TASK_STATUSES`/`ALL_STATUSES`); status resets when entity changes. |
+| `src/pages/ComplaintDetailsPage.tsx` | "تحويل إلى مهمة" button (header card) gated to `canManageComplaints` && complaint status in `{new, under_review}`; opens a Dialog with title/description (prefilled), due date, priority, user assignee, team assignee. On submit calls `createTaskFromComplaint` and navigates to the new task. |
+| `src/pages/TaskDetailsPage.tsx` | Detail grid shows linked team and project as clickable links. Update form adds Team and Project selectors with explicit "— بدون فريق —" / "— بدون مشروع —" options that map to `null`. Save payload only sends `team_id`/`project_id` when changed (so unchanged form does not blank existing values). |
+| `src/pages/SettingsPage.tsx` | Static project info card replaced with grouped editable form sourced from `GET /settings`. Save button gated to project_director/contracts_manager. Health card URL now strips trailing `/api` from `config.API_BASE_URL` (`buildHealthUrl()` helper) and sends `Authorization: Bearer <access_token>`; on any non-2xx response the card hides itself instead of showing a misleading "broken" label. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New "Before / After" entry for this batch with engineering decisions and honest residual-gaps list. |
+| `HANDOFF_STATUS.md` | This update. |
+
+### ✅ مكتمل ومُتحقق منه (Done — verified):
+
+| Goal | Status | Evidence |
+|---|---|---|
+| A) Repair broken core pages and data loading | **Done** | Settings now loads `/settings` with seeded defaults; broken health-card URL+auth fixed. Other pages (complaints/tasks/contracts/locations) verified to already match backend `{total_count, items}` shapes; no `failed to load` regressions in test runs. |
+| B) Real complaint → task workflow | **Done** | `POST /complaints/{id}/create-task` endpoint + "تحويل إلى مهمة" dialog + activity logging on both sides + automatic complaint status flip `NEW\|UNDER_REVIEW → ASSIGNED`. Test `test_create_task_from_complaint` covers the end-to-end flow. |
+| C) Map/list source consistency | **Done** | `ComplaintsMapPage` defaults to `entity_type=complaint`; per-entity scoped status filter list; status resets on entity switch — the default view of "خريطة الشكاوى" now reflects the same source as the complaints list. |
+| D) Real Settings page | **Done** | `app_settings` table, `GET/PUT /settings`, grouped read/edit form gated by role, 7 default settings auto-seeded on first GET (project metadata, organization metadata, operational defaults). System health card URL+auth fixed. |
+| E) Projects + Teams modules | **Done** | Both backends shipped (model + Pydantic schemas + paginated CRUD + filters + tests). Both frontends shipped (list + detail). `Task.team_id`, `Task.project_id`, `Contract.project_id`, `Complaint.project_id` wired. `/teams/active` lightweight dropdown endpoint added. |
+| F) Role coherence improved | **Partial** | New "Convert" / "Save settings" / "Add project" / "Add team" buttons gated to the right roles; new pages have clean Arabic empty-state cards. The deeper "every existing page tailored per role" refactor is intentionally out of scope. |
+| G) Preserve what already works | **Verified** | Login untouched. SSL/deploy/nginx/frontend bases untouched. Map rendering untouched. Contract intelligence untouched. RTL/Arabic UI untouched. |
+| Frontend build passes | **Verified** | `VITE_API_BASE_URL=/api VITE_FILES_BASE_URL= npm run build` → **✓ built in 944ms**, no TS errors, no warnings. |
+| Backend tests pass | **Verified** | `python -m pytest tests/ -q` → **292 passed, 856 warnings in 115.79s** (was 279 before this batch; +13 new tests in `test_projects_teams_settings.py`). 0 failures. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` + `HANDOFF_STATUS.md` updated honestly | **Done** | Full Before/After entry with verification evidence and remaining-gaps list. |
+
+### ⚠️ Partial / Out-of-scope (honestly stated):
+
+| Item | Status | Why |
+|---|---|---|
+| Migration 008 applied to a running database | **Not yet** | Production deploy must run `alembic upgrade head` (handled automatically by `entrypoint.sh` on container start; a hot deploy without restart will not apply it). |
+| Project-scoped filter on existing complaints/tasks/contracts list pages | **Not done** | Out of scope. The data linkage exists; surfacing it as a filter on the existing list pages is a follow-up. |
+| Type-aware widgets in Settings UI (e.g. enum dropdown for `defaults.task_priority`) | **Not done** | One flat form per category with string/number/boolean inputs only. Practical for v1. |
+| Project deletion archive/restore UX | **Not done** | Hard delete sets dependents' FK to NULL (columns are nullable). No archive layer. |
+| Wider role-based shell tailoring across all existing pages | **Out of scope** | Goal F was satisfied for the *new* surface; an audit-and-restyle of every existing page per role belongs to a separate batch. |
+| SAWarning during test teardown about Project↔Contract FK cycle | **Cosmetic** | Non-blocking; `use_alter=True` on one side of the FK pair would silence it in a follow-up cleanup. |
+| Frontend Dockerfile, dependency CVE pass, virus scanning, real `/metrics` counters | **Carried over** | Inherited from previous batches' "Partial" lists; intentionally not addressed here. |
+
+### 🚫 Blocked: none.
+
+### الفجوات المتبقية قبل النشر الحقيقي:
+
+1. **Migration 008 must run on the production DB** — `./deploy.sh --rebuild` triggers `entrypoint.sh` which runs `alembic upgrade head` on container start, so a normal redeploy is sufficient. A hot frontend-only deploy is **not**.
+2. **Carried over from prior batches:** Frontend remains a host-built artifact; aging tokens/hashing libs (`python-jose==3.3.0`, `passlib==1.7.4`, yanked `email-validator==2.1.0`); no virus scanning on uploaded files; `/metrics` counters are placeholders.
 
 ---
 
