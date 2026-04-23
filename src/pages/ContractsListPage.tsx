@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
@@ -42,14 +42,32 @@ const PAGE_SIZE = 15;
 
 export default function ContractsListPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialProject = searchParams.get('project_id') || 'all';
   const [contracts, setContracts] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState(initialProject);
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (projectFilter === 'all') next.delete('project_id');
+    else next.set('project_id', projectFilter);
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectFilter]);
+
+  useEffect(() => {
+    apiService.getProjects({ limit: 200 })
+      .then((data) => setProjects(data.items || []))
+      .catch(() => setProjects([]));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -57,6 +75,7 @@ export default function ContractsListPage() {
     const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
     if (typeFilter !== 'all') params.contract_type = typeFilter;
+    if (projectFilter !== 'all') params.project_id = Number(projectFilter);
     if (search) params.search = search;
     apiService.getContracts(params)
       .then((data) => {
@@ -65,7 +84,9 @@ export default function ContractsListPage() {
       })
       .catch(() => setError('فشل تحميل العقود'))
       .finally(() => setLoading(false));
-  }, [statusFilter, typeFilter, search, page]);
+  }, [statusFilter, typeFilter, projectFilter, search, page]);
+
+  const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -105,6 +126,15 @@ export default function ContractsListPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={projectFilter} onValueChange={(v) => { setProjectFilter(v); setPage(0); }}>
+                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="المشروع" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع المشاريع</SelectItem>
+                  {projects.map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -130,6 +160,7 @@ export default function ContractsListPage() {
                       <TableHead className="text-right">العنوان</TableHead>
                       <TableHead className="text-right">المقاول</TableHead>
                       <TableHead className="text-right">النوع</TableHead>
+                      <TableHead className="text-right">المشروع</TableHead>
                       <TableHead className="text-right">القيمة</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">تاريخ الانتهاء</TableHead>
@@ -138,7 +169,7 @@ export default function ContractsListPage() {
                   <TableBody>
                     {contracts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                           لا توجد عقود
                         </TableCell>
                       </TableRow>
@@ -153,6 +184,7 @@ export default function ContractsListPage() {
                           <TableCell>{c.title}</TableCell>
                           <TableCell>{c.contractor_name}</TableCell>
                           <TableCell>{typeLabels[c.contract_type] || c.contract_type || '-'}</TableCell>
+                          <TableCell>{c.project_id ? (projectMap[c.project_id] || `#${c.project_id}`) : '-'}</TableCell>
                           <TableCell>{formatValue(c.contract_value)}</TableCell>
                           <TableCell>
                             <Badge className={statusColors[c.status] || 'bg-gray-100 text-gray-800'}>
@@ -191,6 +223,12 @@ export default function ContractsListPage() {
                         <span>{typeLabels[c.contract_type] || c.contract_type || '-'}</span>
                         <span>•</span>
                         <span>{formatValue(c.contract_value)}</span>
+                        {c.project_id && (
+                          <>
+                            <span>•</span>
+                            <span>{projectMap[c.project_id] || `مشروع #${c.project_id}`}</span>
+                          </>
+                        )}
                         {c.end_date && (
                           <>
                             <span>•</span>

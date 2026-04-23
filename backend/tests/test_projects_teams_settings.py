@@ -247,3 +247,120 @@ def test_create_task_from_complaint(client, director_token, db, sample_area):
     task = db.query(Task).filter(Task.id == data["id"]).first()
     assert task is not None
     assert task.complaint_id == complaint.id
+
+
+# ── Cross-entity filter tests (project_id, team_id) ──
+
+def test_list_complaints_filtered_by_project(client, director_token, db, sample_area):
+    """Complaints list endpoint must accept ?project_id and only return complaints linked to that project."""
+    from app.models.complaint import Complaint, ComplaintType
+    from app.models.project import Project
+
+    p1 = Project(title="Proj A", code="PA", status=ProjectStatus.ACTIVE)
+    p2 = Project(title="Proj B", code="PB", status=ProjectStatus.ACTIVE)
+    db.add_all([p1, p2])
+    db.commit()
+
+    c_a = Complaint(
+        tracking_number="CMPP00001", full_name="A", phone="0991111111",
+        complaint_type=ComplaintType.ROADS, description="x", status=ComplaintStatus.NEW,
+        area_id=sample_area.id, project_id=p1.id,
+    )
+    c_b = Complaint(
+        tracking_number="CMPP00002", full_name="B", phone="0992222222",
+        complaint_type=ComplaintType.ROADS, description="x", status=ComplaintStatus.NEW,
+        area_id=sample_area.id, project_id=p2.id,
+    )
+    c_none = Complaint(
+        tracking_number="CMPP00003", full_name="C", phone="0993333333",
+        complaint_type=ComplaintType.ROADS, description="x", status=ComplaintStatus.NEW,
+        area_id=sample_area.id,
+    )
+    db.add_all([c_a, c_b, c_none])
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {director_token}"}
+    resp = client.get(f"/complaints/?project_id={p1.id}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert data["items"][0]["tracking_number"] == "CMPP00001"
+
+
+def test_list_tasks_filtered_by_project_and_team(client, director_token, db):
+    """Tasks list endpoint must accept ?project_id and ?team_id."""
+    from app.models.task import Task, TaskStatus, TaskPriority
+    from app.models.project import Project
+    from app.models.team import Team
+
+    p1 = Project(title="Proj T", code="PT1", status=ProjectStatus.ACTIVE)
+    t_team = Team(name="Crew A", team_type=TeamType.FIELD_CREW, is_active=True)
+    other_team = Team(name="Crew B", team_type=TeamType.FIELD_CREW, is_active=True)
+    db.add_all([p1, t_team, other_team])
+    db.commit()
+
+    t1 = Task(title="T1", description="d", status=TaskStatus.PENDING, priority=TaskPriority.MEDIUM,
+              project_id=p1.id, team_id=t_team.id)
+    t2 = Task(title="T2", description="d", status=TaskStatus.PENDING, priority=TaskPriority.MEDIUM,
+              project_id=p1.id, team_id=other_team.id)
+    t3 = Task(title="T3", description="d", status=TaskStatus.PENDING, priority=TaskPriority.MEDIUM)
+    db.add_all([t1, t2, t3])
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {director_token}"}
+
+    # Filter by project only
+    resp = client.get(f"/tasks/?project_id={p1.id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["total_count"] == 2
+
+    # Filter by team only
+    resp = client.get(f"/tasks/?team_id={t_team.id}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert data["items"][0]["title"] == "T1"
+
+    # Filter by both
+    resp = client.get(f"/tasks/?project_id={p1.id}&team_id={other_team.id}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert data["items"][0]["title"] == "T2"
+
+
+def test_list_contracts_filtered_by_project(client, director_token, db, director_user):
+    """Contracts list endpoint must accept ?project_id."""
+    from datetime import date
+    from decimal import Decimal
+    from app.models.contract import Contract, ContractType, ContractStatus
+    from app.models.project import Project
+
+    p1 = Project(title="Proj C", code="PC1", status=ProjectStatus.ACTIVE)
+    p2 = Project(title="Proj D", code="PC2", status=ProjectStatus.ACTIVE)
+    db.add_all([p1, p2])
+    db.commit()
+
+    c1 = Contract(
+        contract_number="C-PRJ-1", title="X", contractor_name="Y",
+        contract_type=ContractType.CONSTRUCTION, contract_value=Decimal("1000"),
+        start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        scope_description="scope", status=ContractStatus.DRAFT,
+        created_by_id=director_user.id, project_id=p1.id,
+    )
+    c2 = Contract(
+        contract_number="C-PRJ-2", title="X2", contractor_name="Y2",
+        contract_type=ContractType.MAINTENANCE, contract_value=Decimal("2000"),
+        start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
+        scope_description="scope", status=ContractStatus.DRAFT,
+        created_by_id=director_user.id, project_id=p2.id,
+    )
+    db.add_all([c1, c2])
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {director_token}"}
+    resp = client.get(f"/contracts/?project_id={p1.id}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert data["items"][0]["contract_number"] == "C-PRJ-1"

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Spinner, ArrowLeft } from '@phosphor-icons/react';
+import { Spinner, ArrowLeft, ListChecks, ChatCircleDots, FileText, UsersThree } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -174,19 +174,68 @@ export default function ProjectDetailsPage() {
             )}
 
             {!editing && project && (
-              <div className="grid gap-4 md:grid-cols-3 pt-4 border-t">
-                <Card>
-                  <CardHeader><CardTitle className="text-sm">المهام</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{project.task_count || 0}</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle className="text-sm">الشكاوى</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{project.complaint_count || 0}</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader><CardTitle className="text-sm">الفرق</CardTitle></CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{project.team_count || 0}</p></CardContent>
-                </Card>
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="text-sm font-semibold text-muted-foreground">العناصر المرتبطة</h3>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Link to={`/tasks?project_id=${project.id}`} className="block">
+                    <Card className="hover:bg-muted/50 transition-colors h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <ListChecks size={16} />
+                          المهام
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{project.task_count || 0}</p>
+                        <p className="text-xs text-muted-foreground mt-1">عرض المهام في هذا المشروع</p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Link to={`/complaints?project_id=${project.id}`} className="block">
+                    <Card className="hover:bg-muted/50 transition-colors h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <ChatCircleDots size={16} />
+                          الشكاوى
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{project.complaint_count || 0}</p>
+                        <p className="text-xs text-muted-foreground mt-1">عرض الشكاوى المرتبطة</p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Link to={`/contracts?project_id=${project.id}`} className="block">
+                    <Card className="hover:bg-muted/50 transition-colors h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <FileText size={16} />
+                          العقود
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-2xl font-bold">{project.contract_count || 0}</p>
+                        <p className="text-xs text-muted-foreground mt-1">عرض عقود هذا المشروع</p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </div>
+                <div className="grid gap-4 md:grid-cols-1">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <UsersThree size={16} />
+                        الفرق المرتبطة
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">{project.team_count || 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        عدد فرق التنفيذ المرتبطة بهذا المشروع
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             )}
           </CardContent>

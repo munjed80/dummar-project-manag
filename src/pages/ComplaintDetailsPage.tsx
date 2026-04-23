@@ -57,10 +57,12 @@ export default function ComplaintDetailsPage() {
   const [areas, setAreas] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
@@ -86,13 +88,16 @@ export default function ComplaintDetailsPage() {
       apiService.getAreas().catch(() => []),
       apiService.getUsers({ limit: 100 }).catch(() => ({ items: [] })),
       apiService.getActiveTeams().catch(() => []),
+      apiService.getProjects({ limit: 200 }).catch(() => ({ items: [] })),
     ])
-      .then(([complaintData, activitiesData, areasData, usersData, teamsData]) => {
+      .then(([complaintData, activitiesData, areasData, usersData, teamsData, projectsData]) => {
         setComplaint(complaintData);
         setActivities(Array.isArray(activitiesData) ? activitiesData : []);
         setAreas(areasData);
         setUsers(usersData.items || []);
         setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setProjects((projectsData as any).items || []);
+        setProjectId(complaintData?.project_id ? String(complaintData.project_id) : '');
       })
       .catch(() => setError('فشل تحميل بيانات الشكوى'))
       .finally(() => setLoading(false));
@@ -108,6 +113,11 @@ export default function ComplaintDetailsPage() {
       if (newStatus) updateData.status = newStatus;
       if (notes) updateData.notes = notes;
       if (assignee) updateData.assigned_to_id = Number(assignee);
+      // Project: send only when value differs from persisted complaint, so an
+      // unchanged form does not blank the existing project link.
+      if (projectId !== (complaint?.project_id ? String(complaint.project_id) : '')) {
+        updateData.project_id = projectId ? Number(projectId) : null;
+      }
       await apiService.updateComplaint(Number(id), updateData);
       toast.success('تم تحديث الشكوى بنجاح');
       setNewStatus('');
@@ -254,6 +264,11 @@ export default function ComplaintDetailsPage() {
               {detail('الموقع', complaint.location_text)}
               {complaint.latitude && complaint.longitude && detail('الإحداثيات', `${complaint.latitude}, ${complaint.longitude}`)}
               {detail('المسؤول المعين', assignedUser ? assignedUser.full_name : '-')}
+              {detail('المشروع', complaint.project_id ? (
+                <Link to={`/projects/${complaint.project_id}`} className="text-primary hover:underline">
+                  {projects.find((p: any) => p.id === complaint.project_id)?.title || `#${complaint.project_id}`}
+                </Link>
+              ) : '-')}
               {detail('تاريخ الإنشاء', complaint.created_at ? format(new Date(complaint.created_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ التحديث', complaint.updated_at ? format(new Date(complaint.updated_at), 'yyyy/MM/dd HH:mm') : '-')}
               {complaint.resolved_at && detail('تاريخ الحل', format(new Date(complaint.resolved_at), 'yyyy/MM/dd HH:mm'))}
@@ -328,6 +343,18 @@ export default function ComplaintDetailsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">المشروع المرتبط</label>
+                <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بدون مشروع —</SelectItem>
+                    {projects.map((p: any) => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <Textarea
               placeholder="ملاحظات..."
@@ -342,7 +369,11 @@ export default function ComplaintDetailsPage() {
                   handleStatusUpdate();
                 }
               }}
-              disabled={(!newStatus && !notes && !assignee) || updating}
+              disabled={
+                (!newStatus && !notes && !assignee &&
+                 projectId === (complaint?.project_id ? String(complaint.project_id) : '')) ||
+                updating
+              }
             >
               {updating ? <Spinner className="animate-spin ml-2" size={16} /> : null}
               تحديث الشكوى

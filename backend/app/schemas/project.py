@@ -37,6 +37,7 @@ class ProjectResponse(ProjectBase):
     task_count: int = 0
     complaint_count: int = 0
     team_count: int = 0
+    contract_count: int = 0
     location_name: Optional[str] = None
     contract_number: Optional[str] = None
 

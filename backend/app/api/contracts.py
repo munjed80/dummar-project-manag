@@ -90,6 +90,7 @@ def list_contracts(
     limit: int = 100,
     status_filter: Optional[ContractStatus] = None,
     contract_type: Optional[ContractType] = None,
+    project_id: Optional[int] = None,
     search: Optional[str] = None,
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
@@ -101,6 +102,9 @@ def list_contracts(
 
     if contract_type:
         query = query.filter(Contract.contract_type == contract_type)
+
+    if project_id:
+        query = query.filter(Contract.project_id == project_id)
 
     if search:
         search_term = f"%{search}%"
