@@ -35,6 +35,33 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 step()    { echo -e "\n${CYAN}▸ $*${NC}"; }
 
+# Detect whether a Let's Encrypt cert file exists. We CANNOT rely on a plain
+# `[ -f "$cert" ]` because /etc/letsencrypt/{live,archive} are mode 0700
+# root:root on a standard install. When this script is run by the typical
+# non-root deploy user (who only needs docker-socket access, not full root),
+# that test silently returns false even when the cert is present. The
+# resulting failure mode was: SSL self-heal skipped → nginx.conf stays
+# HTTP-only after `git pull` → no `listen 443 ssl` → docker-proxy resets
+# every connection on 443 → curl reports SSL_SYSCALL and Cloudflare
+# returns 521.
+#
+# Fall back to the docker daemon (which always has root via the socket) by
+# running a tiny throw-away container against the same nginx:alpine image
+# the stack already uses. The cert path is passed via env (CERT_PATH) so
+# it is not subject to shell interpolation/quoting inside the container.
+cert_present() {
+    local cert="$1"
+    [ -r "$cert" ] && return 0
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        docker run --rm \
+            -e CERT_PATH="$cert" \
+            -v /etc/letsencrypt:/etc/letsencrypt:ro \
+            --entrypoint sh nginx:alpine \
+            -c '[ -f "$CERT_PATH" ]' >/dev/null 2>&1 && return 0
+    fi
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
@@ -211,9 +238,13 @@ fi
 
 # If --domain was specified, update CORS_ORIGINS in .env
 if [ -n "$DOMAIN" ]; then
+    LE_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+
     if [ -f .env ]; then
-        # Determine scheme (https if certs exist, http otherwise)
-        if [ -d certs ] || [ -d /etc/letsencrypt/live/"$DOMAIN" ]; then
+        # Determine scheme (https if certs exist, http otherwise).
+        # cert_present() (defined near the top) handles the non-root /
+        # 0700-permissions case via a docker fallback.
+        if [ -d certs ] || cert_present "$LE_CERT"; then
             SCHEME="https"
         else
             SCHEME="http"
@@ -232,8 +263,7 @@ if [ -n "$DOMAIN" ]; then
     # This makes  `git pull && ./deploy.sh --rebuild --domain=X`  idempotent
     # for HTTPS — no hidden manual edits required on the VPS.
     # ---------------------------------------------------------------------
-    LE_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
-    if [ -f "$LE_CERT" ] && [ -f nginx-ssl.conf ]; then
+    if cert_present "$LE_CERT" && [ -f nginx-ssl.conf ]; then
         # Detect whether the live nginx.conf is already SSL-enabled. We look
         # for the `listen 443 ssl` directive AND the substituted server_name
         # (i.e. DOMAIN_PLACEHOLDER has been replaced with the real domain).
@@ -254,7 +284,7 @@ if [ -n "$DOMAIN" ]; then
         else
             info "nginx.conf already configured for HTTPS on ${DOMAIN} — no change."
         fi
-    elif [ -n "$DOMAIN" ] && [ ! -f "$LE_CERT" ]; then
+    elif [ -n "$DOMAIN" ] && ! cert_present "$LE_CERT"; then
         info "No Let's Encrypt cert at ${LE_CERT} yet — staying on HTTP nginx.conf."
         info "Run  sudo ./ssl-setup.sh ${DOMAIN} --auto  once to enable HTTPS."
     fi
@@ -405,10 +435,67 @@ check_endpoint "Frontend (SPA)"     "$BASE_URL/"
 check_endpoint "API health/ready"   "$BASE_URL/api/health/ready"  200
 check_endpoint "API root"            "$BASE_URL/api/"              200
 
+# ---------------------------------------------------------------------------
+# Local HTTPS acceptance probe — the test that previously caught no one out.
+#
+# We trigger this whenever the loaded nginx.conf is actually SSL-enabled
+# (i.e. has a `listen 443 ssl` block). Checking the on-disk nginx.conf is
+# the most reliable signal — it works for non-root operators and makes no
+# assumptions about /etc/letsencrypt permissions, which were the original
+# trip-wire that masked this regression.
+#
+# This check runs ON the VPS against `https://localhost`, so it bypasses
+# Cloudflare entirely and exercises the origin TLS stack directly. Without
+# it, an HTTP-only nginx.conf would happily pass the public HTTPS probe via
+# a cached/stale Cloudflare response or be silently absent (the previous
+# behavior), letting CF return 521 in production.
+# ---------------------------------------------------------------------------
+SSL_ENABLED=false
+if [ -f nginx.conf ] && grep -q 'listen 443 ssl' nginx.conf; then
+    SSL_ENABLED=true
+fi
+
+if [ "$SSL_ENABLED" = true ]; then
+    HTTPS_PORT_LOCAL=$(grep '^HTTPS_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "443")
+    HTTPS_PORT_LOCAL="${HTTPS_PORT_LOCAL:-443}"
+
+    info "SSL is enabled in nginx.conf — verifying origin TLS on localhost…"
+
+    # Probe https://localhost directly. -k because the cert is for $DOMAIN,
+    # not "localhost". A working TLS stack returns 200/301/etc.; a broken
+    # one (no listen 443, missing cert, bad config) yields curl exit code
+    # ≠0 and HTTP 000 — which we treat as a hard deploy failure so the
+    # SSL_SYSCALL / Cloudflare-521 regression cannot pass silently again.
+    https_status=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
+        "https://localhost:${HTTPS_PORT_LOCAL}/" 2>/dev/null || echo "000")
+    if [ "$https_status" != "000" ] && [ "$https_status" != "521" ]; then
+        success "HTTPS origin (https://localhost) → HTTP $https_status"
+        PASS=$((PASS + 1))
+    else
+        error "HTTPS origin (https://localhost) → curl failed (status=$https_status)"
+        error "  nginx.conf has 'listen 443 ssl' but the TLS handshake on the"
+        error "  origin failed. Check 'docker compose logs nginx' and verify"
+        error "  /etc/letsencrypt/live/${DOMAIN:-your-domain}/ contains fullchain.pem"
+        error "  and privkey.pem and is mounted into the nginx container."
+        FAIL=$((FAIL + 1))
+    fi
+
+    # HTTP → HTTPS redirect on the origin (catches accidental HTTP-only
+    # regressions where /nginx-health works but the catch-all is missing).
+    redirect_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+        -H "Host: ${DOMAIN:-localhost}" "$BASE_URL/" 2>/dev/null || echo "000")
+    if [ "$redirect_status" = "301" ] || [ "$redirect_status" = "302" ]; then
+        success "HTTP → HTTPS redirect on origin → HTTP $redirect_status"
+        PASS=$((PASS + 1))
+    else
+        warn "HTTP → HTTPS redirect on origin → HTTP $redirect_status (expected 301/302)"
+    fi
+fi
+
 # When --domain was passed AND a Let's Encrypt cert exists, also probe the
 # real public HTTPS endpoint. This catches "nginx is healthy locally but TLS
 # is broken" regressions (e.g. cert mount path wrong, HSTS issue).
-if [ -n "$DOMAIN" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+if [ -n "$DOMAIN" ] && cert_present "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
     check_endpoint "HTTPS frontend"      "https://${DOMAIN}/"                200
     check_endpoint "HTTPS health/ready"  "https://${DOMAIN}/api/health/ready" 200
 fi

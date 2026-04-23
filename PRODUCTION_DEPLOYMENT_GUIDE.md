@@ -871,6 +871,39 @@ exists for the domain but the on-disk `nginx.conf` is the HTTP-only repo
 template (because `git pull` overwrote it), it automatically re-applies
 `nginx-ssl.conf`. You will not silently lose HTTPS after a `git pull`.
 
+> **About the cert detection (non-root deploys).** `/etc/letsencrypt/{live,archive}`
+> are typically `0700 root:root`. An earlier version of the self-heal used
+> a plain `[ -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem ]` test, which
+> silently returned false when `deploy.sh` was run by an unprivileged
+> deploy user (the standard pattern — only docker-socket access is
+> needed). The self-heal was then skipped, `nginx.conf` stayed HTTP-only,
+> nothing inside the container listened on 443, docker-proxy reset every
+> connection on 443, and `curl -k -I https://localhost` failed with
+> `SSL_SYSCALL` (Cloudflare in turn returned 521). The current
+> implementation falls back to a tiny `docker run` against the existing
+> `nginx:alpine` image — the docker daemon runs as root via the socket,
+> so the cert is detected reliably regardless of who runs `deploy.sh`.
+
+### Verifying HTTPS after a deploy
+
+`deploy.sh` now runs an **origin TLS probe** as part of its post-deploy
+verification whenever `nginx.conf` contains `listen 443 ssl`:
+
+```bash
+curl -sk -o /dev/null -w '%{http_code}' https://localhost/
+```
+
+If this returns `000` (curl could not complete the handshake) the deploy
+is marked failed. This is the canonical local acceptance test — it bypasses
+Cloudflare entirely and exercises the origin TLS stack directly. You can
+re-run it manually at any time:
+
+```bash
+curl -k -I https://localhost          # origin TLS handshake
+curl -I  http://localhost             # HTTP→HTTPS redirect (or SPA on HTTP-only)
+curl -I  https://your-domain.example  # public path (through Cloudflare)
+```
+
 ### Manual setup (advanced — only if `--auto` is unsuitable)
 
 If you need to run the steps individually (e.g. webroot mode, or you
