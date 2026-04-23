@@ -87,7 +87,15 @@ services:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Active nginx config is selected by env var so HTTPS enablement does
+      # NOT require mutating any git-tracked file. Default = the HTTP-only
+      # ./nginx.conf. After ssl-setup.sh --auto runs, .env contains
+      # NGINX_CONF_FILE=./nginx-active.conf (a gitignored, rendered copy of
+      # nginx-ssl.conf with the real domain substituted). Both .env and
+      # nginx-active.conf survive `git reset --hard origin/main`, so a
+      # subsequent `git pull && ./deploy.sh --rebuild` keeps HTTPS alive
+      # instead of silently reverting nginx to the HTTP-only tracked config.
+      - ${NGINX_CONF_FILE:-./nginx.conf}:/etc/nginx/conf.d/default.conf:ro
       - ./dist:/usr/share/nginx/html:ro
       - backend_uploads:/usr/share/nginx/uploads:ro
       # SSL certificates — mounted unconditionally so HTTPS enablement does

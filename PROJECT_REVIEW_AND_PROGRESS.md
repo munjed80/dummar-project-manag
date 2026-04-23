@@ -11,6 +11,45 @@
 
 ## سجل الدفعات (Batch Log)
 
+### الدفعة: 2026-04-23T18:11 — Permanent SSL/Deployment-Alignment Batch (HTTPS survives git reset + rebuild)
+
+**قبل البدء (Before Current Batch):**
+- **الطابع الزمني:** 2026-04-23T18:11
+- **فهم النظام الحالي (verified by inspection of real code, not docs):**
+  - The 2026-04-23T16:53 batch fixed the frontend bundle, the SSL volume mounts, and the healthcheck target — all genuinely needed. But it left **one** load-bearing gap that re-broke HTTPS on every `git reset --hard origin/main` + `./deploy.sh --rebuild`:
+    - `docker-compose.yml:90` mounts `./nginx.conf:/etc/nginx/conf.d/default.conf:ro` — i.e. it directly mounts the **git-tracked** `nginx.conf`, which is the HTTP-only config (no `listen 443 ssl`, no cert directives).
+    - `ssl-setup.sh:260` (the `--auto` path) does `cp nginx-ssl.conf nginx.conf` followed by `sed -i …`. It **overwrites the tracked `nginx.conf` file in place** with the SSL config.
+    - On the live VPS this works once: `nginx.conf` now contains the SSL block, nginx serves 443, Cloudflare is happy.
+    - The first time the operator runs `git reset --hard origin/main` (or `git pull` pulls a change to `nginx.conf`), git restores the HTTP-only `nginx.conf`. nginx reloads, port 443 stops being served, Cloudflare gets connection-refused on origin → **521**. Exactly the symptom reported.
+    - Re-running `ssl-setup.sh --auto` fixes it again — but only by re-mutating the tracked file, which is the same time bomb. The repo never actually represents the SSL deployment.
+  - Secondary observations:
+    - `nginx-ssl.conf` already has `/nginx-health` defined in **both** the HTTP and HTTPS server blocks (HTTP block has it *before* the catch-all 301), and `docker-compose.yml` healthcheck already targets `http://localhost:80/nginx-health`. The healthcheck side of the previous batch is correct and should be preserved as-is.
+    - `${LETSENCRYPT_DIR:-/etc/letsencrypt}` and `${CERTBOT_WEBROOT:-/var/www/certbot}` mounts are unconditional. Good — keep.
+    - `.env` is gitignored (`.gitignore:27`). It survives `git reset --hard`. This is the lever to use: persist SSL state in `.env`, not in tracked files.
+    - `certs/` is also untracked but is currently created as host-side symlinks by `ssl-setup.sh`; no code path actually requires it for the in-container nginx (the compose mount goes straight to `/etc/letsencrypt`). Mark it ignored defensively.
+    - The frontend `/api`, `FILES_BASE_URL`, `deploy.sh` build-env pinning, and the `localhost:8000` leak-guard from the previous batch must not be touched.
+- **أهداف الدفعة (this batch's goals):**
+  - A) Stop mutating the tracked `nginx.conf`. Instead, select the active config via an env-var-driven mount (`${NGINX_CONF_FILE:-./nginx.conf}`) so the default is HTTP-only and SSL is opt-in *without* editing tracked files.
+  - B) Have `ssl-setup.sh --auto` write a **gitignored** `nginx-active.conf` (rendered from `nginx-ssl.conf` with the domain substituted) and persist `NGINX_CONF_FILE=./nginx-active.conf` + `DOMAIN=<domain>` to `.env`. Both survive `git reset --hard`.
+  - C) Make `deploy.sh` self-heal: if `.env` references `nginx-active.conf` but the file is missing (e.g. a brand-new clone with the old `.env`), regenerate it from `nginx-ssl.conf` using the persisted `DOMAIN`. Same when certs already exist for `$DOMAIN` and the operator just runs `./deploy.sh --rebuild --domain=…`.
+  - D) Keep `nginx.conf` as the canonical HTTP-only fallback (untouched by SSL flow). Keep `nginx-ssl.conf` as the canonical SSL **template** (with `DOMAIN_PLACEHOLDER`).
+  - E) Preserve everything from the previous batch: `/api` default, `FILES_BASE_URL`, `localhost:8000` leak guard, unconditional Let's Encrypt mounts, `/nginx-health` healthcheck.
+  - F) Add `nginx-active.conf` and `certs/` to `.gitignore`.
+- **الملفات المتوقع تعديلها:**
+  - `docker-compose.yml` — switch nginx config mount to `${NGINX_CONF_FILE:-./nginx.conf}`.
+  - `ssl-setup.sh` — stop overwriting `nginx.conf`; render `nginx-active.conf` from `nginx-ssl.conf`; persist `NGINX_CONF_FILE` + `DOMAIN` to `.env`; idempotent.
+  - `deploy.sh` — persist `DOMAIN`; auto-regenerate missing `nginx-active.conf`; auto-detect existing certs and switch to SSL mode without manual `ssl-setup.sh` re-run.
+  - `.gitignore` — add `nginx-active.conf`, `certs/`.
+  - `PROJECT_REVIEW_AND_PROGRESS.md`, `HANDOFF_STATUS.md` — honest before/after.
+- **المخاطر / الافتراضات:**
+  - Operators with an older `.env` that has neither `NGINX_CONF_FILE` nor `DOMAIN` keep the HTTP-only behavior by default — backward compatible.
+  - Operators on the live VPS who currently have a manually-mutated `nginx.conf` lose nothing: after this batch, `ssl-setup.sh --auto` will write `nginx-active.conf` next to it; the next `deploy.sh --rebuild` will use the new file, and the tracked `nginx.conf` is no longer touched.
+  - No product behavior, no new features, no Arabic/RTL UI changes, no API surface changes.
+
+**بعد الانتهاء (After Current Batch):** _(filled in at end of batch)_
+
+---
+
 ### الدفعة: 2026-04-23T16:53 — Deployment-Alignment & Production-Stability Batch (frontend API/files bases, deploy/env, nginx/SSL, healthcheck)
 
 **قبل البدء (Before Current Batch):**

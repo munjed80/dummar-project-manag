@@ -31,5 +31,10 @@ pids
 .file-manifest
 .devcontainer/
 
+# SSL-deployment runtime artifacts (rendered from nginx-ssl.conf by
+# ssl-setup.sh / deploy.sh — never commit; they bake in the domain name).
+nginx-active.conf
+certs/
+
 .spark-workbench-id
 __pycache__/

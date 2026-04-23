@@ -220,7 +220,106 @@ if [ -n "$DOMAIN" ]; then
         fi
         sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=${SCHEME}://${DOMAIN}|" .env
         success "CORS_ORIGINS set to ${SCHEME}://${DOMAIN}"
+
+        # Persist DOMAIN in .env so subsequent deploys (and the SSL self-heal
+        # step below) can recover the active domain even when --domain is not
+        # passed again. .env is gitignored and survives `git reset --hard`.
+        if grep -qE '^DOMAIN=' .env; then
+            sed -i "s|^DOMAIN=.*|DOMAIN=${DOMAIN}|" .env
+        else
+            echo "DOMAIN=${DOMAIN}" >> .env
+        fi
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# SSL config self-heal
+# ---------------------------------------------------------------------------
+# The active nginx config is selected by NGINX_CONF_FILE in .env (see
+# docker-compose.yml). When SSL has been set up via ssl-setup.sh --auto,
+# .env contains NGINX_CONF_FILE=./nginx-active.conf — a gitignored file
+# rendered from the tracked nginx-ssl.conf template with the real domain
+# substituted. Both .env and nginx-active.conf survive `git reset --hard`,
+# so HTTPS persists across rebuilds.
+#
+# Two recovery paths handled here so the operator never has to re-run
+# ssl-setup.sh just to bring HTTPS back after a reset:
+#
+#   1. .env says NGINX_CONF_FILE=./nginx-active.conf but the file is
+#      missing (e.g. a fresh clone, or someone deleted it). Re-render it
+#      from nginx-ssl.conf using the persisted DOMAIN.
+#
+#   2. Certs exist for $DOMAIN under /etc/letsencrypt/live but .env still
+#      points at the HTTP-only nginx.conf (e.g. operator just ran
+#      `./deploy.sh --rebuild --domain=matrixtop.com` after a reset and
+#      certs are still on disk). Switch to the SSL config and pin .env.
+step "Checking SSL config state"
+
+ENV_NGINX_CONF=""
+ENV_DOMAIN=""
+if [ -f .env ]; then
+    ENV_NGINX_CONF=$(grep -E '^NGINX_CONF_FILE=' .env | tail -1 | cut -d= -f2- || true)
+    ENV_DOMAIN=$(grep -E '^DOMAIN=' .env | tail -1 | cut -d= -f2- || true)
+fi
+# Effective domain for SSL detection: --domain flag wins, then .env DOMAIN.
+EFFECTIVE_DOMAIN="${DOMAIN:-$ENV_DOMAIN}"
+
+render_nginx_active() {
+    # render_nginx_active <domain> — render nginx-ssl.conf into the
+    # gitignored nginx-active.conf with the domain substituted. Idempotent.
+    local d="$1"
+    if [ -z "$d" ]; then
+        warn "Cannot render nginx-active.conf: no domain known (set DOMAIN in .env or pass --domain=...)."
+        return 1
+    fi
+    if [ ! -f nginx-ssl.conf ]; then
+        warn "Cannot render nginx-active.conf: nginx-ssl.conf template missing."
+        return 1
+    fi
+    sed "s/DOMAIN_PLACEHOLDER/${d}/g" nginx-ssl.conf > nginx-active.conf
+    success "Rendered nginx-active.conf for ${d} (gitignored runtime config)."
+    return 0
+}
+
+upsert_env_var() {
+    # upsert_env_var <KEY> <VALUE>
+    local key="$1"; local value="$2"
+    [ -f .env ] || return 0
+    if grep -qE "^${key}=" .env; then
+        sed -i "s|^${key}=.*|${key}=${value}|" .env
+    else
+        printf '%s=%s\n' "$key" "$value" >> .env
+    fi
+}
+
+# Path 1: .env says SSL is active but the rendered file is missing.
+if [ "$ENV_NGINX_CONF" = "./nginx-active.conf" ] && [ ! -f nginx-active.conf ]; then
+    info "SSL config selected in .env but nginx-active.conf is missing — regenerating."
+    if render_nginx_active "$EFFECTIVE_DOMAIN"; then
+        success "HTTPS config restored without re-running ssl-setup.sh."
+    else
+        warn "Could not restore SSL config automatically. Falling back to HTTP-only."
+        warn "Run: sudo ./ssl-setup.sh ${EFFECTIVE_DOMAIN:-<your-domain>} --auto"
+        # Unset the broken pointer so docker-compose falls back to nginx.conf
+        # instead of failing to mount a missing file.
+        upsert_env_var NGINX_CONF_FILE "./nginx.conf"
+    fi
+# Path 2: certs exist for $EFFECTIVE_DOMAIN but .env still points at HTTP-only.
+elif [ -n "$EFFECTIVE_DOMAIN" ] \
+     && [ -d "/etc/letsencrypt/live/${EFFECTIVE_DOMAIN}" ] \
+     && [ -f "/etc/letsencrypt/live/${EFFECTIVE_DOMAIN}/fullchain.pem" ] \
+     && [ "$ENV_NGINX_CONF" != "./nginx-active.conf" ]; then
+    info "Let's Encrypt cert found for ${EFFECTIVE_DOMAIN} but SSL config not active — enabling."
+    if render_nginx_active "$EFFECTIVE_DOMAIN"; then
+        upsert_env_var NGINX_CONF_FILE "./nginx-active.conf"
+        upsert_env_var CORS_ORIGINS    "https://${EFFECTIVE_DOMAIN}"
+        success "HTTPS auto-enabled (NGINX_CONF_FILE pinned in .env)."
+    fi
+elif [ "$ENV_NGINX_CONF" = "./nginx-active.conf" ] && [ -f nginx-active.conf ]; then
+    success "SSL config active: ./nginx-active.conf (rendered for ${ENV_DOMAIN:-unknown})."
+else
+    info "No SSL config selected — nginx will serve HTTP-only via ./nginx.conf."
+    info "  To enable HTTPS: sudo ./ssl-setup.sh <your-domain> --auto"
 fi
 
 # Source .env for local use (read only needed vars, not sensitive ones)

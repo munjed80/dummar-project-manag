@@ -16,10 +16,14 @@
 #   4. Run as root or with sudo.
 #
 # When --auto is used, the script will:
-#   - Copy nginx-ssl.conf → nginx.conf with domain replaced
-#   - Uncomment /etc/letsencrypt volume in docker-compose.yml
-#   - Update CORS_ORIGINS in .env to https://
-#   - Restart the nginx container
+#   - Render nginx-ssl.conf into a gitignored nginx-active.conf with the
+#     real domain substituted (the tracked nginx.conf is NEVER overwritten,
+#     so `git reset --hard origin/main` no longer breaks HTTPS).
+#   - Persist NGINX_CONF_FILE=./nginx-active.conf and DOMAIN=<domain> in .env
+#     so docker-compose (and the next ./deploy.sh --rebuild) automatically
+#     keep using the SSL config without any further manual edits.
+#   - Update CORS_ORIGINS in .env to https://<domain>.
+#   - Restart the nginx container.
 # =============================================================================
 
 set -euo pipefail
@@ -256,17 +260,51 @@ fi
 if [ "$AUTO_CONFIGURE" = true ]; then
     step "Auto-configuring nginx for SSL"
 
-    # 1. Copy SSL config and replace domain placeholder
-    cp nginx-ssl.conf nginx.conf
-    sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" nginx.conf
-    success "nginx.conf updated with SSL config for $DOMAIN."
+    # 1. Render the SSL nginx config into a gitignored runtime file. The
+    #    tracked nginx.conf is left ALONE so a future `git reset --hard
+    #    origin/main` cannot revert nginx to HTTP-only behind the operator's
+    #    back. nginx-active.conf is listed in .gitignore.
+    if [ ! -f nginx-ssl.conf ]; then
+        error "nginx-ssl.conf template is missing — cannot render nginx-active.conf."
+        exit 1
+    fi
+    sed "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" nginx-ssl.conf > nginx-active.conf
+    success "nginx-active.conf rendered for $DOMAIN (gitignored runtime file)."
 
-    # 2. Ensure letsencrypt volumes are active in docker-compose.yml.
-    #    The current repo mounts them unconditionally (LETSENCRYPT_DIR /
-    #    CERTBOT_WEBROOT), so nothing to patch here on fresh checkouts.
-    #    The legacy commented-out form is handled for backward compatibility
-    #    with older clones that may still have the commented mounts.
-    if grep -q '# - /etc/letsencrypt:/etc/letsencrypt:ro' docker-compose.yml; then
+    # 2. Persist the SSL state in .env so docker-compose and deploy.sh keep
+    #    selecting the SSL config across rebuilds. .env is gitignored and
+    #    therefore survives `git reset --hard origin/main`.
+    upsert_env() {
+        # upsert_env <KEY> <VALUE> — replaces existing KEY=… line in .env or
+        # appends it. Idempotent. No-op if .env is missing (deploy.sh creates
+        # it on first run).
+        local key="$1"
+        local value="$2"
+        [ -f .env ] || return 0
+        if grep -qE "^${key}=" .env; then
+            # Use a sed delimiter unlikely to appear in the value
+            sed -i "s|^${key}=.*|${key}=${value}|" .env
+        else
+            printf '%s=%s\n' "$key" "$value" >> .env
+        fi
+    }
+
+    if [ ! -f .env ]; then
+        warn ".env not found — SSL state cannot be persisted yet."
+        warn "Run ./deploy.sh first to generate .env, then re-run ssl-setup.sh."
+    else
+        upsert_env NGINX_CONF_FILE "./nginx-active.conf"
+        upsert_env DOMAIN "$DOMAIN"
+        upsert_env CORS_ORIGINS "https://$DOMAIN"
+        success ".env updated: NGINX_CONF_FILE, DOMAIN, CORS_ORIGINS pinned for HTTPS."
+    fi
+
+    # 3. Backward-compatibility: older clones of docker-compose.yml had the
+    #    /etc/letsencrypt mount commented out and relied on a sed patch here.
+    #    Current compose mounts them unconditionally via LETSENCRYPT_DIR /
+    #    CERTBOT_WEBROOT — nothing to patch on fresh checkouts. We still
+    #    handle the legacy form for operators upgrading from older versions.
+    if grep -q '# - /etc/letsencrypt:/etc/letsencrypt:ro' docker-compose.yml 2>/dev/null; then
         sed -i 's|# - /etc/letsencrypt:/etc/letsencrypt:ro|- /etc/letsencrypt:/etc/letsencrypt:ro|' docker-compose.yml
         sed -i 's|# - /var/www/certbot:/var/www/certbot:ro|- /var/www/certbot:/var/www/certbot:ro|' docker-compose.yml
         success "docker-compose.yml: legacy commented letsencrypt volumes activated."
@@ -274,23 +312,26 @@ if [ "$AUTO_CONFIGURE" = true ]; then
         info "docker-compose.yml: letsencrypt volumes already active (mounted unconditionally)."
     fi
 
-    # 3. Update CORS_ORIGINS in .env to use HTTPS
-    if [ -f .env ]; then
-        if grep -q "^CORS_ORIGINS=http://" .env; then
-            sed -i "s|^CORS_ORIGINS=http://.*|CORS_ORIGINS=https://$DOMAIN|" .env
-            success ".env: CORS_ORIGINS updated to https://$DOMAIN."
-        elif grep -q "^CORS_ORIGINS=https://" .env; then
-            info ".env: CORS_ORIGINS already uses HTTPS."
-        else
-            echo "CORS_ORIGINS=https://$DOMAIN" >> .env
-            success ".env: CORS_ORIGINS added as https://$DOMAIN."
-        fi
+    # 4. Defensive guard: if a previous run of an older ssl-setup.sh had
+    #    overwritten the tracked nginx.conf with SSL content, warn the
+    #    operator. We do NOT auto-revert it — that's a destructive action
+    #    and the operator may be mid-merge. nginx-active.conf is what the
+    #    container will actually use after this run; nginx.conf is now only
+    #    the HTTP-only fallback when NGINX_CONF_FILE is unset.
+    if grep -q 'listen 443 ssl' nginx.conf 2>/dev/null; then
+        warn "nginx.conf in the working tree contains 'listen 443 ssl' — likely"
+        warn "a leftover from an older ssl-setup.sh that overwrote the tracked"
+        warn "file. The container will now use nginx-active.conf instead, so"
+        warn "this is harmless. To restore the canonical HTTP-only nginx.conf:"
+        warn "  git checkout -- nginx.conf"
     fi
 
-    # 4. Restart nginx container
+    # 5. Restart nginx container to pick up the new config mount.
     step "Restarting nginx with SSL"
     if [ -f docker-compose.yml ]; then
-        docker compose up -d --build nginx 2>/dev/null && success "nginx restarted with SSL." || warn "Failed to restart nginx. Run: docker compose up -d --build nginx"
+        # Re-create the container so the new NGINX_CONF_FILE env var takes
+        # effect (a plain restart would keep the old volume binding).
+        docker compose up -d --force-recreate nginx 2>/dev/null && success "nginx restarted with SSL." || warn "Failed to restart nginx. Run: docker compose up -d --force-recreate nginx"
     fi
 fi
 
@@ -303,20 +344,23 @@ if [ "$AUTO_CONFIGURE" = false ]; then
     echo -e "  ${GREEN}✓ SSL setup complete${NC}"
     echo "=========================================="
     echo ""
-    echo "  Next steps (or re-run with --auto to do these automatically):"
+    echo "  Next steps (or re-run with --auto to do all of these automatically):"
     echo ""
-    echo "  1. Copy the SSL nginx config into place:"
-    echo "     cp nginx-ssl.conf nginx.conf"
+    echo "  1. Render the SSL nginx config into a gitignored runtime file"
+    echo "     (do NOT overwrite the tracked nginx.conf — it would be reverted"
+    echo "     on the next 'git reset --hard origin/main'):"
+    echo "     sed 's/DOMAIN_PLACEHOLDER/$DOMAIN/g' nginx-ssl.conf > nginx-active.conf"
     echo ""
-    echo "  2. Replace DOMAIN_PLACEHOLDER with your domain:"
-    echo "     sed -i 's/DOMAIN_PLACEHOLDER/$DOMAIN/g' nginx.conf"
+    echo "  2. Pin the SSL config and domain in .env so docker-compose keeps"
+    echo "     using it across rebuilds:"
+    echo "     echo 'NGINX_CONF_FILE=./nginx-active.conf' >> .env"
+    echo "     echo 'DOMAIN=$DOMAIN' >> .env"
+    echo "     sed -i 's|^CORS_ORIGINS=.*|CORS_ORIGINS=https://$DOMAIN|' .env"
     echo ""
-    echo "  3. Update CORS_ORIGINS in .env to use HTTPS:"
-    echo "     CORS_ORIGINS=https://$DOMAIN"
-    echo ""
-    echo "  4. Restart the nginx container (SSL volumes are already mounted"
-    echo "     unconditionally by docker-compose.yml — no volume editing needed):"
-    echo "     docker compose up -d --build nginx"
+    echo "  3. Re-create the nginx container so the new mount takes effect"
+    echo "     (the SSL volumes are already mounted unconditionally — no"
+    echo "     docker-compose.yml editing required):"
+    echo "     docker compose up -d --force-recreate nginx"
     echo ""
 else
     echo ""
@@ -325,6 +369,7 @@ else
     echo "=========================================="
     echo ""
     info "HTTPS is now active at https://$DOMAIN"
+    info "Active nginx config: ./nginx-active.conf (gitignored, survives git reset)"
     info "Certificates auto-renew daily at 03:00."
     info "Verify: curl -sI https://$DOMAIN | head -5"
     echo ""
