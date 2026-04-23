@@ -93,10 +93,7 @@ npm run dev
 
 **Default Login**:
 - Username: `director`
-- Password: generated per user on first seed (see `/tmp/seed_credentials.txt`
-  inside the backend container — chmod 600). DO NOT use the legacy `password123`
-  default in production. See README and PRODUCTION_DEPLOYMENT_GUIDE for the
-  exact retrieval / deletion commands.
+- Password: generated per user on first seed and written to `/tmp/seed_credentials.txt` inside the backend container (chmod 600). DO NOT use the legacy `password123` in production. See README and PRODUCTION_DEPLOYMENT_GUIDE for the exact retrieval / deletion commands.
 
 (See README for all seeded user accounts)
 
