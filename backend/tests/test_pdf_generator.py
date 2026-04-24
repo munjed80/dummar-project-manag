@@ -51,7 +51,9 @@ def test_generate_contract_pdf_sanitizes_unsafe_filename(tmp_path, monkeypatch):
     pdf_dir = tmp_path / "contracts" / "pdf"
     full = _disk_path(path)
     # Resulting file must live inside the intended pdf directory
-    assert os.path.commonpath([os.path.realpath(full), os.path.realpath(str(pdf_dir))]) == os.path.realpath(str(pdf_dir))
+    from pathlib import Path
+
+    assert Path(full).resolve().is_relative_to(pdf_dir.resolve())
     assert os.path.exists(full)
     # No path traversal characters should remain in the filename
     name = os.path.basename(full)
