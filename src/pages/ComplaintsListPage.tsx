@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass, Spinner, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
+import { describeLoadError } from '@/lib/loadError';
 
 const statusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -68,10 +69,15 @@ export default function ComplaintsListPage() {
   }, [projectFilter]);
 
   useEffect(() => {
-    apiService.getAreas().then(setAreas).catch(() => {});
+    apiService.getAreas().then(setAreas).catch((err) => {
+      if (import.meta.env?.DEV) console.warn('[load:areas]', err);
+    });
     apiService.getProjects({ limit: 200 })
       .then((data) => setProjects(data.items || []))
-      .catch(() => setProjects([]));
+      .catch((err) => {
+        if (import.meta.env?.DEV) console.warn('[load:projects-selector]', err);
+        setProjects([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -87,7 +93,7 @@ export default function ComplaintsListPage() {
         setComplaints(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(() => setError('فشل تحميل الشكاوى'))
+      .catch((err) => setError(describeLoadError(err, 'الشكاوى').message))
       .finally(() => setLoading(false));
   }, [statusFilter, areaFilter, projectFilter, search, page]);
 

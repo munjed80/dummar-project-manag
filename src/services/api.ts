@@ -28,6 +28,84 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
+/**
+ * Structured error thrown by the API service for non-2xx HTTP responses.
+ *
+ * Carries the actual HTTP status, the server-provided `detail` (when the body
+ * is JSON-decodable), and the request URL so callers can give the operator a
+ * truthful diagnostic instead of swallowing the failure with a generic
+ * "فشل تحميل ..." message.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly statusText: string;
+  readonly detail: string | null;
+  readonly url: string;
+  readonly body: unknown;
+
+  constructor(opts: {
+    status: number;
+    statusText: string;
+    detail: string | null;
+    url: string;
+    body: unknown;
+    message?: string;
+  }) {
+    super(opts.message ?? `HTTP ${opts.status}: ${opts.detail ?? opts.statusText}`);
+    this.name = 'ApiError';
+    this.status = opts.status;
+    this.statusText = opts.statusText;
+    this.detail = opts.detail;
+    this.url = opts.url;
+    this.body = opts.body;
+  }
+}
+
+/** Maximum number of characters of a non-JSON error body to keep for diagnostics. */
+const MAX_ERROR_TEXT_LENGTH = 500;
+
+/**
+ * Read a fetch Response, attempt to extract a JSON `detail` (FastAPI's
+ * standard error shape) or fall back to the raw text, and return both.
+ */
+async function readErrorBody(response: Response): Promise<{ detail: string | null; body: unknown }> {
+  let text = '';
+  try {
+    text = await response.text();
+  } catch {
+    return { detail: null, body: null };
+  }
+  if (!text) return { detail: null, body: null };
+  try {
+    const parsed = JSON.parse(text);
+    let detail: string | null = null;
+    if (parsed && typeof parsed === 'object') {
+      const d = (parsed as Record<string, unknown>).detail;
+      if (typeof d === 'string') detail = d;
+      else if (d != null) detail = JSON.stringify(d);
+    }
+    return { detail, body: parsed };
+  } catch {
+    return { detail: text.slice(0, MAX_ERROR_TEXT_LENGTH), body: text };
+  }
+}
+
+/**
+ * Throw a structured ApiError from a failed Response. Callers should `await`
+ * this when `response.ok` is false.
+ */
+async function throwApiError(response: Response, fallbackMessage: string): Promise<never> {
+  const { detail, body } = await readErrorBody(response);
+  throw new ApiError({
+    status: response.status,
+    statusText: response.statusText,
+    detail,
+    url: response.url,
+    body,
+    message: `${fallbackMessage} (HTTP ${response.status}${detail ? `: ${detail}` : ''})`,
+  });
+}
+
 class ApiService {
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('access_token');
@@ -88,7 +166,7 @@ class ApiService {
     // doesn't trust X-Forwarded-Proto, which the browser then blocks as mixed
     // content and the fetch fails. Calling the canonical URL avoids the redirect.
     const response = await fetch(`${API_BASE_URL}/complaints/?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch complaints');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch complaints');
     return response.json();
   }
 
@@ -150,7 +228,7 @@ class ApiService {
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
     const response = await fetch(`${API_BASE_URL}/tasks/?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch tasks');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch tasks');
     return response.json();
   }
 
@@ -197,7 +275,7 @@ class ApiService {
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
     const response = await fetch(`${API_BASE_URL}/contracts/?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch contracts');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch contracts');
     return response.json();
   }
 
@@ -272,7 +350,7 @@ class ApiService {
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
     const response = await fetch(`${API_BASE_URL}/projects/?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch projects');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch projects');
     return response.json();
   }
 
@@ -323,13 +401,13 @@ class ApiService {
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
     const response = await fetch(`${API_BASE_URL}/teams/?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch teams');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch teams');
     return response.json();
   }
 
   async getActiveTeams(): Promise<any[]> {
     const response = await fetch(`${API_BASE_URL}/teams/active`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch active teams');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch active teams');
     return response.json();
   }
 

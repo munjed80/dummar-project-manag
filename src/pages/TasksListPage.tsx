@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass, Spinner, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
+import { describeLoadError } from '@/lib/loadError';
 
 const statusLabels: Record<string, string> = {
   pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
@@ -72,10 +73,16 @@ export default function TasksListPage() {
   useEffect(() => {
     apiService.getProjects({ limit: 200 })
       .then((data) => setProjects(data.items || []))
-      .catch(() => setProjects([]));
+      .catch((err) => {
+        if (import.meta.env?.DEV) console.warn('[load:projects-selector]', err);
+        setProjects([]);
+      });
     apiService.getActiveTeams()
       .then((data) => setTeams(Array.isArray(data) ? data : []))
-      .catch(() => setTeams([]));
+      .catch((err) => {
+        if (import.meta.env?.DEV) console.warn('[load:teams-selector]', err);
+        setTeams([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -92,7 +99,7 @@ export default function TasksListPage() {
         setTasks(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(() => setError('فشل تحميل المهام'))
+      .catch((err) => setError(describeLoadError(err, 'المهام').message))
       .finally(() => setLoading(false));
   }, [statusFilter, search, priorityFilter, projectFilter, teamFilter, page]);
 

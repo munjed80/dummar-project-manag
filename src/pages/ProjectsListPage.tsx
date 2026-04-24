@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass, Spinner, Warning, Plus } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
+import { describeLoadError } from '@/lib/loadError';
 
 const statusLabels: Record<string, string> = {
   planned: 'مخطط', active: 'نشط', on_hold: 'متوقف مؤقتاً',
@@ -53,7 +54,7 @@ export default function ProjectsListPage() {
         setProjects(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(() => setError('فشل تحميل المشاريع'))
+      .catch((err) => setError(describeLoadError(err, 'المشاريع').message))
       .finally(() => setLoading(false));
   }, [statusFilter, search, page]);
 

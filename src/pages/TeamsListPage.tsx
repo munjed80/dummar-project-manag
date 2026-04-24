@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass, Spinner, Warning, Plus } from '@phosphor-icons/react';
 import { useAuth } from '@/hooks/useAuth';
+import { describeLoadError } from '@/lib/loadError';
 
 const typeLabels: Record<string, string> = {
   internal_team: 'فريق داخلي', contractor: 'مقاول', field_crew: 'طاقم ميداني', supervision_unit: 'وحدة إشراف',
@@ -47,7 +48,7 @@ export default function TeamsListPage() {
         setTeams(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(() => setError('فشل تحميل الفرق'))
+      .catch((err) => setError(describeLoadError(err, 'الفرق').message))
       .finally(() => setLoading(false));
   }, [typeFilter, activeFilter, search, page]);
 
