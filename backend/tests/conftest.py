@@ -15,6 +15,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 os.environ["UPLOAD_DIR"] = "/tmp/test_uploads"
 os.makedirs("/tmp/test_uploads", exist_ok=True)
+# Force background-job tasks to run inline (no Redis broker available in CI).
+os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
+os.environ.setdefault("CELERY_BROKER_URL", "")
 
 # Patch GeoAlchemy2 Geometry type to behave as plain String on SQLite
 import geoalchemy2  # noqa: E402
@@ -89,6 +92,13 @@ def _override_get_db():
 
 
 app.dependency_overrides[get_db] = _override_get_db
+
+
+# Make Celery tasks open sessions against the same in-memory SQLite engine
+# that the API tests use.
+from app.jobs import tasks as _jobs_tasks  # noqa: E402
+
+_jobs_tasks.set_task_session_factory(TestingSessionLocal)
 
 
 # ---------------------------------------------------------------------------

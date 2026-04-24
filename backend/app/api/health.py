@@ -213,7 +213,7 @@ def smtp_test_send(
     Requires internal staff authentication and SMTP to be enabled.
     This is an operational verification tool, not for regular use.
     """
-    from app.services.email_service import send_email, _render_html
+    from app.services.email_service import _send_email_sync, _render_html
 
     if not settings.SMTP_ENABLED:
         return SmtpTestSendResult(
@@ -230,7 +230,7 @@ def smtp_test_send(
     )
     html_body = _render_html("اختبار البريد الإلكتروني — Email Test", content)
 
-    success = send_email(
+    success = _send_email_sync(
         to_email=request_body.to_email,
         subject="Dummar Platform — SMTP Test / اختبار البريد",
         body_html=html_body,

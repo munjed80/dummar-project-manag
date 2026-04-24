@@ -157,14 +157,13 @@ def _render_html(title: str, content: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def send_email(to_email: str, subject: str, body_html: str) -> bool:
-    """Send an HTML email via SMTP.
+def _send_email_sync(to_email: str, subject: str, body_html: str) -> bool:
+    """Actually send an HTML email via SMTP — synchronous SMTP call.
 
-    * Returns immediately (no-op) when ``SMTP_ENABLED`` is ``False``.
-    * Never raises — all exceptions are caught and logged.
-    * Deduplicates: same (to, subject) within 5 minutes is silently skipped.
-    * TLS handling: uses STARTTLS on port 587 (default), direct SSL on port 465.
-    * Returns True if email was sent successfully, False otherwise.
+    This is invoked from :func:`app.jobs.tasks.send_email_task` (when the
+    background-job system is in use) or directly from :func:`send_email`
+    when the broker is unavailable / disabled. Behaviour and return value
+    are identical to the original ``send_email``.
     """
     if not settings.SMTP_ENABLED:
         logger.debug(
@@ -222,6 +221,56 @@ def send_email(to_email: str, subject: str, body_html: str) -> bool:
             "Failed to send email to %s (subject: %s)", to_email, subject
         )
         return False
+
+
+def send_email(to_email: str, subject: str, body_html: str) -> bool:
+    """Send an HTML email via SMTP, dispatched through the background-job system.
+
+    * Returns immediately (no-op) when ``SMTP_ENABLED`` is ``False``.
+    * Never raises — all exceptions are caught and logged.
+    * In production the actual SMTP work runs on a Celery worker (with
+      automatic retry on transient network errors).
+    * In eager mode (tests / no broker) the work is performed inline and the
+      return value reflects the real send result. When dispatched
+      asynchronously the function returns ``True`` to indicate the task was
+      successfully enqueued — callers that need the real send result must
+      await the :class:`AsyncResult` returned by the task layer instead.
+    """
+    if not settings.SMTP_ENABLED:
+        logger.debug(
+            "SMTP disabled — skipping email to %s (subject: %s)", to_email, subject
+        )
+        return False
+
+    # Imported lazily to avoid a circular import (jobs ➜ services ➜ jobs).
+    try:
+        from app.jobs import dispatch, is_eager_mode
+        from app.jobs.tasks import send_email_task
+    except Exception:
+        # If the jobs system can't be imported for any reason, fall back to
+        # the synchronous path so emails still go out.
+        logger.exception("Background-job system unavailable — sending email inline")
+        return _send_email_sync(to_email, subject, body_html)
+
+    try:
+        result = dispatch(send_email_task, to_email, subject, body_html)
+    except Exception:
+        # Broker unreachable — fall back to inline send so we never silently
+        # drop a notification email.
+        logger.exception(
+            "Failed to enqueue send_email_task — falling back to inline send"
+        )
+        return _send_email_sync(to_email, subject, body_html)
+
+    if is_eager_mode():
+        # apply() returns an EagerResult whose .result is the task's return value.
+        try:
+            return bool(result.result)
+        except Exception:
+            return False
+
+    # Async path — caller cannot block, so return True to indicate accepted.
+    return True
 
 
 # ---------------------------------------------------------------------------

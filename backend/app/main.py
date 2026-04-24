@@ -9,7 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from app.api import auth, complaints, tasks, contracts, projects, teams, app_settings, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence
+from app.api import auth, complaints, tasks, contracts, projects, teams, app_settings, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence, jobs
 from app.api.deps import get_current_internal_user
 from app.core.config import settings
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -130,6 +130,7 @@ app.include_router(gis.router)
 app.include_router(health.router)
 app.include_router(audit_logs.router)
 app.include_router(contract_intelligence.router)
+app.include_router(jobs.router)
 
 # Ensure the upload directory exists. NOTE: we intentionally do NOT mount it as
 # unauthenticated StaticFiles. All file access goes through app.api.uploads

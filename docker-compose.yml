@@ -28,6 +28,28 @@ services:
         limits:
           memory: 512M
 
+  redis:
+    image: redis:7-alpine
+    # Broker + result backend for the Celery worker.  Not exposed externally.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
   backend:
     build:
       context: ./backend
@@ -59,10 +81,16 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+      # Background-job system (Celery + Redis)
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-false}
     volumes:
       - backend_uploads:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -80,6 +108,57 @@ services:
       resources:
         limits:
           memory: 1G
+
+  worker:
+    # Celery worker — runs background jobs (PDF generation, OCR pipeline,
+    # email sending, notification fan-out). Shares the backend image so it
+    # has access to the same code and Python dependencies.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "app.jobs.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      DATABASE_URL: postgresql://dummar:${DB_PASSWORD:?DB_PASSWORD must be set in .env}@db:5432/dummar_db
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: dummar
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      ALGORITHM: HS256
+      UPLOAD_DIR: /app/uploads
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@dummar.gov.sy}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.jobs.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   nginx:
     image: nginx:alpine
@@ -125,4 +204,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   backend_uploads:

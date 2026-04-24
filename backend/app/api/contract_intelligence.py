@@ -239,8 +239,20 @@ async def upload_contract_document(
         request=request,
     )
 
-    # Auto-process the document
-    _process_document(db, doc, filepath, current_user.id, request)
+    # Auto-process the document via the background-job system. In production
+    # (Redis broker + worker) the upload returns immediately and the worker
+    # runs OCR + intelligence asynchronously. In tests / eager mode the task
+    # runs inline so existing behavior is preserved.
+    from app.jobs import dispatch
+    from app.jobs.tasks import process_contract_document_task
+
+    try:
+        dispatch(process_contract_document_task, doc.id, filepath, current_user.id)
+    except Exception:
+        # Enqueue failure (e.g. broker temporarily unreachable) is logged but
+        # must not break the upload. The document stays in QUEUED status and
+        # can be retried via the reprocess endpoint.
+        logger.exception("Failed to enqueue intelligence pipeline for doc %s", doc.id)
 
     db.refresh(doc)
     return doc
@@ -253,131 +265,16 @@ def _process_document(
     user_id: int,
     request: Optional[Request] = None,
 ):
-    """Run the full intelligence pipeline on a document."""
-    try:
-        # Step 1: OCR
-        doc.processing_status = DocumentProcessingStatus.PROCESSING
-        db.commit()
+    """Backward-compatible wrapper kept for any legacy callers / tests.
 
-        ocr_result = process_ocr(filepath, doc.file_type or "")
+    The implementation now lives in
+    :mod:`app.services.contract_intelligence_pipeline`. Prefer dispatching
+    :func:`app.jobs.tasks.process_contract_document_task` instead so that
+    work runs on the Celery worker.
+    """
+    from app.services.contract_intelligence_pipeline import run_intelligence_pipeline
 
-        doc.ocr_text = ocr_result.text
-        doc.ocr_confidence = ocr_result.confidence
-        doc.ocr_engine = ocr_result.engine
-        doc.ocr_completed_at = datetime.utcnow()
-
-        if not ocr_result.success:
-            doc.processing_status = DocumentProcessingStatus.FAILED
-            doc.error_message = "; ".join(ocr_result.warnings) if ocr_result.warnings else "OCR failed"
-            db.commit()
-            return
-
-        doc.processing_status = DocumentProcessingStatus.OCR_COMPLETE
-        db.commit()
-
-        # Step 2: Field extraction
-        extraction_result = extract_fields(ocr_result.text)
-        doc.extracted_fields = fields_to_json(extraction_result.fields)
-        doc.extraction_confidence = extraction_result.confidence
-        doc.extraction_notes = "; ".join(extraction_result.notes) if extraction_result.notes else None
-
-        doc.processing_status = DocumentProcessingStatus.EXTRACTED
-        db.commit()
-
-        # Step 3: Classification
-        classification = classify_contract(
-            text=ocr_result.text,
-            extracted_fields=extraction_result.fields,
-        )
-        doc.suggested_type = classification.suggested_type
-        doc.classification_confidence = classification.confidence
-        doc.classification_reason = classification.reason
-        db.commit()
-
-        # Step 4: Summary
-        summary = generate_summary(
-            extracted_fields=extraction_result.fields,
-            ocr_text=ocr_result.text,
-            contract_type=classification.suggested_type,
-        )
-        doc.auto_summary = summary
-        db.commit()
-
-        # Step 5: Risk analysis
-        risk_flags = analyze_contract_risks(
-            extracted_fields=extraction_result.fields,
-            ocr_text=ocr_result.text,
-        )
-        if risk_flags:
-            save_risk_flags(db, risk_flags, document_id=doc.id)
-
-        # Step 6: Duplicate detection
-        fields = extraction_result.fields
-        matches = find_duplicates(
-            db,
-            contract_number=fields.get("contract_number"),
-            contractor_name=fields.get("contractor_name"),
-            title=fields.get("title"),
-            contract_value=fields.get("contract_value"),
-            start_date=fields.get("start_date"),
-            end_date=fields.get("end_date"),
-        )
-        if matches:
-            save_duplicate_records(db, document_id=doc.id, matches=matches)
-
-        # Set final status
-        if doc.ocr_confidence and doc.ocr_confidence < 0.3:
-            doc.processing_status = DocumentProcessingStatus.REVIEW
-        elif doc.extraction_confidence and doc.extraction_confidence < 0.3:
-            doc.processing_status = DocumentProcessingStatus.REVIEW
-        else:
-            doc.processing_status = DocumentProcessingStatus.REVIEW
-
-        db.commit()
-
-        write_audit_log(
-            db,
-            action="contract_doc_processed",
-            entity_type="contract_document",
-            entity_id=doc.id,
-            user_id=user_id,
-            description=f"Document processed: OCR={doc.ocr_confidence}, extraction={doc.extraction_confidence}",
-            request=request,
-        )
-
-        # Send processing-completion notifications
-        try:
-            notify_intelligence_processing_complete(
-                db, event="extraction_review_ready",
-                document_id=doc.id,
-                details=f"ثقة OCR: {doc.ocr_confidence}, ثقة الاستخراج: {doc.extraction_confidence}",
-            )
-            # If high/critical risks found, send risk notification
-            high_risk_count = sum(1 for f in risk_flags if f.get("severity") in ("high", "critical"))
-            if high_risk_count > 0:
-                notify_intelligence_processing_complete(
-                    db, event="risk_review_needed",
-                    document_id=doc.id,
-                    details=f"{high_risk_count} مخاطر مرتفعة/حرجة",
-                )
-            # If duplicates found, notify
-            if matches:
-                notify_intelligence_processing_complete(
-                    db, event="duplicate_review_needed",
-                    document_id=doc.id,
-                    details=f"{len(matches)} تكرارات محتملة",
-                )
-        except Exception:
-            logger.exception("Notification failed for doc %s (non-fatal)", doc.id)
-
-    except Exception as e:
-        logger.exception("Document processing failed for doc %s", doc.id)
-        doc.processing_status = DocumentProcessingStatus.FAILED
-        doc.error_message = str(e)
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
+    run_intelligence_pipeline(db, doc, filepath, user_id)
 
 
 # ─────────────────────────────────────────────────────────────
