@@ -82,7 +82,12 @@ class ApiService {
     if (params?.search) qp.append('search', params.search);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/complaints?${qp}`, { headers: this.getAuthHeaders() });
+    // NOTE: trailing slash is required. The backend route is `@router.get("/")`
+    // so `/complaints` triggers a 307 redirect to `/complaints/`. Behind nginx
+    // (HTTPS) the redirect Location is built with `http://` because Starlette
+    // doesn't trust X-Forwarded-Proto, which the browser then blocks as mixed
+    // content and the fetch fails. Calling the canonical URL avoids the redirect.
+    const response = await fetch(`${API_BASE_URL}/complaints/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch complaints');
     return response.json();
   }
@@ -143,7 +148,8 @@ class ApiService {
     if (params?.priority) qp.append('priority_filter', params.priority);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/tasks?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — see note on getComplaints().
+    const response = await fetch(`${API_BASE_URL}/tasks/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch tasks');
     return response.json();
   }
@@ -189,7 +195,8 @@ class ApiService {
     if (params?.search) qp.append('search', params.search);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/contracts?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — see note on getComplaints().
+    const response = await fetch(`${API_BASE_URL}/contracts/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch contracts');
     return response.json();
   }
@@ -263,7 +270,8 @@ class ApiService {
     if (params?.search) qp.append('search', params.search);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/projects?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — see note on getComplaints().
+    const response = await fetch(`${API_BASE_URL}/projects/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch projects');
     return response.json();
   }
@@ -313,7 +321,8 @@ class ApiService {
     if (params?.search) qp.append('search', params.search);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/teams?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — see note on getComplaints().
+    const response = await fetch(`${API_BASE_URL}/teams/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch teams');
     return response.json();
   }
