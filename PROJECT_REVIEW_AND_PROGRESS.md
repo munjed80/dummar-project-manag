@@ -4,14 +4,108 @@
 ## نظرة عامة على المشروع
 **الاسم:** منصة إدارة مشروع دمّر  
 **الغرض:** نظام إدارة شكاوى، مهام، وعقود لمشروع دمّر السكني في دمشق  
-**المرحلة الحالية:** المرحلة الحادية عشرة - Hotfix لإفشال نشر VPS الناتج عن Migration 008 (انعدام التوافق مع PostgreSQL)
-**آخر تحديث:** 2026-04-23T21:37
+**المرحلة الحالية:** المرحلة الثانية عشرة — رفع غطاء أخطاء صفحات القوائم المحمية (تشخيص بدلاً من إخفاء)
+**آخر تحديث:** 2026-04-24T00:36
 
 ---
 
 ## سجل الدفعات (Batch Log)
 
-### الدفعة الحالية: 2026-04-23T21:37 — Hotfix: Migration 008 PostgreSQL compatibility (VPS deploy unblock)
+### الدفعة الحالية: 2026-04-24T00:36 — Frontend diagnostic-honesty for protected list pages
+
+**قبل البدء (Before Current Batch):**
+- **العَرَض المُبلَّغ من VPS:** صفحات `complaints, tasks, contracts, projects, teams` كلها تظهر رسالة عربية عامة `"فشل تحميل ..."`. صفحة `Settings` تعمل، لكن السياق نفسه يشير صراحة إلى أن هذا ليس دليلاً على سلامة المسار المحمي لأن `GET /settings/` غير محمي بنفس الآلية.
+- **منهجية التشخيص (مبنية على الكود الفعلي، لا التخمين):**
+  1. فحص `backend/app/api/app_settings.py:50` → `get_settings()` لا يستخدم `Depends(get_current_internal_user)` ولا أي تبعية مصادقة → الصفحة تنجح لأنها لا تصل أصلاً للطبقة المحمية.
+  2. فحص الخمس list endpoints:
+     - `backend/app/api/complaints.py:119` → `Depends(get_current_internal_user)`
+     - `backend/app/api/tasks.py:99` → نفس التبعية
+     - `backend/app/api/contracts.py:95` → نفس التبعية
+     - `backend/app/api/projects.py:65` → نفس التبعية
+     - `backend/app/api/teams.py:65` → نفس التبعية
+     جميعها متطابقة في طبقة المصادقة → فشل موحّد عبر الخمسة يشير إلى عامل مشترك على مستوى المصادقة/الدور.
+  3. فحص `backend/app/api/deps.py:85-100` → `_internal_staff = require_role(PROJECT_DIRECTOR, CONTRACTS_MANAGER, ENGINEER_SUPERVISOR, COMPLAINTS_OFFICER, AREA_SUPERVISOR, FIELD_TEAM, CONTRACTOR_USER)`. أي حساب بدور `CITIZEN` (أو دور غير صالح) يسبب 403 على هذه التبعية تحديداً، بينما `/auth/me` (الذي يستخدم `get_current_user` فقط دون فحص الدور) ينجح.
+  4. فحص الـ frontend في الخمس صفحات → جميعها تستخدم النمط نفسه: `.catch(() => setError('فشل تحميل ...'))`. الحالة الحقيقية (401/403/5xx) و FastAPI `detail` يُتجاهلان قبل أن يصلا للمشغّل.
+  5. التحقق من عدم وجود انحدار في trailing slash: `src/services/api.ts:90, 152, 199, 274, 325` → جميع المسارات الخمسة تستخدم `/...?` بشرطة مائلة → الإصلاح السابق محفوظ.
+- **السبب الجذري الدقيق:**
+  طبقة "إخفاء الخطأ" في الـ frontend. النمط `.catch(() => setError('فشل ...'))` يُسقط (1) كود حالة HTTP، (2) `detail` المُرجَع من FastAPI، (3) عنوان الطلب، (4) جسم الاستجابة. يصبح من المستحيل من واجهة المستخدم التمييز بين 403 (دور غير مسموح — الفرضية الأقوى لأن الفشل موحّد عبر خمس endpoints تشترك بالضبط في `Depends(get_current_internal_user)`)، 401 (انتهاء جلسة)، 5xx (خطأ خادم)، أو حتى نجاح بسيط بـ `{"total_count": 0, "items": []}`. لا يمكن تحديد القيمة الفعلية من الكود وحده — تتطلب لوغ الـ VPS — لكن يمكن الكشف عنها فوراً للمشغّل بإصلاح طبقة الإخفاء.
+- **ما لم يكن السبب (نفي صريح):**
+  - Trailing slash: مُصلَح مسبقاً (`src/services/api.ts:85-90`).
+  - Backend runtime bug عام: مستبعد لأن جميع الـ 296 اختباراً تمر، و `/auth/login` و `/auth/me` و `/settings/` كلها تعمل على نفس الـ deployment.
+  - CORS: مستبعد، login يعمل من نفس الـ origin.
+  - VPS / SSL / nginx / docker: ممنوع لمسها صراحةً، وغير ذي صلة لأن باقي المسارات تعمل.
+
+**أثناء الدفعة (During Current Batch):**
+- **التغييرات الجراحية على Frontend فقط:**
+  - `src/services/api.ts`:
+    - أضِيف `class ApiError extends Error` يحمل `status, statusText, detail, url, body` — مُصدَّر للاستخدام من المكوّنات.
+    - أضِيف `readErrorBody(response)` يحاول تفكيك `{"detail": "..."}` المعياري لـ FastAPI ويرجع `{detail, body}`.
+    - أضِيف `throwApiError(response, fallbackMessage)` يرمي `ApiError` كاملة الحقول.
+    - استُبدلت `throw new Error('Failed to fetch ...')` بـ `await throwApiError(response, ...)` في **الستة فقط:** `getComplaints`, `getTasks`, `getContracts`, `getProjects`, `getTeams`, `getActiveTeams`. باقي الـ endpoints لم تُلمس (نطاق جراحي).
+  - `src/lib/loadError.ts` — **ملف جديد**:
+    - `describeLoadError(err, entityLabel)` يُترجم `ApiError` إلى رسالة عربية صادقة:
+      - 401 → "انتهت الجلسة أو الرمز غير صالح..."
+      - 403 → "ليس لديك صلاحية لعرض ${entityLabel} (HTTP 403: ${detail})"
+      - 5xx → "خطأ في الخادم أثناء تحميل ${entityLabel} (HTTP ${status}: ${detail})"
+      - شبكة/غير ذلك → "تعذّر الاتصال بالخادم لتحميل ${entityLabel} (${msg})"
+    - دائماً `console.error('[load:${label}]', err)` في `import.meta.env.DEV` → المشغّل يرى الكائن الكامل في DevTools دون إعادة بناء.
+  - الخمس صفحات (`ComplaintsListPage`, `TasksListPage`, `ContractsListPage`, `ProjectsListPage`, `TeamsListPage`):
+    - استُبدل `setError('فشل تحميل ...')` بـ `setError(describeLoadError(err, 'الكيان').message)`.
+    - الـ side-fetches (selectors للمشاريع/الفرق/المناطق) التي كانت `.catch(() => setX([]))` صامتة → أصبحت تطبع `console.warn('[load:...-selector]', err)` في DEV، مع الحفاظ على المسلك الصامت في الإنتاج (لا تكسر الصفحة الرئيسية إن فشل dropdown ثانوي).
+  - الحالة الفارغة (`items.length === 0` بدون خطأ): محفوظة كما هي في الخمس صفحات. مع إزالة catch المُزيَّف، النتيجة الفعلية الفارغة لن تُحوَّل بعد الآن إلى لافتة "فشل تحميل" زائفة.
+
+**بعد الانتهاء (After Current Batch):**
+- ✅ **صحة المسلكيات المحفوظة:** login، HTTPS، public complaint flow، routing، RBAC على مستوى الـ routes — صفر تغيير.
+- ✅ **اختبارات الـ Backend:** 296 passed (لا تغيير لأن أي ملف backend لم يُلمس).
+- ✅ **بناء الـ Frontend:** `npm run build` ينجح في 992ms، بدون أخطاء TS في الملفات المُعدَّلة.
+- ✅ **Trailing slash:** خمس استدعاءات canonical محفوظة في `src/services/api.ts`.
+- ✅ **Surface حقيقية:** عند فشل الطلب الآن، الصفحة تعرض كود الحالة الفعلي + `detail` المُرجَع من الـ backend، والـ DevTools console يطبع الكائن الكامل.
+- ⚠️ **حدّ الالتزام:** بدون لوغ VPS لا يمكن الجزم بأن السبب الجذري للعَرَض هو 403 تحديداً. لكن الإصلاح يضمن أن أوّل تحميل بعد النشر يُظهر للمشغّل القيمة الفعلية، وأكثر فرضية ترجيحاً (عدم تطابق الدور مع `_internal_staff`) أصبحت قابلة للتمييز عن أي صنف فشل آخر بنقرة واحدة.
+
+**ما لم يُلمس (محفوظ نصّاً):**
+- VPS، SSL، Docker، nginx (`nginx.conf`, `nginx-ssl.conf`)، `deploy.sh`، `ssl-setup.sh`، `entrypoint.sh`، `docker-compose.yml`، `backend/Dockerfile` — صفر تعديل.
+- جميع ملفات الـ Backend الـ Python — صفر تعديل.
+- العقود التعاقدية للـ API — صفر تغيير.
+- routes / RoleProtectedRoute — صفر تغيير.
+
+**ملفات تم تعديلها هذه الدفعة:**
+
+| الملف | التغيير |
+|---|---|
+| `src/services/api.ts` | إضافة `ApiError` + `readErrorBody` + `throwApiError`، واستبدال `throw new Error` في 6 list endpoints. |
+| `src/lib/loadError.ts` | ملف جديد: `describeLoadError(err, label)` — يُحوّل `ApiError` إلى رسالة عربية صادقة + `console.error` في DEV. |
+| `src/pages/ComplaintsListPage.tsx` | استخدام `describeLoadError`، dev-warn للـ selectors. |
+| `src/pages/TasksListPage.tsx` | نفس النمط. |
+| `src/pages/ContractsListPage.tsx` | نفس النمط. |
+| `src/pages/ProjectsListPage.tsx` | نفس النمط. |
+| `src/pages/TeamsListPage.tsx` | نفس النمط. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | هذه الإضافة. |
+| `HANDOFF_STATUS.md` | تحديث مكافئ. |
+
+**التحقّق (Verification):**
+
+| الفحص | النتيجة |
+|---|---|
+| `cd backend && python -m pytest tests/ -q` | ✅ **296 passed**, 871 warnings in 133.66s — انعدام انحدار |
+| `npm run build` | ✅ `✓ built in 992ms`، لا أخطاء TS في الملفات المُعدَّلة |
+| `npx tsc -b` على الملفات المُعدَّلة فقط | ✅ صفر أخطاء (أخطاء `src/components/ui/*` ما قبل الموجودة لا علاقة لها وتُتخطّى بـ `--noCheck` في build script) |
+| `grep -E "/(complaints\|tasks\|contracts\|projects\|teams)/?\\?" src/services/api.ts` | ✅ خمس مسارات canonical-URL محفوظة |
+| `grep "throw new Error('Failed to fetch (complaints\|tasks\|contracts\|projects\|teams" src/services/api.ts` | ✅ صفر مطابقات (تم استبدالها كلّها) |
+
+**هل يحتاج VPS redeploy؟**
+- **Backend:** لا. الصورة بت-لـ-بت مطابقة للدفعة السابقة.
+- **Frontend:** نعم — يحتاج إعادة بناء ونشر الأصول (`./deploy.sh --rebuild --domain=...`) لكي يصل التشخيص إلى متصفّح المشغّل. لا تغييرات بنية تحتية.
+
+**خطوة المشغّل بعد إعادة النشر:**
+يفتح أي من الصفحات الخمس مع DevTools → سيطبع الـ console سطراً واحداً مثل:
+```
+[load:الشكاوى] ApiError: HTTP 403: Access denied. Required roles: [...]
+```
+هذا السطر **هو** السبب الجذري الفعلي. إن كان 403 → الإصلاح على جانب دور المستخدم. إن كان 5xx → الـ `detail` المطبوع هو استثناء الـ backend ويحدد الإصلاح هناك. إن كان `TypeError: Failed to fetch` → مشكلة شبكة/CORS. الصفحة نفسها تعرض الرسالة بالعربية، لذا DevTools ليس شرطاً.
+
+---
+
+### الدفعة السابقة: 2026-04-23T21:37 — Hotfix: Migration 008 PostgreSQL compatibility (VPS deploy unblock)
 
 **قبل البدء (Before Current Batch):**
 - **الطابع الزمني:** 2026-04-23T21:37

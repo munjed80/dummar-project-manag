@@ -1,11 +1,94 @@
 # حالة التسليم
 # HANDOFF_STATUS.md
 
-## آخر تحديث: 2026-04-23T21:37
+## آخر تحديث: 2026-04-24T00:36
 
 ---
 
-## الدفعة الحالية: 2026-04-23T21:37 — Hotfix: Migration 008 PostgreSQL Compatibility (VPS deploy unblock)
+## الدفعة الحالية: 2026-04-24T00:36 — Frontend diagnostic-honesty for protected list pages
+
+**Scope:** Application-level fix only. Zero changes to VPS, SSL, Docker, nginx, `deploy.sh`, or any infrastructure file. Zero backend code or schema changes. The change is intentionally surgical — it removes a layer of frontend deception that was making it impossible to distinguish a real backend failure from an empty result on the five protected list pages.
+
+### Symptom on the live VPS
+
+Login, HTTPS, app shell, and the Settings page all worked, but the five protected list pages — **complaints, tasks, contracts, projects, teams** — all rendered the same generic Arabic message `"فشل تحميل ..."` ("failed to load X"). The Settings page working was **not** evidence the protected stack was healthy: `GET /settings/` is intentionally unauthenticated (`backend/app/api/app_settings.py:50` — no `Depends(get_current_internal_user)`), while every one of the five failing list endpoints sits behind `Depends(get_current_internal_user)` (`_internal_staff` role check in `backend/app/api/deps.py:85-100`).
+
+### Root cause (frontend deception layer, not backend)
+
+Every one of those pages was swallowing the real failure with this exact pattern:
+
+```ts
+.catch(() => setError('فشل تحميل ...'))
+```
+
+The HTTP status, the FastAPI `detail`, and the request URL were all discarded before they ever reached the operator. The "failed to load" string was synthesized client-side and bore no relationship to what the backend actually returned. With this in place it was impossible to tell from the UI whether the backend returned 401 (token expired), 403 (role mismatch — the most likely culprit for a uniform failure across five endpoints that share the same `_internal_staff` dependency), 5xx (backend runtime), or simply `{"total_count": 0, "items": []}` (empty data, which the page would never have shown as an error if the catch block had not fired). The trailing-slash collection-URL fix from a previous batch is intact (`src/services/api.ts:90, 152, 199, 274, 325`); that is not the cause.
+
+The fix is the one the problem statement asks for: stop swallowing the error, surface the truth, and let the operator see whether they are looking at an auth/role mismatch or a real backend bug.
+
+### Files changed this batch
+
+| File | Change |
+|---|---|
+| `src/services/api.ts` | (1) New exported `ApiError` class carrying `status`, `statusText`, `detail`, `url`, `body`. (2) New `readErrorBody` + `throwApiError` helpers that parse FastAPI's standard `{"detail": "..."}` JSON shape and fall back to raw text. (3) `getComplaints`, `getTasks`, `getContracts`, `getProjects`, `getTeams`, `getActiveTeams` now `await throwApiError(response, ...)` instead of `throw new Error('Failed to fetch ...')`. All other endpoints untouched. |
+| `src/lib/loadError.ts` | **New file.** `describeLoadError(err, entityLabel)` translates an `ApiError` into a clean Arabic message that mirrors backend reality: `401 → "انتهت الجلسة..."`, `403 → "ليس لديك صلاحية لعرض ${label} (HTTP 403: ${detail})"`, `5xx → "خطأ في الخادم..."`, network/other → "تعذّر الاتصال...". Always `console.error`s the raw error object in `import.meta.env.DEV` so the operator can inspect status, detail, URL, and body in the browser console without a rebuild. |
+| `src/pages/ComplaintsListPage.tsx` | Replaced silent generic catch with `describeLoadError(err, 'الشكاوى')`. Side-fetches for areas / projects selector now `console.warn` in dev instead of returning silently. |
+| `src/pages/TasksListPage.tsx` | Same pattern, `entityLabel='المهام'`. Side-fetches for projects / active-teams selectors now `console.warn` in dev. |
+| `src/pages/ContractsListPage.tsx` | Same pattern, `entityLabel='العقود'`. Side-fetch for projects selector now `console.warn` in dev. |
+| `src/pages/ProjectsListPage.tsx` | Same pattern, `entityLabel='المشاريع'`. |
+| `src/pages/TeamsListPage.tsx` | Same pattern, `entityLabel='الفرق'`. |
+| `PROJECT_REVIEW_AND_PROGRESS.md` | New batch entry with the same diagnosis and verification record. |
+| `HANDOFF_STATUS.md` | This entry. |
+
+### Behavioral guarantees preserved
+
+- **Login flow:** `apiService.login` is untouched. JWT storage and `cached_user` writeback unchanged.
+- **HTTPS / nginx / Docker / deploy.sh / ssl-setup.sh:** zero edits. No VPS redeploy is required for the fix to take effect, only a frontend rebuild + asset publish.
+- **Public complaint flow:** `createComplaint` and `trackComplaint` untouched.
+- **Routing:** `App.tsx` `RoleProtectedRoute` is untouched; the five list pages remain gated to `INTERNAL_ROLES`.
+- **Empty-state handling:** all five pages already render a clean empty state when `items.length === 0` and no error is set. With the fake catch removed, an actually-empty backend result will now correctly show that empty state instead of the false "failed to load" banner.
+
+### What this change does NOT claim
+
+It does **not** invent a "fix" for an unverifiable runtime root cause. Without access to the live VPS logs we cannot say with certainty whether the failure on the operator's screen is 401 vs 403 vs 5xx. What we can guarantee is that after this change the next browser load will show the operator exactly that information, both rendered in the UI and logged to the dev console — and the most likely root cause (role / token state mismatch with `_internal_staff`) is now distinguishable from any other class of failure in one click.
+
+### Verification (this batch)
+
+| Check | Result |
+|---|---|
+| `VITE_API_BASE_URL=/api npm run build` | ✅ `✓ built in 992ms`, no TS errors in changed files |
+| `cd backend && python -m pytest tests/ -q` | ✅ **296 passed**, 871 warnings in 133.66s — zero regression (no backend file touched) |
+| `npx tsc -b` filtered to changed files (`services/api`, `pages/{Complaints,Tasks,Contracts,Projects,Teams}ListPage`, `lib/loadError`) | ✅ no errors. Pre-existing `tsc` errors in unrelated `src/components/ui/*.tsx` files are unchanged; the build script is `tsc -b --noCheck && vite build` which skips them on purpose. |
+| Trailing-slash regression guard: `grep -n "/complaints/?\\|/tasks/?\\|/contracts/?\\|/projects/?\\|/teams/?" src/services/api.ts` | ✅ all five canonical-URL calls preserved |
+
+### Is a VPS redeploy required?
+
+**No backend redeploy.** The backend image is bit-for-bit identical to the previous batch.
+
+**Yes — a frontend rebuild & republish is required** for the diagnostic to reach the operator's browser. The standard one-command path on the VPS already does this:
+
+```bash
+git pull
+./deploy.sh --rebuild --domain=<your-domain>
+```
+
+After the rebuild the operator should reload one of the affected pages with DevTools open. The browser console will print one line per failed list call, e.g.:
+
+```
+[load:الشكاوى] ApiError: HTTP 403: Access denied. Required roles: [...]
+```
+
+Whatever that line says **is** the real root cause. If it is 403, the logged-in account's role is not in `_internal_staff` and the fix is on the user/role side; if it is 5xx, the printed `detail` is the backend exception and the fix is in the backend; if it is a `TypeError: Failed to fetch`, it is a network/CORS issue. The page itself will also render that same message in Arabic, so DevTools is not strictly required.
+
+### Deliverables (per problem statement)
+
+- **Exact root cause:** the frontend `.catch(() => setError('فشل تحميل ...'))` pattern in all five protected list pages was discarding the real HTTP status and FastAPI `detail`, making any backend failure look identical to an empty list. The actual underlying HTTP failure (most likely 401/403 from the shared `get_current_internal_user` dependency, given the uniform symptom across five endpoints that share that exact dependency and the contrasting fact that the unauthenticated `/settings/` endpoint works) cannot be pinned down further without live logs, but is now exposed verbatim by the UI on the next load.
+- **Exact files changed:** `src/services/api.ts`, `src/lib/loadError.ts` (new), `src/pages/ComplaintsListPage.tsx`, `src/pages/TasksListPage.tsx`, `src/pages/ContractsListPage.tsx`, `src/pages/ProjectsListPage.tsx`, `src/pages/TeamsListPage.tsx`, `PROJECT_REVIEW_AND_PROGRESS.md`, `HANDOFF_STATUS.md`.
+- **Exact pages fixed:** complaints list, tasks list, contracts list, projects list, teams list. Each now (a) shows real backend status + detail on failure, (b) shows a clean empty state on `total_count=0`, and (c) never shows a fake "failed to load" banner when the API actually succeeded.
+- **VPS redeploy needed?** No backend redeploy. A frontend rebuild + republish via `./deploy.sh --rebuild` (no infra changes touched) is required to ship the new bundle.
+
+---
+
+## الدفعة السابقة: 2026-04-23T21:37 — Hotfix: Migration 008 PostgreSQL Compatibility (VPS deploy unblock)
 
 **Scope:** Single targeted fix for the live VPS deploy failure where `dummar-backend-1` was reported `unhealthy`, `nginx` (which has `depends_on: backend: condition: service_healthy`) refused to start, and Cloudflare returned `521`. No feature work, no refactor, no behavior change.
 

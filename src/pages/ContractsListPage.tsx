@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass, Spinner, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
+import { describeLoadError } from '@/lib/loadError';
 
 const statusLabels: Record<string, string> = {
   draft: 'مسودة', under_review: 'قيد المراجعة', approved: 'مُعتمد',
@@ -66,7 +67,10 @@ export default function ContractsListPage() {
   useEffect(() => {
     apiService.getProjects({ limit: 200 })
       .then((data) => setProjects(data.items || []))
-      .catch(() => setProjects([]));
+      .catch((err) => {
+        if (import.meta.env?.DEV) console.warn('[load:projects-selector]', err);
+        setProjects([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -82,7 +86,7 @@ export default function ContractsListPage() {
         setContracts(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(() => setError('فشل تحميل العقود'))
+      .catch((err) => setError(describeLoadError(err, 'العقود').message))
       .finally(() => setLoading(false));
   }, [statusFilter, typeFilter, projectFilter, search, page]);
 
