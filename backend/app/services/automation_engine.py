@@ -263,7 +263,7 @@ def _action_create_task(
     activity = TaskActivity(
         task_id=task.id,
         action="created_by_automation",
-        description=f"Task created by automation rule (context trigger=automation)",
+        description="Task created by automation rule",
     )
     db.add(activity)
     db.commit()
