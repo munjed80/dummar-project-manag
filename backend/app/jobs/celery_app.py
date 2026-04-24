@@ -57,7 +57,8 @@ def _build_celery_app() -> Celery:
         # tests/sync callers see the same error they would have seen before.
         task_always_eager=eager,
         task_eager_propagates=eager,
-        # Result expiration (1 day) so the Redis backend doesn't grow forever.
+        # Result expiration so the Redis backend doesn't grow forever.
+        # 86_400 seconds = 1 day.
         result_expires=86_400,
         broker_connection_retry_on_startup=True,
     )

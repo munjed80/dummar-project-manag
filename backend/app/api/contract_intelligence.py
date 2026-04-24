@@ -265,12 +265,13 @@ def _process_document(
     user_id: int,
     request: Optional[Request] = None,
 ):
-    """Backward-compatible wrapper kept for any legacy callers / tests.
+    """Run the intelligence pipeline **synchronously** in the current process.
 
-    The implementation now lives in
-    :mod:`app.services.contract_intelligence_pipeline`. Prefer dispatching
-    :func:`app.jobs.tasks.process_contract_document_task` instead so that
-    work runs on the Celery worker.
+    This is a thin backward-compatible wrapper kept for legacy in-process
+    callers (e.g. ad-hoc scripts or tests that pass a live ORM object).
+    Production code paths should instead dispatch
+    :func:`app.jobs.tasks.process_contract_document_task` (which accepts the
+    document id only) so the work runs on the Celery worker.
     """
     from app.services.contract_intelligence_pipeline import run_intelligence_pipeline
 

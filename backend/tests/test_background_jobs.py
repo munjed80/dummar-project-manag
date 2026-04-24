@@ -109,7 +109,7 @@ def test_send_email_task_does_not_retry_on_non_transient_error():
         "app.services.email_service._send_email_sync",
         side_effect=ValueError("bad address"),
     ):
-        result = send_email_task.apply(args=("u@example.com", "s", "<p>h</p>"))
+        result = dispatch(send_email_task, "u@example.com", "s", "<p>h</p>")
 
     assert result.successful()
     assert result.result is False
