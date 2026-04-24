@@ -86,7 +86,38 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
     )
     db.add(activity)
     db.commit()
-    
+
+    # Fire automation engine for complaint_created. Errors must never break
+    # the citizen-facing API, so the engine swallows its own exceptions.
+    try:
+        from app.models.automation import AutomationTrigger
+        from app.services.automation_engine import fire_event
+
+        fire_event(
+            db,
+            AutomationTrigger.COMPLAINT_CREATED,
+            {
+                "complaint": {
+                    "id": db_complaint.id,
+                    "tracking_number": db_complaint.tracking_number,
+                    "complaint_type": db_complaint.complaint_type.value,
+                    "status": db_complaint.status.value,
+                    "priority": (
+                        db_complaint.priority.value if db_complaint.priority else None
+                    ),
+                    "area_id": db_complaint.area_id,
+                    "location_id": db_complaint.location_id,
+                    "project_id": db_complaint.project_id,
+                    "assigned_to_id": db_complaint.assigned_to_id,
+                },
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Automation fan-out failed for complaint_created (tracking=%s)",
+            db_complaint.tracking_number,
+        )
+
     return db_complaint
 
 
@@ -261,6 +292,39 @@ def update_complaint(
             )
         except Exception:
             logger.exception("Notification failed for complaint %s status change", complaint.tracking_number)
+
+        # Fire automation engine for complaint_status_changed.
+        try:
+            from app.models.automation import AutomationTrigger
+            from app.services.automation_engine import fire_event
+
+            fire_event(
+                db,
+                AutomationTrigger.COMPLAINT_STATUS_CHANGED,
+                {
+                    "complaint": {
+                        "id": complaint.id,
+                        "tracking_number": complaint.tracking_number,
+                        "complaint_type": complaint.complaint_type.value,
+                        "status": complaint.status.value,
+                        "priority": (
+                            complaint.priority.value if complaint.priority else None
+                        ),
+                        "area_id": complaint.area_id,
+                        "location_id": complaint.location_id,
+                        "project_id": complaint.project_id,
+                        "assigned_to_id": complaint.assigned_to_id,
+                    },
+                    "old_status": old_status.value,
+                    "new_status": complaint_update.status.value,
+                    "actor_user_id": current_user.id,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Automation fan-out failed for complaint_status_changed (tracking=%s)",
+                complaint.tracking_number,
+            )
 
         # Audit: specific status change
         write_audit_log(

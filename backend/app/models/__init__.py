@@ -17,6 +17,7 @@ from app.models.contract_intelligence import (
     RiskSeverity,
     DuplicateStatus,
 )
+from app.models.automation import Automation, AutomationTrigger
 
 __all__ = [
     "Base",
@@ -57,4 +58,6 @@ __all__ = [
     "DocumentProcessingStatus",
     "RiskSeverity",
     "DuplicateStatus",
+    "Automation",
+    "AutomationTrigger",
 ]

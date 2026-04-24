@@ -111,8 +111,19 @@ def reset_db():
 
     SQLite cannot drop tables with circular foreign keys (e.g. Project↔Contract)
     while PRAGMA foreign_keys=ON, so we toggle it off for the teardown only.
+
+    Also resets the slowapi in-memory rate limiter so per-IP counters
+    (`@limiter.limit("5/minute")` on POST /complaints/ etc.) don't leak
+    between tests in the same file.
     """
     Base.metadata.create_all(bind=engine)
+    # Best-effort limiter reset — modules are imported lazily so guard against
+    # ImportError to keep this fixture robust.
+    try:
+        from app.api.complaints import limiter as _complaints_limiter
+        _complaints_limiter.reset()
+    except Exception:
+        pass
     yield
     with engine.begin() as conn:
         conn.exec_driver_sql("PRAGMA foreign_keys=OFF")

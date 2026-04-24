@@ -79,7 +79,36 @@ def create_task(
             )
         except Exception:
             logger.exception("Notification failed for task %d assignment", db_task.id)
-    
+
+    # Fire automation engine for task_created.
+    try:
+        from app.models.automation import AutomationTrigger
+        from app.services.automation_engine import fire_event
+
+        fire_event(
+            db,
+            AutomationTrigger.TASK_CREATED,
+            {
+                "task": {
+                    "id": db_task.id,
+                    "title": db_task.title,
+                    "status": db_task.status.value if db_task.status else None,
+                    "priority": (
+                        db_task.priority.value if db_task.priority else None
+                    ),
+                    "assigned_to_id": db_task.assigned_to_id,
+                    "team_id": db_task.team_id,
+                    "project_id": db_task.project_id,
+                    "complaint_id": db_task.complaint_id,
+                    "area_id": db_task.area_id,
+                    "location_id": db_task.location_id,
+                },
+                "actor_user_id": current_user.id,
+            },
+        )
+    except Exception:
+        logger.exception("Automation fan-out failed for task_created (id=%s)", db_task.id)
+
     return db_task
 
 
@@ -200,6 +229,39 @@ def update_task(
             description=f"Task {task.id} status: {old_status.value} -> {task_update.status.value}",
             request=request,
         )
+
+        # Fire automation engine for task_status_changed.
+        try:
+            from app.models.automation import AutomationTrigger
+            from app.services.automation_engine import fire_event
+
+            fire_event(
+                db,
+                AutomationTrigger.TASK_STATUS_CHANGED,
+                {
+                    "task": {
+                        "id": task.id,
+                        "title": task.title,
+                        "status": task.status.value if task.status else None,
+                        "priority": (
+                            task.priority.value if task.priority else None
+                        ),
+                        "assigned_to_id": task.assigned_to_id,
+                        "team_id": task.team_id,
+                        "project_id": task.project_id,
+                        "complaint_id": task.complaint_id,
+                        "area_id": task.area_id,
+                        "location_id": task.location_id,
+                    },
+                    "old_status": old_status.value,
+                    "new_status": task_update.status.value,
+                    "actor_user_id": current_user.id,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Automation fan-out failed for task_status_changed (id=%s)", task.id
+            )
 
     # Notify when task is assigned to a different user
     if (
