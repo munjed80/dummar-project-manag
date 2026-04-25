@@ -17,6 +17,7 @@ from app.models.location import Area, Building
 from app.models.complaint import Complaint, ComplaintType, ComplaintStatus, ComplaintPriority
 from app.models.task import Task, TaskStatus, TaskSourceType, TaskPriority
 from app.models.contract import Contract, ContractType, ContractStatus
+from app.models.organization import OrganizationUnit, OrgLevel
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,68 @@ def check_default_passwords(db: Session):
         print(msg)
         logger.warning(msg)
     return insecure
+
+
+def seed_organization_units(db: Session):
+    """Seed a sample admin hierarchy: Damascus governorate → Dummar municipality
+    → Dummar Project district. Idempotent."""
+    print("Seeding organization units...")
+    units = [
+        {"code": "DAM", "name": "محافظة دمشق", "level": OrgLevel.GOVERNORATE, "parent_code": None},
+        {"code": "DAM-DUM", "name": "بلدية دمر", "level": OrgLevel.MUNICIPALITY, "parent_code": "DAM"},
+        {"code": "DAM-DUM-PRJ", "name": "حي مشروع دمر", "level": OrgLevel.DISTRICT, "parent_code": "DAM-DUM"},
+    ]
+    by_code: dict[str, OrganizationUnit] = {}
+    for spec in units:
+        existing = db.query(OrganizationUnit).filter(OrganizationUnit.code == spec["code"]).first()
+        if existing:
+            by_code[spec["code"]] = existing
+            continue
+        parent_id = None
+        if spec["parent_code"]:
+            parent = by_code.get(spec["parent_code"]) or db.query(OrganizationUnit).filter(
+                OrganizationUnit.code == spec["parent_code"]
+            ).first()
+            parent_id = parent.id if parent else None
+        unit = OrganizationUnit(
+            code=spec["code"],
+            name=spec["name"],
+            level=spec["level"],
+            parent_id=parent_id,
+            is_active=True,
+        )
+        db.add(unit)
+        db.commit()
+        db.refresh(unit)
+        by_code[spec["code"]] = unit
+    print(f"✓ Processed {len(units)} organization units")
+    return by_code
+
+
+def assign_users_to_org_units(db: Session, units: dict):
+    """Place existing seeded users into the demo hierarchy.
+
+    PROJECT_DIRECTOR stays global (org_unit_id=None) to demonstrate cross-unit
+    visibility. Other staff land at the district level.
+    """
+    print("Assigning users to organization units...")
+    district = units.get("DAM-DUM-PRJ")
+    municipality = units.get("DAM-DUM")
+    if district is None:
+        return
+    placement = {
+        "contracts_mgr": municipality.id if municipality else district.id,
+        "engineer": district.id,
+        "complaints_off": district.id,
+        "area_sup": district.id,
+        "field_user": district.id,
+        "contractor": district.id,
+    }
+    for username, unit_id in placement.items():
+        user = db.query(User).filter(User.username == username).first()
+        if user is not None and user.org_unit_id is None:
+            user.org_unit_id = unit_id
+    db.commit()
 
 
 def seed_areas(db: Session):
@@ -582,6 +645,8 @@ def main():
 
     try:
         seed_users(db)
+        org_units = seed_organization_units(db)
+        assign_users_to_org_units(db, org_units)
         seed_areas(db)
         seed_buildings(db)
         seed_complaints(db)

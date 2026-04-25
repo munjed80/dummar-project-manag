@@ -38,6 +38,9 @@ class Task(Base):
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     assigned_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    org_unit_id = Column(
+        Integer, ForeignKey("organization_units.id"), nullable=True, index=True
+    )
     area_id = Column(Integer, ForeignKey("areas.id"), nullable=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
     location_text = Column(Text, nullable=True)

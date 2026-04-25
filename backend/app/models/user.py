@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -27,6 +27,9 @@ class User(Base):
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.CITIZEN)
     phone = Column(String(20), nullable=True)
     is_active = Column(Integer, default=1)
+    org_unit_id = Column(
+        Integer, ForeignKey("organization_units.id"), nullable=True, index=True
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -35,3 +38,4 @@ class User(Base):
     created_contracts = relationship("Contract", back_populates="created_by_user", foreign_keys="Contract.created_by_id")
     approved_contracts = relationship("Contract", back_populates="approved_by_user", foreign_keys="Contract.approved_by_id")
     audit_logs = relationship("AuditLog", back_populates="user")
+    org_unit = relationship("OrganizationUnit", foreign_keys=[org_unit_id])

@@ -18,6 +18,7 @@ from app.models.contract_intelligence import (
     DuplicateStatus,
 )
 from app.models.automation import Automation, AutomationTrigger
+from app.models.organization import OrganizationUnit, OrgLevel
 
 __all__ = [
     "Base",
@@ -60,4 +61,6 @@ __all__ = [
     "DuplicateStatus",
     "Automation",
     "AutomationTrigger",
+    "OrganizationUnit",
+    "OrgLevel",
 ]

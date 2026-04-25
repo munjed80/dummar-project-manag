@@ -45,6 +45,9 @@ class Contract(Base):
     notes = Column(Text, nullable=True)
     qr_code = Column(String(255), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
+    org_unit_id = Column(
+        Integer, ForeignKey("organization_units.id"), nullable=True, index=True
+    )
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     reviewed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)

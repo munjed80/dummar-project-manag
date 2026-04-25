@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
+from app.core import permissions as perms
 from app.models.user import User
 from app.schemas.user import LoginRequest, Token, UserResponse
+from app.schemas.organization import MePermissionsResponse, PermissionItem
 from app.api.deps import get_current_user
 from app.services.audit import write_audit_log
 
@@ -41,3 +43,28 @@ def login(login_data: LoginRequest, request: Request, db: Session = Depends(get_
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/me/permissions", response_model=MePermissionsResponse)
+def get_current_user_permissions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current user's effective permissions, org chain, and reachable
+    org subtree IDs. Powers the frontend ``<Can>`` wrapper so the UI can hide
+    actions the backend would refuse anyway.
+    """
+    chain = perms.derive_org_chain(db, current_user.org_unit_id)
+    scope = perms.user_scope_unit_ids(db, current_user)
+    return MePermissionsResponse(
+        user_id=current_user.id,
+        role=current_user.role.value,
+        org_unit_id=current_user.org_unit_id,
+        governorate_id=chain["governorate_id"],
+        municipality_id=chain["municipality_id"],
+        district_id=chain["district_id"],
+        scope_unit_ids=None if scope is None else sorted(scope),
+        permissions=[
+            PermissionItem(**p) for p in perms.list_permissions(current_user.role)
+        ],
+    )

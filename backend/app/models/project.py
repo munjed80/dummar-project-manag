@@ -25,6 +25,9 @@ class Project(Base):
     end_date = Column(Date, nullable=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True, index=True)
+    org_unit_id = Column(
+        Integer, ForeignKey("organization_units.id"), nullable=True, index=True
+    )
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

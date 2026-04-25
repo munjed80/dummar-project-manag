@@ -10,6 +10,7 @@ from app.models.user import User, UserRole
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskActivityResponse
 from app.schemas.report import PaginatedTasks
 from app.api.deps import get_current_user, require_role, get_current_internal_user
+from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_task_assigned
 from app.schemas.file_utils import serialize_file_list
@@ -45,6 +46,10 @@ def create_task(
         longitude=task_data.get("longitude"),
     )
     task_data["location_id"] = resolved_location_id
+
+    # Stamp org_unit_id from creator if not explicitly provided
+    if task_data.get("org_unit_id") is None and current_user.org_unit_id is not None:
+        task_data["org_unit_id"] = current_user.org_unit_id
 
     db_task = Task(**task_data)
     
@@ -129,7 +134,8 @@ def list_tasks(
     db: Session = Depends(get_db)
 ):
     query = db.query(Task)
-    
+    query = perms.scope_query(query, db, current_user, Task)
+
     if status_filter:
         query = query.filter(Task.status == status_filter)
     
@@ -177,6 +183,10 @@ def get_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.TASK, resource=task
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     return task
 
 
@@ -191,6 +201,10 @@ def update_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.UPDATE, perms.ResourceType.TASK, resource=task
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     old_status = task.status
     old_assigned_to_id = task.assigned_to_id

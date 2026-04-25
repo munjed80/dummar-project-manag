@@ -21,6 +21,7 @@ from app.schemas.complaint import (
 from app.services.location_service import infer_location_id
 from app.schemas.report import PaginatedComplaints
 from app.api.deps import get_current_user, require_role, get_current_internal_user
+from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_complaint_status_change
 from app.schemas.file_utils import serialize_file_list
@@ -151,7 +152,8 @@ def list_complaints(
     db: Session = Depends(get_db)
 ):
     query = db.query(Complaint)
-    
+    query = perms.scope_query(query, db, current_user, Complaint)
+
     if status_filter:
         query = query.filter(Complaint.status == status_filter)
     
@@ -235,6 +237,10 @@ def get_complaint(
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.COMPLAINT, resource=complaint
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     return complaint
 
 
@@ -249,6 +255,10 @@ def update_complaint(
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.UPDATE, perms.ResourceType.COMPLAINT, resource=complaint
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     old_status = complaint.status
     old_assigned_to_id = complaint.assigned_to_id
