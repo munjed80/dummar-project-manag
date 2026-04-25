@@ -9,6 +9,7 @@ from app.models.location import Location
 from app.models.contract import Contract
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
 from app.api.deps import get_current_internal_user, require_role, get_current_user
+from app.core import permissions as perms
 from app.models.user import UserRole
 from app.services.audit import write_audit_log
 
@@ -39,6 +40,8 @@ def create_project(
         **project.model_dump(),
         created_by_id=current_user.id,
     )
+    if db_project.org_unit_id is None and current_user.org_unit_id is not None:
+        db_project.org_unit_id = current_user.org_unit_id
     
     db.add(db_project)
     db.commit()
@@ -66,7 +69,8 @@ def list_projects(
     db: Session = Depends(get_db)
 ):
     query = db.query(Project)
-    
+    query = perms.scope_query(query, db, current_user, Project)
+
     if status:
         query = query.filter(Project.status == status)
     

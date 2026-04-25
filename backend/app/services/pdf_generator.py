@@ -1,5 +1,6 @@
 import io
 import os
+import re
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
@@ -13,7 +14,8 @@ def generate_contract_pdf(contract) -> str:
     pdf_dir = os.path.join(settings.UPLOAD_DIR, "contracts", "pdf")
     os.makedirs(pdf_dir, exist_ok=True)
 
-    filename = f"contract_{contract.contract_number.replace('/', '_').replace('\\', '_').replace('..', '_')}.pdf"
+    safe_contract_number = re.sub(r"[^A-Za-z0-9._-]", "_", str(contract.contract_number)).replace("..", "_")
+    filename = "contract_" + safe_contract_number + ".pdf"
     filepath = os.path.join(pdf_dir, filename)
 
     buffer = io.BytesIO()

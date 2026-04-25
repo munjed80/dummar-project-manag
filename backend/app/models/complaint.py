@@ -51,6 +51,9 @@ class Complaint(Base):
     status = Column(SQLEnum(ComplaintStatus), nullable=False, default=ComplaintStatus.NEW)
     priority = Column(SQLEnum(ComplaintPriority), nullable=True)
     assigned_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    org_unit_id = Column(
+        Integer, ForeignKey("organization_units.id"), nullable=True, index=True
+    )
     images = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

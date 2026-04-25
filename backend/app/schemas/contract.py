@@ -18,6 +18,7 @@ class ContractBase(BaseModel):
     execution_duration_days: Optional[int] = None
     scope_description: str
     related_areas: Optional[str] = None
+    org_unit_id: Optional[int] = None
 
 
 class ContractCreate(ContractBase):
@@ -30,6 +31,7 @@ class ContractUpdate(BaseModel):
     end_date: Optional[date] = None
     status: Optional[ContractStatus] = None
     project_id: Optional[int] = None
+    org_unit_id: Optional[int] = None
     notes: Optional[str] = None
     attachments: Optional[List[str]] = None
 

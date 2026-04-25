@@ -15,13 +15,15 @@ class Settings(BaseSettings):
     # (override with ENABLE_API_DOCS=true).
     ENVIRONMENT: str = "production"
     ENABLE_API_DOCS: bool = False
-    # Email settings (optional — notifications work in-app without email)
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = "noreply@dummar.gov.sy"
-    SMTP_ENABLED: bool = False
+
+    # ── Background jobs (Celery + Redis) ──
+    # When CELERY_BROKER_URL is empty OR CELERY_TASK_ALWAYS_EAGER is True the
+    # job system runs tasks inline in the calling process. This keeps tests and
+    # local-dev runnable without spinning up Redis + a worker container.
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
+    CELERY_TASK_ALWAYS_EAGER: bool = False
+    CELERY_TASK_DEFAULT_QUEUE: str = "dummar"
 
     def get_cors_origins(self) -> List[str]:
         """Parse comma-separated CORS origins from env var."""

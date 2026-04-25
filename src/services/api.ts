@@ -21,6 +21,18 @@ export interface User {
   phone?: string;
   is_active: number;
   created_at: string;
+  org_unit_id?: number | null;
+}
+
+export interface MePermissionsResponse {
+  user_id: number;
+  role: string;
+  org_unit_id: number | null;
+  governorate_id: number | null;
+  municipality_id: number | null;
+  district_id: number | null;
+  scope_unit_ids: number[] | null;
+  permissions: { resource: string; action: string }[];
 }
 
 export interface PaginatedResponse<T> {
@@ -147,6 +159,14 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to fetch user');
+    return response.json();
+  }
+
+  async getCurrentUserPermissions(): Promise<MePermissionsResponse> {
+    const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch permissions');
     return response.json();
   }
 

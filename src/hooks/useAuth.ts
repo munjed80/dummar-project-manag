@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '@/services/api';
-import type { User } from '@/services/api';
+import type { User, MePermissionsResponse } from '@/services/api';
 
 // ── Role definitions matching backend UserRole enum ──
 export type UserRole =
@@ -53,6 +53,10 @@ export interface AuthState {
   canViewReports: boolean;
   /** Generic role check */
   hasRole: (...roles: UserRole[]) => boolean;
+  /** Fine-grained permission check (resource + action). */
+  can: (resource: string, action: string) => boolean;
+  /** Permission metadata fetched from /auth/me/permissions */
+  permissions: MePermissionsResponse | null;
   /** Refresh user from API */
   refresh: () => Promise<void>;
 }
@@ -80,11 +84,13 @@ export function useAuth(): AuthState {
   const [user, setUser] = useState<User | null>(getCachedUser);
   const [loading, setLoading] = useState(!getCachedUser());
   const [error, setError] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<MePermissionsResponse | null>(null);
 
   const refresh = useCallback(async () => {
     if (!apiService.isAuthenticated()) {
       setUser(null);
       setCachedUser(null);
+      setPermissions(null);
       setLoading(false);
       return;
     }
@@ -94,9 +100,16 @@ export function useAuth(): AuthState {
       setUser(u);
       setCachedUser(u);
       setError(null);
+      try {
+        const p = await apiService.getCurrentUserPermissions();
+        setPermissions(p);
+      } catch {
+        setPermissions(null);
+      }
     } catch {
       setUser(null);
       setCachedUser(null);
+      setPermissions(null);
       setError('Failed to fetch user');
     } finally {
       setLoading(false);
@@ -114,6 +127,16 @@ export function useAuth(): AuthState {
     [role],
   );
 
+  const can = useCallback(
+    (resource: string, action: string) => {
+      if (!permissions) return false;
+      return permissions.permissions.some(
+        (p) => p.resource === resource && p.action === action,
+      );
+    },
+    [permissions],
+  );
+
   return {
     user,
     loading,
@@ -127,6 +150,8 @@ export function useAuth(): AuthState {
     canManageUsers: role ? USER_MANAGERS.includes(role) : false,
     canViewReports: role !== 'citizen',
     hasRole,
+    can,
+    permissions,
     refresh,
   };
 }

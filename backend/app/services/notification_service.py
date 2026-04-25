@@ -1,6 +1,5 @@
 """
-Notification service — creates in-app notifications and sends email
-notifications for important events.
+Notification service — creates in-app notifications for important events.
 """
 import logging
 from typing import Optional, List
@@ -8,11 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationType
 from app.models.user import User, UserRole
-from app.services.email_service import (
-    send_complaint_status_email,
-    send_task_assignment_email,
-    send_contract_status_email,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +21,34 @@ def create_notification(
     entity_id: Optional[int] = None,
 ) -> Notification:
     """Create a single in-app notification for a user."""
-    notif = Notification(
-        user_id=user_id,
-        notification_type=notification_type,
-        title=title,
-        message=message,
+    from app.services.execution_log import (
+        ACTION_TYPE_NOTIFICATION,
+        track_execution,
+    )
+
+    with track_execution(
+        ACTION_TYPE_NOTIFICATION,
+        "create_notification",
         entity_type=entity_type,
         entity_id=entity_id,
-    )
-    db.add(notif)
-    db.commit()
-    db.refresh(notif)
-    return notif
+        user_id=user_id,
+        payload={
+            "notification_type": getattr(notification_type, "value", str(notification_type)),
+            "title": title,
+        },
+    ):
+        notif = Notification(
+            user_id=user_id,
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        db.add(notif)
+        db.commit()
+        db.refresh(notif)
+        return notif
 
 
 def notify_complaint_status_change(
@@ -94,24 +104,6 @@ def notify_complaint_status_change(
             entity_id=complaint_id,
         )
 
-    # Send email notifications to users with email addresses (batch lookup)
-    if notify_user_ids:
-        email_users = db.query(User).filter(
-            User.id.in_(notify_user_ids),
-            User.email.isnot(None),
-            User.email != "",
-        ).all()
-        for user in email_users:
-            try:
-                send_complaint_status_email(
-                    to_email=user.email,
-                    tracking_number=tracking_number,
-                    old_status=old_status,
-                    new_status=new_status,
-                )
-            except Exception:
-                logger.exception("Failed to send complaint email to user %d", user.id)
-
     logger.info(
         "Sent %d notifications for complaint %s status change",
         len(notify_user_ids),
@@ -135,18 +127,6 @@ def notify_task_assigned(
         entity_type="task",
         entity_id=task_id,
     )
-
-    # Send email notification
-    try:
-        user = db.query(User).filter(User.id == assigned_to_id).first()
-        if user and user.email:
-            send_task_assignment_email(
-                to_email=user.email,
-                task_title=task_title,
-                assignee_name=user.full_name,
-            )
-    except Exception:
-        logger.exception("Failed to send task assignment email to user %d", assigned_to_id)
 
 
 def notify_contract_status_change(
@@ -187,24 +167,6 @@ def notify_contract_status_change(
             entity_type="contract",
             entity_id=contract_id,
         )
-
-    # Send email notifications to managers with email addresses (batch lookup)
-    manager_ids = [uid for (uid,) in managers]
-    if manager_ids:
-        email_users = db.query(User).filter(
-            User.id.in_(manager_ids),
-            User.email.isnot(None),
-            User.email != "",
-        ).all()
-        for user in email_users:
-            try:
-                send_contract_status_email(
-                    to_email=user.email,
-                    contract_number=contract_number,
-                    action=action,
-                )
-            except Exception:
-                logger.exception("Failed to send contract email to user %d", user.id)
 
     logger.info(
         "Sent %d notifications for contract %s action=%s",

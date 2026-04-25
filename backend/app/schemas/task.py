@@ -21,6 +21,7 @@ class TaskBase(BaseModel):
     longitude: Optional[float] = None
     due_date: Optional[date] = None
     priority: TaskPriority = TaskPriority.MEDIUM
+    org_unit_id: Optional[int] = None
 
 
 class TaskCreate(TaskBase):
@@ -33,6 +34,7 @@ class TaskUpdate(BaseModel):
     assigned_to_id: Optional[int] = None
     team_id: Optional[int] = None
     project_id: Optional[int] = None
+    org_unit_id: Optional[int] = None
     due_date: Optional[date] = None
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None

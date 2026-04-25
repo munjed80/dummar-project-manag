@@ -22,3 +22,5 @@ openpyxl==3.1.5
 pytesseract==0.3.13
 arabic-reshaper==3.0.0
 python-bidi==0.6.7
+celery==5.4.0
+redis==5.2.1

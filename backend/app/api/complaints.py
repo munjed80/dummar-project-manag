@@ -21,6 +21,7 @@ from app.schemas.complaint import (
 from app.services.location_service import infer_location_id
 from app.schemas.report import PaginatedComplaints
 from app.api.deps import get_current_user, require_role, get_current_internal_user
+from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_complaint_status_change
 from app.schemas.file_utils import serialize_file_list
@@ -86,7 +87,38 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
     )
     db.add(activity)
     db.commit()
-    
+
+    # Fire automation engine for complaint_created. Errors must never break
+    # the citizen-facing API, so the engine swallows its own exceptions.
+    try:
+        from app.models.automation import AutomationTrigger
+        from app.services.automation_engine import fire_event
+
+        fire_event(
+            db,
+            AutomationTrigger.COMPLAINT_CREATED,
+            {
+                "complaint": {
+                    "id": db_complaint.id,
+                    "tracking_number": db_complaint.tracking_number,
+                    "complaint_type": db_complaint.complaint_type.value,
+                    "status": db_complaint.status.value,
+                    "priority": (
+                        db_complaint.priority.value if db_complaint.priority else None
+                    ),
+                    "area_id": db_complaint.area_id,
+                    "location_id": db_complaint.location_id,
+                    "project_id": db_complaint.project_id,
+                    "assigned_to_id": db_complaint.assigned_to_id,
+                },
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Automation fan-out failed for complaint_created (tracking=%s)",
+            db_complaint.tracking_number,
+        )
+
     return db_complaint
 
 
@@ -120,7 +152,8 @@ def list_complaints(
     db: Session = Depends(get_db)
 ):
     query = db.query(Complaint)
-    
+    query = perms.scope_query(query, db, current_user, Complaint)
+
     if status_filter:
         query = query.filter(Complaint.status == status_filter)
     
@@ -204,6 +237,10 @@ def get_complaint(
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.COMPLAINT, resource=complaint
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     return complaint
 
 
@@ -218,6 +255,10 @@ def update_complaint(
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.UPDATE, perms.ResourceType.COMPLAINT, resource=complaint
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     old_status = complaint.status
     old_assigned_to_id = complaint.assigned_to_id
@@ -261,6 +302,39 @@ def update_complaint(
             )
         except Exception:
             logger.exception("Notification failed for complaint %s status change", complaint.tracking_number)
+
+        # Fire automation engine for complaint_status_changed.
+        try:
+            from app.models.automation import AutomationTrigger
+            from app.services.automation_engine import fire_event
+
+            fire_event(
+                db,
+                AutomationTrigger.COMPLAINT_STATUS_CHANGED,
+                {
+                    "complaint": {
+                        "id": complaint.id,
+                        "tracking_number": complaint.tracking_number,
+                        "complaint_type": complaint.complaint_type.value,
+                        "status": complaint.status.value,
+                        "priority": (
+                            complaint.priority.value if complaint.priority else None
+                        ),
+                        "area_id": complaint.area_id,
+                        "location_id": complaint.location_id,
+                        "project_id": complaint.project_id,
+                        "assigned_to_id": complaint.assigned_to_id,
+                    },
+                    "old_status": old_status.value,
+                    "new_status": complaint_update.status.value,
+                    "actor_user_id": current_user.id,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Automation fan-out failed for complaint_status_changed (tracking=%s)",
+                complaint.tracking_number,
+            )
 
         # Audit: specific status change
         write_audit_log(

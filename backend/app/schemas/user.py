@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     full_name: str
     role: UserRole
     phone: Optional[str] = None
+    org_unit_id: Optional[int] = None
 
 
 class UserCreate(UserBase):
@@ -21,6 +22,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[int] = None
+    org_unit_id: Optional[int] = None
 
 
 class UserResponse(UserBase):

@@ -13,6 +13,7 @@ class ProjectBase(BaseModel):
     end_date: Optional[date] = None
     location_id: Optional[int] = None
     contract_id: Optional[int] = None
+    org_unit_id: Optional[int] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -27,6 +28,7 @@ class ProjectUpdate(BaseModel):
     end_date: Optional[date] = None
     location_id: Optional[int] = None
     contract_id: Optional[int] = None
+    org_unit_id: Optional[int] = None
 
 
 class ProjectResponse(ProjectBase):

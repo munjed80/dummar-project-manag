@@ -17,6 +17,7 @@ from app.schemas.contract import (
 )
 from app.schemas.report import PaginatedContracts
 from app.api.deps import get_current_user, get_current_contracts_manager, get_current_internal_user
+from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.pdf_generator import generate_contract_pdf
 from app.services.notification_service import notify_contract_status_change
@@ -60,6 +61,8 @@ def create_contract(
         created_by_id=current_user.id,
         status=ContractStatus.DRAFT,
     )
+    if db_contract.org_unit_id is None and current_user.org_unit_id is not None:
+        db_contract.org_unit_id = current_user.org_unit_id
     
     db.add(db_contract)
     db.commit()
@@ -96,7 +99,8 @@ def list_contracts(
     db: Session = Depends(get_db)
 ):
     query = db.query(Contract)
-    
+    query = perms.scope_query(query, db, current_user, Contract)
+
     if status_filter:
         query = query.filter(Contract.status == status_filter)
 
@@ -148,6 +152,10 @@ def get_contract(
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.CONTRACT, resource=contract
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     return contract
 
 
@@ -239,15 +247,34 @@ def generate_contract_pdf_endpoint(
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
+    """Generate the PDF summary for a contract.
+
+    The actual PDF rendering runs as a Celery task. When the broker is
+    configured (production) the endpoint enqueues the task and returns
+    ``{"job_id": ..., "status": "queued"}`` so the client can poll
+    ``GET /jobs/{job_id}``. In eager mode (tests / local dev without Redis)
+    the task runs inline and the response also includes ``pdf_path`` so the
+    pre-existing API contract is preserved.
+    """
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
 
-    pdf_path = generate_contract_pdf(contract)
-    contract.pdf_file = pdf_path
-    db.commit()
+    from app.jobs import dispatch, is_eager_mode
+    from app.jobs.tasks import generate_contract_pdf_task
 
-    return {"pdf_path": pdf_path}
+    result = dispatch(generate_contract_pdf_task, contract.id)
+
+    if is_eager_mode():
+        # Refresh so the caller sees the updated pdf_file column.
+        db.refresh(contract)
+        return {
+            "pdf_path": contract.pdf_file,
+            "job_id": result.id,
+            "status": "completed",
+        }
+
+    return {"job_id": result.id, "status": "queued"}
 
 
 @router.get("/{contract_id}/approvals", response_model=List[ContractApprovalResponse])

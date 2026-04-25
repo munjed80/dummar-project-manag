@@ -15,6 +15,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 os.environ["UPLOAD_DIR"] = "/tmp/test_uploads"
 os.makedirs("/tmp/test_uploads", exist_ok=True)
+# Force background-job tasks to run inline (no Redis broker available in CI).
+os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
+os.environ.setdefault("CELERY_BROKER_URL", "")
 
 # Patch GeoAlchemy2 Geometry type to behave as plain String on SQLite
 import geoalchemy2  # noqa: E402
@@ -91,6 +94,21 @@ def _override_get_db():
 app.dependency_overrides[get_db] = _override_get_db
 
 
+# Make Celery tasks open sessions against the same in-memory SQLite engine
+# that the API tests use.
+from app.jobs import tasks as _jobs_tasks  # noqa: E402
+
+_jobs_tasks.set_task_session_factory(TestingSessionLocal)
+
+
+# Make the central execution-log recorder (used by notifications, automation
+# engine and Celery tasks) write into the same in-memory engine when callers
+# don't pass an explicit `db` session.
+from app.services import execution_log as _exec_log_service  # noqa: E402
+
+_exec_log_service.set_log_session_factory(TestingSessionLocal)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -101,8 +119,19 @@ def reset_db():
 
     SQLite cannot drop tables with circular foreign keys (e.g. Project↔Contract)
     while PRAGMA foreign_keys=ON, so we toggle it off for the teardown only.
+
+    Also resets the slowapi in-memory rate limiter so per-IP counters
+    (`@limiter.limit("5/minute")` on POST /complaints/ etc.) don't leak
+    between tests in the same file.
     """
     Base.metadata.create_all(bind=engine)
+    # Best-effort limiter reset — modules are imported lazily so guard against
+    # ImportError to keep this fixture robust.
+    try:
+        from app.api.complaints import limiter as _complaints_limiter
+        _complaints_limiter.reset()
+    except Exception:
+        pass
     yield
     with engine.begin() as conn:
         conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
