@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -409,7 +409,7 @@ def _record_run(
     """Update the audit columns on the automation row."""
     try:
         automation.run_count = (automation.run_count or 0) + 1
-        automation.last_run_at = datetime.utcnow()
+        automation.last_run_at = datetime.now(timezone.utc)
         automation.last_error = error
         db.commit()
     except Exception:

@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
@@ -371,7 +371,7 @@ def approve_document(
 
     doc.processing_status = DocumentProcessingStatus.APPROVED
     doc.reviewed_by_id = current_user.id
-    doc.reviewed_at = datetime.utcnow()
+    doc.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(doc)
 
@@ -402,7 +402,7 @@ def reject_document(
 
     doc.processing_status = DocumentProcessingStatus.REJECTED
     doc.reviewed_by_id = current_user.id
-    doc.reviewed_at = datetime.utcnow()
+    doc.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(doc)
 
@@ -624,7 +624,7 @@ def resolve_risk_flag(
 
     flag.is_resolved = True
     flag.resolved_by_id = current_user.id
-    flag.resolved_at = datetime.utcnow()
+    flag.resolved_at = datetime.now(timezone.utc)
     flag.resolution_notes = resolution_notes
     db.commit()
 
@@ -681,7 +681,7 @@ def review_duplicate(
     dup.status = review.status
     dup.review_notes = review.review_notes
     dup.reviewed_by_id = current_user.id
-    dup.reviewed_at = datetime.utcnow()
+    dup.reviewed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(dup)
 
@@ -1992,7 +1992,7 @@ def export_intelligence_pdf(
     _draw("تقرير ذكاء العقود — مشروع دمّر", 30 * mm, y, _FONT_BOLD, 18)
     y -= 10 * mm
     c.setFont(_FONT, 10)
-    c.drawString(30 * mm, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    c.drawString(30 * mm, y, f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}")
     y -= 6 * mm
 
     # Active filters
@@ -2133,7 +2133,7 @@ def export_document_pdf(
     y -= 8 * mm
     _draw(f"الملف: {doc.original_filename or '?'}", 30 * mm, y, _FONT, 10)
     y -= 5 * mm
-    c.drawString(30 * mm, y, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    c.drawString(30 * mm, y, f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}")
     y -= 8 * mm
 
     # Document info section

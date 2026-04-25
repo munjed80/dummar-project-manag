@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import random
 import string
@@ -274,7 +274,7 @@ def update_complaint(
         setattr(complaint, field, value)
     
     if complaint_update.status == ComplaintStatus.RESOLVED:
-        complaint.resolved_at = datetime.utcnow()
+        complaint.resolved_at = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(complaint)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 from app.core.database import get_db
@@ -212,7 +212,7 @@ def approve_contract(
     if approval_request.action == "approve":
         contract.status = ContractStatus.APPROVED
         contract.approved_by_id = current_user.id
-        contract.approved_at = datetime.utcnow()
+        contract.approved_at = datetime.now(timezone.utc)
     elif approval_request.action == "activate":
         contract.status = ContractStatus.ACTIVE
     elif approval_request.action == "complete":
