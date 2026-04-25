@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 # random passwords per user and writes them to a credentials file.
 _SEED_DEFAULT_PASSWORD = "password123"
 
+# Fixed seed password for the `director` account. The director is the
+# bootstrap super-user used by operators and integration tests, so its
+# credentials must remain stable across fresh seeds (do NOT randomize).
+# An existing `director` user is never overwritten — this password is
+# only applied when the account is created for the first time.
+_DIRECTOR_FIXED_PASSWORD = "Dummar-Test@2026!"
+_DIRECTOR_USERNAME = "director"
+
 # Where per-user generated passwords are written when the production-safe
 # random-password mode is used. Must NOT be world-readable; the file is
 # chmod 600 after writing. The operator should record/distribute the
@@ -77,7 +85,13 @@ def seed_users(db: Session, credentials_file: str = _DEFAULT_CREDENTIALS_FILE):
         if existing:
             continue
 
-        if use_default:
+        if user_data["username"] == _DIRECTOR_USERNAME:
+            # Director uses a fixed, well-known password so operators and
+            # integration tests have a stable bootstrap account. Existing
+            # director users are never touched (handled by the
+            # skip-if-exists check above).
+            password = _DIRECTOR_FIXED_PASSWORD
+        elif use_default:
             password = _SEED_DEFAULT_PASSWORD
         else:
             password = _generate_strong_password()
