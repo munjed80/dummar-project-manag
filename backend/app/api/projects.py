@@ -105,6 +105,10 @@ def get_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.PROJECT, resource=project
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     return _enrich_project_response(db, project)
 
 
@@ -119,6 +123,10 @@ def update_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.UPDATE, perms.ResourceType.PROJECT, resource=project
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     update_data = project_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -147,6 +155,10 @@ def delete_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.DELETE, perms.ResourceType.PROJECT, resource=project
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     write_audit_log(
         db, action="project_delete", entity_type="project",

@@ -193,6 +193,7 @@ def get_complaints_map_markers(
         Complaint.latitude.isnot(None),
         Complaint.longitude.isnot(None),
     )
+    query = perms.scope_query(query, db, current_user, Complaint)
 
     if status_filter:
         query = query.filter(Complaint.status == status_filter)
