@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import Dict, List
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import get_db
 from app.models.app_setting import AppSetting
 from app.models.user import User, UserRole
@@ -86,7 +86,7 @@ def update_settings(
             existing.category = item.category
             existing.description = item.description
             existing.updated_by_id = current_user.id
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
         else:
             new_setting = AppSetting(
                 key=item.key,

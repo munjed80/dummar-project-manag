@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from app.core.database import get_db
 from app.models.task import Task, TaskActivity, TaskStatus, TaskPriority
@@ -220,7 +220,7 @@ def update_task(
         setattr(task, field, value)
     
     if task_update.status == TaskStatus.COMPLETED:
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(task)

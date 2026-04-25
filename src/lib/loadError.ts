@@ -4,10 +4,12 @@
  * browser console so the real status / detail is never silently swallowed.
  *
  * This intentionally distinguishes:
- *   - 401  → the session expired / token missing
- *   - 403  → the logged-in role is not allowed by the backend
- *   - 5xx  → backend runtime failure, surface the real `detail`
- *   - else → network / unknown error, still surface what we know
+ *   - 401         → the session expired / token missing
+ *   - 403         → the logged-in role is not allowed by the backend
+ *   - 502/503/504 → transient gateway error; show a clean retry-friendly
+ *                   Arabic message and DO NOT leak any HTML body
+ *   - other 5xx   → backend runtime failure, surface the JSON `detail`
+ *   - else        → network / unknown error, still surface what we know
  *
  * Callers should pass `entityLabel` in Arabic (e.g. "الشكاوى", "المهام").
  */
@@ -21,7 +23,12 @@ export interface LoadErrorInfo {
   status: number | null;
   /** True if the backend explicitly refused due to auth/role (401/403). */
   isAuth: boolean;
+  /** True if this is a transient infrastructure error (502/503/504, network)
+   *  for which the UI should suggest a retry. */
+  isTransient: boolean;
 }
+
+const TRANSIENT_GATEWAY_STATUSES = new Set([502, 503, 504]);
 
 export function describeLoadError(err: unknown, entityLabel: string): LoadErrorInfo {
   // Always log the raw error in dev so the operator sees the real cause.
@@ -31,11 +38,17 @@ export function describeLoadError(err: unknown, entityLabel: string): LoadErrorI
   }
 
   if (err instanceof ApiError) {
-    const detail = err.detail ?? err.statusText ?? '';
+    // Use detail only when it's a real backend message (never raw HTML — the
+    // api.ts readErrorBody helper already discards HTML bodies, but we still
+    // guard here in case a future caller passes through unsanitized text).
+    const detailRaw = err.detail ?? '';
+    const detail = /^\s*<(!doctype|html|\?xml)/i.test(detailRaw) ? '' : detailRaw;
+
     if (err.status === 401) {
       return {
         status: 401,
         isAuth: true,
+        isTransient: false,
         message: 'انتهت الجلسة أو الرمز غير صالح. يرجى تسجيل الدخول من جديد.',
       };
     }
@@ -43,27 +56,44 @@ export function describeLoadError(err: unknown, entityLabel: string): LoadErrorI
       return {
         status: 403,
         isAuth: true,
+        isTransient: false,
         message: `ليس لديك صلاحية لعرض ${entityLabel} (HTTP ${err.status}${detail ? `: ${detail}` : ''}).`,
+      };
+    }
+    if (TRANSIENT_GATEWAY_STATUSES.has(err.status)) {
+      // Gateway error — typically nginx returning its default text/html 502
+      // page when the backend was momentarily unreachable. NEVER include the
+      // body here. Show a clean retry-friendly Arabic message.
+      return {
+        status: err.status,
+        isAuth: false,
+        isTransient: true,
+        message: `الخادم غير متاح مؤقتًا أثناء تحميل ${entityLabel} (HTTP ${err.status}). يرجى إعادة المحاولة بعد لحظات.`,
       };
     }
     if (err.status >= 500) {
       return {
         status: err.status,
         isAuth: false,
+        isTransient: false,
         message: `خطأ في الخادم أثناء تحميل ${entityLabel} (HTTP ${err.status}${detail ? `: ${detail}` : ''}).`,
       };
     }
     return {
       status: err.status,
       isAuth: false,
+      isTransient: false,
       message: `تعذّر تحميل ${entityLabel} (HTTP ${err.status}${detail ? `: ${detail}` : ''}).`,
     };
   }
 
+  // Non-ApiError: typically a TypeError from fetch (network down, CORS, DNS).
+  // These are also transient from the user's perspective.
   const msg = err instanceof Error ? err.message : String(err ?? 'unknown error');
   return {
     status: null,
     isAuth: false,
-    message: `تعذّر الاتصال بالخادم لتحميل ${entityLabel} (${msg}).`,
+    isTransient: true,
+    message: `تعذّر الاتصال بالخادم لتحميل ${entityLabel} (${msg}). يرجى إعادة المحاولة.`,
   };
 }

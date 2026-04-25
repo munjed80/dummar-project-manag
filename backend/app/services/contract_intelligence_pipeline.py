@@ -15,7 +15,7 @@ FastAPI ``Request`` object across a process boundary.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -55,7 +55,7 @@ def run_intelligence_pipeline(
         doc.ocr_text = ocr_result.text
         doc.ocr_confidence = ocr_result.confidence
         doc.ocr_engine = ocr_result.engine
-        doc.ocr_completed_at = datetime.utcnow()
+        doc.ocr_completed_at = datetime.now(timezone.utc)
 
         if not ocr_result.success:
             doc.processing_status = DocumentProcessingStatus.FAILED
