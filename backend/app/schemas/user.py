@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 from app.models.user import UserRole
@@ -6,7 +6,6 @@ from app.models.user import UserRole
 
 class UserBase(BaseModel):
     username: str
-    email: Optional[EmailStr] = None
     full_name: str
     role: UserRole
     phone: Optional[str] = None
@@ -23,11 +22,9 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """Fields an admin (PROJECT_DIRECTOR) can change on an existing user.
 
-    Email is intentionally optional throughout the system — we never require it.
     Setting ``password`` here will hash it and force a password change on next
     login (see ``app.api.users.update_user``).
     """
-    email: Optional[EmailStr] = None
     full_name: Optional[str] = None
     phone: Optional[str] = None
     role: Optional[UserRole] = None
@@ -73,4 +70,5 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
 

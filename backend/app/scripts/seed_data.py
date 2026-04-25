@@ -59,14 +59,14 @@ def _generate_strong_password() -> str:
 def seed_users(db: Session, credentials_file: str = _DEFAULT_CREDENTIALS_FILE):
     print("Seeding users...")
     users_data = [
-        {"username": "director", "full_name": "م. أحمد الخطيب", "role": UserRole.PROJECT_DIRECTOR, "email": "director@dummar.gov.sy", "phone": "+963112345001"},
-        {"username": "contracts_mgr", "full_name": "م. سامر القاسم", "role": UserRole.CONTRACTS_MANAGER, "email": "contracts@dummar.gov.sy", "phone": "+963112345002"},
-        {"username": "engineer", "full_name": "م. ليلى حسن", "role": UserRole.ENGINEER_SUPERVISOR, "email": "engineer@dummar.gov.sy", "phone": "+963112345003"},
-        {"username": "complaints_off", "full_name": "عمر المصري", "role": UserRole.COMPLAINTS_OFFICER, "email": "complaints@dummar.gov.sy", "phone": "+963112345004"},
-        {"username": "area_sup", "full_name": "خالد الأحمد", "role": UserRole.AREA_SUPERVISOR, "email": "area@dummar.gov.sy", "phone": "+963112345005"},
-        {"username": "field_user", "full_name": "يوسف العلي", "role": UserRole.FIELD_TEAM, "email": "field@dummar.gov.sy", "phone": "+963112345006"},
-        {"username": "contractor", "full_name": "شركة البناء الحديث", "role": UserRole.CONTRACTOR_USER, "email": "contractor@dummar.gov.sy", "phone": "+963112345007"},
-        {"username": "citizen1", "full_name": "مواطن — سمير الحسن", "role": UserRole.CITIZEN, "email": "citizen1@dummar.gov.sy", "phone": "+963911234567"},
+        {"username": "director", "full_name": "م. أحمد الخطيب", "role": UserRole.PROJECT_DIRECTOR, "phone": "+963112345001"},
+        {"username": "contracts_mgr", "full_name": "م. سامر القاسم", "role": UserRole.CONTRACTS_MANAGER, "phone": "+963112345002"},
+        {"username": "engineer", "full_name": "م. ليلى حسن", "role": UserRole.ENGINEER_SUPERVISOR, "phone": "+963112345003"},
+        {"username": "complaints_off", "full_name": "عمر المصري", "role": UserRole.COMPLAINTS_OFFICER, "phone": "+963112345004"},
+        {"username": "area_sup", "full_name": "خالد الأحمد", "role": UserRole.AREA_SUPERVISOR, "phone": "+963112345005"},
+        {"username": "field_user", "full_name": "يوسف العلي", "role": UserRole.FIELD_TEAM, "phone": "+963112345006"},
+        {"username": "contractor", "full_name": "شركة البناء الحديث", "role": UserRole.CONTRACTOR_USER, "phone": "+963112345007"},
+        {"username": "citizen1", "full_name": "مواطن — سمير الحسن", "role": UserRole.CITIZEN, "phone": "+963911234567"},
     ]
 
     use_default = _use_default_passwords()

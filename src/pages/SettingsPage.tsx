@@ -330,7 +330,6 @@ export default function SettingsPage() {
             <CardContent className="space-y-1">
               {detail('اسم المستخدم', user.username)}
               {detail('الاسم الكامل', user.full_name)}
-              {detail('البريد الإلكتروني', user.email)}
               {detail('الدور', <Badge>{roleLabels[user.role] || user.role}</Badge>)}
               {detail('رقم الهاتف', user.phone)}
             </CardContent>

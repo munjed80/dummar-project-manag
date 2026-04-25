@@ -34,15 +34,9 @@ def create_user(
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    if user.email:
-        existing_email = db.query(User).filter(User.email == user.email).first()
-        if existing_email:
-            raise HTTPException(status_code=400, detail="Email already exists")
-
     hashed_password = get_password_hash(user.password)
     db_user = User(
         username=user.username,
-        email=user.email,
         full_name=user.full_name,
         hashed_password=hashed_password,
         role=user.role,
@@ -87,7 +81,6 @@ def list_users(
             or_(
                 User.username.ilike(search_term),
                 User.full_name.ilike(search_term),
-                User.email.ilike(search_term),
             )
         )
 

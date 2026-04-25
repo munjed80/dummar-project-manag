@@ -9,7 +9,6 @@ class TeamBase(BaseModel):
     team_type: TeamType = TeamType.INTERNAL_TEAM
     contact_name: Optional[str] = None
     contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
     is_active: bool = True
     location_id: Optional[int] = None
     project_id: Optional[int] = None
@@ -25,7 +24,6 @@ class TeamUpdate(BaseModel):
     team_type: Optional[TeamType] = None
     contact_name: Optional[str] = None
     contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
     is_active: Optional[bool] = None
     location_id: Optional[int] = None
     project_id: Optional[int] = None

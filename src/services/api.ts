@@ -16,7 +16,6 @@ export interface AuthToken {
 export interface User {
   id: number;
   username: string;
-  email?: string;
   full_name: string;
   role: string;
   phone?: string;

@@ -64,7 +64,7 @@ export default function UsersPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState({ username: '', email: '', full_name: '', password: '', role: 'field_team', phone: '' });
+  const [formData, setFormData] = useState({ username: '', full_name: '', password: '', role: 'field_team', phone: '' });
   const [saving, setSaving] = useState(false);
 
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
@@ -96,13 +96,13 @@ export default function UsersPage() {
 
   const openCreateDialog = () => {
     setEditingUser(null);
-    setFormData({ username: '', email: '', full_name: '', password: '', role: 'field_team', phone: '' });
+    setFormData({ username: '', full_name: '', password: '', role: 'field_team', phone: '' });
     setDialogOpen(true);
   };
 
   const openEditDialog = (user: User) => {
     setEditingUser(user);
-    setFormData({ username: user.username, email: user.email || '', full_name: user.full_name, password: '', role: user.role, phone: user.phone || '' });
+    setFormData({ username: user.username, full_name: user.full_name, password: '', role: user.role, phone: user.phone || '' });
     setDialogOpen(true);
   };
 
@@ -110,11 +110,10 @@ export default function UsersPage() {
     setSaving(true);
     try {
       if (editingUser) {
-        // Admin edit: full_name, email (optional), phone, role, active status.
+        // Admin edit: full_name, phone, role, active status.
         // Password is NOT changed here — use the dedicated reset action.
         const updateData: any = {
           full_name: formData.full_name,
-          email: formData.email || undefined,
           phone: formData.phone || undefined,
           role: formData.role,
           is_active: editingUser.is_active,
@@ -140,7 +139,6 @@ export default function UsersPage() {
           phone: formData.phone || undefined,
           must_change_password: true,
         };
-        if (formData.email) createPayload.email = formData.email;
         await apiService.createUser(createPayload);
         toast.success('تم إنشاء المستخدم بنجاح');
       }
@@ -236,7 +234,6 @@ export default function UsersPage() {
                   <TableRow>
                     <TableHead className="text-right">الاسم الكامل</TableHead>
                     <TableHead className="text-right">اسم المستخدم</TableHead>
-                    <TableHead className="text-right">البريد</TableHead>
                     <TableHead className="text-right">الدور</TableHead>
                     <TableHead className="text-right">الحالة</TableHead>
                     <TableHead className="text-right">تاريخ الإنشاء</TableHead>
@@ -246,7 +243,7 @@ export default function UsersPage() {
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                         لا يوجد مستخدمون
                       </TableCell>
                     </TableRow>
@@ -255,7 +252,6 @@ export default function UsersPage() {
                       <TableRow key={u.id}>
                         <TableCell className="font-medium">{u.full_name}</TableCell>
                         <TableCell className="font-mono text-sm">{u.username}</TableCell>
-                        <TableCell className="text-sm">{u.email || '-'}</TableCell>
                         <TableCell>
                           <Badge className={roleColors[u.role] || 'bg-gray-100 text-gray-800'}>
                             {roleLabels[u.role] || u.role}
@@ -323,10 +319,6 @@ export default function UsersPage() {
             <div className="space-y-2">
               <Label>الاسم الكامل *</Label>
               <Input value={formData.full_name} onChange={(e) => setFormData(f => ({ ...f, full_name: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>البريد الإلكتروني (اختياري)</Label>
-              <Input type="email" value={formData.email} onChange={(e) => setFormData(f => ({ ...f, email: e.target.value }))} />
             </div>
             {!editingUser && (
               <div className="space-y-2">

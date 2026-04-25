@@ -35,7 +35,6 @@ def upgrade():
                 name='automationtrigger',
             ),
             nullable=False,
-            index=True,
         ),
         sa.Column('conditions', sa.Text(), nullable=True),
         sa.Column('actions', sa.Text(), nullable=False),

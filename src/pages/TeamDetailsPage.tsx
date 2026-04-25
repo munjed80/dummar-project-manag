@@ -29,7 +29,6 @@ export default function TeamDetailsPage() {
     team_type: 'internal_team',
     contact_name: '',
     contact_phone: '',
-    contact_email: '',
     notes: '',
     is_active: true,
   });
@@ -44,7 +43,6 @@ export default function TeamDetailsPage() {
             team_type: data.team_type || 'internal_team',
             contact_name: data.contact_name || '',
             contact_phone: data.contact_phone || '',
-            contact_email: data.contact_email || '',
             notes: data.notes || '',
             is_active: data.is_active !== undefined ? data.is_active : true,
           });
@@ -139,15 +137,6 @@ export default function TeamDetailsPage() {
                 <Input
                   value={formData.contact_phone}
                   onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                  disabled={!editing}
-                />
-              </div>
-              <div>
-                <Label>البريد الإلكتروني</Label>
-                <Input
-                  type="email"
-                  value={formData.contact_email}
-                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
                   disabled={!editing}
                 />
               </div>

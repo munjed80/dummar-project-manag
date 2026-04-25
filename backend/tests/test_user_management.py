@@ -118,22 +118,42 @@ def test_inactive_user_with_stale_token_blocked(client, db, field_user, field_to
 # Admin user-management flow.
 # ---------------------------------------------------------------------------
 
-def test_admin_can_create_user_without_email(client, director_token):
+def test_admin_can_create_user(client, director_token):
     payload = {
         "username": "operator1",
         "full_name": "Operator One",
         "role": "engineer_supervisor",
         "phone": "+963900000001",
         "password": "Sup3rSecret!",
-        # No email field — must be allowed.
     }
     resp = client.post("/users/", json=payload, headers=_auth_headers(director_token))
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["username"] == "operator1"
-    assert body["email"] is None
+    # No email field is exposed — the system has no email concept.
+    assert "email" not in body
     # API-created accounts default to requiring a password rotation.
     assert body["must_change_password"] is True
+
+
+def test_admin_create_user_rejects_email_field(client, director_token):
+    """Email is not part of the user model — extra ``email`` keys must not
+    silently flow into the database."""
+    resp = client.post(
+        "/users/",
+        json={
+            "username": "noemail",
+            "full_name": "No Email",
+            "role": "field_team",
+            "password": "Sup3rSecret!",
+            "email": "should-be-ignored@example.com",
+        },
+        headers=_auth_headers(director_token),
+    )
+    # Pydantic v2 ignores extra fields by default; the create still succeeds
+    # but the response/payload must not contain the email.
+    assert resp.status_code == 200, resp.text
+    assert "email" not in resp.json()
 
 
 def test_admin_create_user_short_password_rejected(client, director_token):
@@ -407,7 +427,6 @@ def test_seed_users_does_not_overwrite_manually_created_user(db, monkeypatch, tm
         role=UserRole.PROJECT_DIRECTOR,
         phone="+963999999999",
         is_active=1,
-        email=None,
     ))
     db.commit()
 
