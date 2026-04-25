@@ -165,62 +165,86 @@ def _send_email_sync(to_email: str, subject: str, body_html: str) -> bool:
     when the broker is unavailable / disabled. Behaviour and return value
     are identical to the original ``send_email``.
     """
-    if not settings.SMTP_ENABLED:
-        logger.debug(
-            "SMTP disabled — skipping email to %s (subject: %s)", to_email, subject
-        )
-        return False
+    # Imported lazily to avoid pulling the model layer into a module that may
+    # be imported very early during app startup.
+    from app.services.execution_log import (
+        ACTION_TYPE_EMAIL,
+        track_execution,
+    )
 
-    if _is_duplicate(to_email, subject):
-        logger.info(
-            "Skipping duplicate email to %s (subject: %s) — sent recently",
-            to_email,
-            subject,
-        )
-        return False
-
-    try:
-        if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-            logger.error(
-                "SMTP credentials are not fully configured — "
-                "check SMTP_HOST, SMTP_USER, and SMTP_PASSWORD"
+    with track_execution(
+        ACTION_TYPE_EMAIL,
+        "email.send",
+        entity_type="email",
+        payload={"to": to_email, "subject": subject},
+        reraise=False,
+    ) as _ctx:
+        if not settings.SMTP_ENABLED:
+            logger.debug(
+                "SMTP disabled — skipping email to %s (subject: %s)", to_email, subject
             )
+            _ctx.skip("smtp_disabled")
             return False
 
-        msg = MIMEMultipart("alternative")
-        msg["From"] = settings.SMTP_FROM_EMAIL
-        msg["To"] = to_email
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
+        if _is_duplicate(to_email, subject):
+            logger.info(
+                "Skipping duplicate email to %s (subject: %s) — sent recently",
+                to_email,
+                subject,
+            )
+            _ctx.skip("duplicate_within_window")
+            return False
 
-        port = settings.SMTP_PORT
-        timeout = 30
+        try:
+            if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+                logger.error(
+                    "SMTP credentials are not fully configured — "
+                    "check SMTP_HOST, SMTP_USER, and SMTP_PASSWORD"
+                )
+                _ctx.skip("smtp_not_configured")
+                return False
 
-        if port == 465:
-            # Direct SSL connection
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(
-                settings.SMTP_HOST, port, timeout=timeout, context=context
-            ) as server:
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
-        else:
-            # STARTTLS connection (default for port 587 and others)
-            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=timeout) as server:
-                server.ehlo()
-                server.starttls(context=ssl.create_default_context())
-                server.ehlo()
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
+            msg = MIMEMultipart("alternative")
+            msg["From"] = settings.SMTP_FROM_EMAIL
+            msg["To"] = to_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-        logger.info("Email sent successfully to %s (subject: %s)", to_email, subject)
-        return True
+            port = settings.SMTP_PORT
+            timeout = 30
 
-    except Exception:
-        logger.exception(
-            "Failed to send email to %s (subject: %s)", to_email, subject
-        )
-        return False
+            if port == 465:
+                # Direct SSL connection
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(
+                    settings.SMTP_HOST, port, timeout=timeout, context=context
+                ) as server:
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
+            else:
+                # STARTTLS connection (default for port 587 and others)
+                with smtplib.SMTP(settings.SMTP_HOST, port, timeout=timeout) as server:
+                    server.ehlo()
+                    server.starttls(context=ssl.create_default_context())
+                    server.ehlo()
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
+
+            logger.info("Email sent successfully to %s (subject: %s)", to_email, subject)
+            return True
+
+        except Exception:
+            logger.exception(
+                "Failed to send email to %s (subject: %s)", to_email, subject
+            )
+            # Re-raise inside the tracker so it captures the traceback as
+            # ``failed``. ``reraise=False`` on the context prevents it from
+            # bubbling out of this function, preserving the legacy contract
+            # that _send_email_sync never raises.
+            raise
+
+    # Reached only when the with-block raises and reraise=False suppresses it.
+    return False
 
 
 def send_email(to_email: str, subject: str, body_html: str) -> bool:

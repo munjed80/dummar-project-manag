@@ -85,6 +85,9 @@ def send_email_task(self: Task, to_email: str, subject: str, body_html: str) -> 
     Transient network errors trigger Celery's exponential-backoff retry; any
     other exception is logged and the task is marked failed (never retried,
     because retrying e.g. an authentication error wastes worker capacity).
+
+    The execution log is written by ``_send_email_sync`` itself, so this
+    wrapper does not double-record.
     """
     # Imported lazily so the email module can import dispatch helpers
     # without causing a circular import at package load time.
@@ -136,23 +139,32 @@ def generate_contract_pdf_task(self: Task, contract_id: int) -> Optional[str]:
     has been deleted between dispatch and execution.
     """
     from app.models.contract import Contract
+    from app.services.execution_log import ACTION_TYPE_TASK, track_execution
     from app.services.pdf_generator import generate_contract_pdf
 
-    with task_session() as db:
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            logger.warning(
-                "generate_contract_pdf_task: contract id=%s not found", contract_id
-            )
-            return None
+    with track_execution(
+        ACTION_TYPE_TASK,
+        "dummar.contracts.generate_pdf",
+        entity_type="contract",
+        entity_id=contract_id,
+        payload={"attempt": self.request.retries + 1},
+    ) as _ctx:
+        with task_session() as db:
+            contract = db.query(Contract).filter(Contract.id == contract_id).first()
+            if not contract:
+                logger.warning(
+                    "generate_contract_pdf_task: contract id=%s not found", contract_id
+                )
+                _ctx.skip("contract_not_found")
+                return None
 
-        pdf_path = generate_contract_pdf(contract)
-        contract.pdf_file = pdf_path
-        db.commit()
-        logger.info(
-            "generate_contract_pdf_task ok: contract id=%s path=%s", contract_id, pdf_path
-        )
-        return pdf_path
+            pdf_path = generate_contract_pdf(contract)
+            contract.pdf_file = pdf_path
+            db.commit()
+            logger.info(
+                "generate_contract_pdf_task ok: contract id=%s path=%s", contract_id, pdf_path
+            )
+            return pdf_path
 
 
 # ---------------------------------------------------------------------------
@@ -176,27 +188,37 @@ def process_contract_document_task(
     """Run the full contract-intelligence pipeline on an uploaded document."""
     from app.models.contract_intelligence import ContractDocument
     from app.services.contract_intelligence_pipeline import run_intelligence_pipeline
+    from app.services.execution_log import ACTION_TYPE_TASK, track_execution
 
-    with task_session() as db:
-        doc = (
-            db.query(ContractDocument)
-            .filter(ContractDocument.id == document_id)
-            .first()
-        )
-        if not doc:
-            logger.warning(
-                "process_contract_document_task: document id=%s not found",
-                document_id,
+    with track_execution(
+        ACTION_TYPE_TASK,
+        "dummar.contract_intelligence.process_document",
+        entity_type="contract_document",
+        entity_id=document_id,
+        user_id=user_id,
+        payload={"attempt": self.request.retries + 1},
+    ) as _ctx:
+        with task_session() as db:
+            doc = (
+                db.query(ContractDocument)
+                .filter(ContractDocument.id == document_id)
+                .first()
             )
-            return False
+            if not doc:
+                logger.warning(
+                    "process_contract_document_task: document id=%s not found",
+                    document_id,
+                )
+                _ctx.skip("document_not_found")
+                return False
 
-        run_intelligence_pipeline(db, doc, filepath, user_id)
-        logger.info(
-            "process_contract_document_task ok: document id=%s status=%s",
-            document_id,
-            doc.processing_status,
-        )
-        return True
+            run_intelligence_pipeline(db, doc, filepath, user_id)
+            logger.info(
+                "process_contract_document_task ok: document id=%s status=%s",
+                document_id,
+                doc.processing_status,
+            )
+            return True
 
 
 # ---------------------------------------------------------------------------

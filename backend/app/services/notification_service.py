@@ -27,18 +27,34 @@ def create_notification(
     entity_id: Optional[int] = None,
 ) -> Notification:
     """Create a single in-app notification for a user."""
-    notif = Notification(
-        user_id=user_id,
-        notification_type=notification_type,
-        title=title,
-        message=message,
+    from app.services.execution_log import (
+        ACTION_TYPE_NOTIFICATION,
+        track_execution,
+    )
+
+    with track_execution(
+        ACTION_TYPE_NOTIFICATION,
+        "create_notification",
         entity_type=entity_type,
         entity_id=entity_id,
-    )
-    db.add(notif)
-    db.commit()
-    db.refresh(notif)
-    return notif
+        user_id=user_id,
+        payload={
+            "notification_type": getattr(notification_type, "value", str(notification_type)),
+            "title": title,
+        },
+    ):
+        notif = Notification(
+            user_id=user_id,
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        db.add(notif)
+        db.commit()
+        db.refresh(notif)
+        return notif
 
 
 def notify_complaint_status_change(

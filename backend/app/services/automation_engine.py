@@ -320,9 +320,43 @@ def run_automation(
             msg = f"Automation {automation.id}: unknown action type '{atype}'"
             logger.warning(msg)
             report["errors"].append(msg)
+            # Record an explicit failed entry so the operator can see the
+            # automation referenced an unknown action type.
+            from app.services.execution_log import (
+                ACTION_TYPE_AUTOMATION,
+                record_execution,
+                EXECUTION_STATUS_FAILED,
+            )
+
+            record_execution(
+                action_type=ACTION_TYPE_AUTOMATION,
+                action_name=f"automation.action.{atype or 'unknown'}",
+                status=EXECUTION_STATUS_FAILED,
+                entity_type="automation",
+                entity_id=automation.id,
+                payload={"trigger": automation.trigger.value, "params": params},
+                error=msg,
+            )
             continue
+
+        from app.services.execution_log import (
+            ACTION_TYPE_AUTOMATION,
+            track_execution,
+        )
+
         try:
-            handler(db, params, context)
+            with track_execution(
+                ACTION_TYPE_AUTOMATION,
+                f"automation.action.{atype}",
+                entity_type="automation",
+                entity_id=automation.id,
+                payload={
+                    "trigger": automation.trigger.value,
+                    "params": params,
+                    "context_keys": sorted(context.keys()),
+                },
+            ):
+                handler(db, params, context)
             report["actions_executed"] += 1
             logger.info(
                 "Automation %s ran action=%s (trigger=%s)",

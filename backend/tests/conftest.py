@@ -101,6 +101,14 @@ from app.jobs import tasks as _jobs_tasks  # noqa: E402
 _jobs_tasks.set_task_session_factory(TestingSessionLocal)
 
 
+# Make the central execution-log recorder (used by notifications, automation
+# engine, email service and Celery tasks) write into the same in-memory engine
+# when callers don't pass an explicit `db` session.
+from app.services import execution_log as _exec_log_service  # noqa: E402
+
+_exec_log_service.set_log_session_factory(TestingSessionLocal)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

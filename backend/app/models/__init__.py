@@ -19,6 +19,16 @@ from app.models.contract_intelligence import (
 )
 from app.models.automation import Automation, AutomationTrigger
 from app.models.organization import OrganizationUnit, OrgLevel
+from app.models.execution_log import (
+    ExecutionLog,
+    EXECUTION_STATUS_SUCCESS,
+    EXECUTION_STATUS_FAILED,
+    EXECUTION_STATUS_SKIPPED,
+    ACTION_TYPE_NOTIFICATION,
+    ACTION_TYPE_EMAIL,
+    ACTION_TYPE_AUTOMATION,
+    ACTION_TYPE_TASK,
+)
 
 __all__ = [
     "Base",
@@ -63,4 +73,12 @@ __all__ = [
     "AutomationTrigger",
     "OrganizationUnit",
     "OrgLevel",
+    "ExecutionLog",
+    "EXECUTION_STATUS_SUCCESS",
+    "EXECUTION_STATUS_FAILED",
+    "EXECUTION_STATUS_SKIPPED",
+    "ACTION_TYPE_NOTIFICATION",
+    "ACTION_TYPE_EMAIL",
+    "ACTION_TYPE_AUTOMATION",
+    "ACTION_TYPE_TASK",
 ]
