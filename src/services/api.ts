@@ -77,11 +77,26 @@ export class ApiError extends Error {
 /** Maximum number of characters of a non-JSON error body to keep for diagnostics. */
 const MAX_ERROR_TEXT_LENGTH = 500;
 
+/** Heuristic: does this text body look like an HTML document (e.g. an
+ *  upstream/proxy error page) rather than a real API payload? When it does,
+ *  we deliberately discard the body for the user-facing detail so we never
+ *  render raw "<html>...502 Bad Gateway..." text in the UI. The full body
+ *  is still attached to the ApiError as `body` for dev-tools diagnostics. */
+function looksLikeHtml(contentType: string | null, text: string): boolean {
+  if (contentType && /text\/html|application\/xhtml/i.test(contentType)) return true;
+  const head = text.trimStart().slice(0, 100).toLowerCase();
+  return head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('<?xml');
+}
+
 /**
  * Read a fetch Response, attempt to extract a JSON `detail` (FastAPI's
- * standard error shape) or fall back to the raw text, and return both.
+ * standard error shape) or fall back to a sanitized text snippet, and
+ * return both. Raw HTML bodies (typical of upstream 502/503/504 pages
+ * served by nginx/Cloudflare) are NEVER returned as `detail` — we only
+ * keep them on `body` for diagnostics.
  */
 async function readErrorBody(response: Response): Promise<{ detail: string | null; body: unknown }> {
+  const contentType = response.headers.get('content-type');
   let text = '';
   try {
     text = await response.text();
@@ -89,6 +104,7 @@ async function readErrorBody(response: Response): Promise<{ detail: string | nul
     return { detail: null, body: null };
   }
   if (!text) return { detail: null, body: null };
+  // Prefer JSON: real FastAPI errors carry { detail: "..." }
   try {
     const parsed = JSON.parse(text);
     let detail: string | null = null;
@@ -99,6 +115,12 @@ async function readErrorBody(response: Response): Promise<{ detail: string | nul
     }
     return { detail, body: parsed };
   } catch {
+    // Body is not JSON. If it's HTML (gateway error page), suppress detail
+    // so the UI never renders raw markup. The full body is still kept on
+    // the ApiError instance for the dev-tools console log.
+    if (looksLikeHtml(contentType, text)) {
+      return { detail: null, body: text };
+    }
     return { detail: text.slice(0, MAX_ERROR_TEXT_LENGTH), body: text };
   }
 }
@@ -119,6 +141,56 @@ async function throwApiError(response: Response, fallbackMessage: string): Promi
   });
 }
 
+// ── Transient-error retry helper ──────────────────────────────────────────
+//
+// Many "intermittent 502 Bad Gateway" reports in production are a single
+// upstream blip (worker recycle, brief connection gap). A targeted 1x retry
+// with a short backoff masks the vast majority of these without changing
+// any UX. We only retry:
+//   * GET requests (idempotent)
+//   * status 502/503/504 (gateway-side transient failures)
+//   * network errors (TypeError thrown by fetch when the connection drops)
+// We NEVER retry 4xx (the request itself is the problem) or non-GET
+// methods (could double-create resources).
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const RETRY_BACKOFF_MS = 400;
+
+function shouldRetry(method: string, statusOrNull: number | null): boolean {
+  if (method.toUpperCase() !== 'GET') return false;
+  if (statusOrNull === null) return true; // network error
+  return TRANSIENT_STATUSES.has(statusOrNull);
+}
+
+async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  // SAFE FOR ANY HTTP METHOD: callers may use fetchWithRetry uniformly.
+  // The shouldRetry() guard above passes non-GET requests through with NO
+  // retry (so POST/PUT/DELETE/PATCH never double-execute). The single-helper
+  // call site keeps the API service consistent and avoids a class of bug
+  // where a future maintainer forgets to wrap a new GET endpoint.
+  const method = (init?.method ?? 'GET').toUpperCase();
+  try {
+    const response = await fetch(input, init);
+    if (!response.ok && shouldRetry(method, response.status)) {
+      await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+      try {
+        const retry = await fetch(input, init);
+        return retry;
+      } catch {
+        // Retry threw — surface the original response so callers see a real status.
+        return response;
+      }
+    }
+    return response;
+  } catch (err) {
+    // Network error (DNS, connection reset, offline). Retry once for GETs.
+    if (shouldRetry(method, null)) {
+      await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+      return fetch(input, init);
+    }
+    throw err;
+  }
+}
+
 class ApiService {
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('access_token');
@@ -129,7 +201,7 @@ class ApiService {
   }
 
   async login(credentials: LoginCredentials): Promise<AuthToken> {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
@@ -144,7 +216,7 @@ class ApiService {
     }
     // Pre-fetch and cache user info for RBAC
     try {
-      const userResp = await fetch(`${API_BASE_URL}/auth/me`, {
+      const userResp = await fetchWithRetry(`${API_BASE_URL}/auth/me`, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${data.access_token}`,
@@ -161,7 +233,7 @@ class ApiService {
   }
 
   async getCurrentUser(): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/me`, {
       headers: this.getAuthHeaders(),
     });
     if (!response.ok) await throwApiError(response, 'Failed to fetch user');
@@ -169,7 +241,7 @@ class ApiService {
   }
 
   async getCurrentUserPermissions(): Promise<MePermissionsResponse> {
-    const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/me/permissions`, {
       headers: this.getAuthHeaders(),
     });
     if (!response.ok) await throwApiError(response, 'Failed to fetch permissions');
@@ -191,19 +263,19 @@ class ApiService {
     // (HTTPS) the redirect Location is built with `http://` because Starlette
     // doesn't trust X-Forwarded-Proto, which the browser then blocks as mixed
     // content and the fetch fails. Calling the canonical URL avoids the redirect.
-    const response = await fetch(`${API_BASE_URL}/complaints/?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch complaints');
     return response.json();
   }
 
   async getComplaint(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/complaints/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch complaint');
     return response.json();
   }
 
   async createComplaint(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/complaints/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -213,7 +285,7 @@ class ApiService {
   }
 
   async trackComplaint(tracking_number: string, phone: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/complaints/track`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/track`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tracking_number, phone }),
@@ -223,7 +295,7 @@ class ApiService {
   }
 
   async updateComplaint(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/complaints/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -233,7 +305,7 @@ class ApiService {
   }
 
   async getComplaintActivities(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/complaints/${id}/activities`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${id}/activities`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch activities');
     return response.json();
   }
@@ -253,19 +325,19 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
-    const response = await fetch(`${API_BASE_URL}/tasks/?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/tasks/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch tasks');
     return response.json();
   }
 
   async getTask(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/tasks/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch task');
     return response.json();
   }
 
   async createTask(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/tasks/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/tasks/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -275,7 +347,7 @@ class ApiService {
   }
 
   async updateTask(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/tasks/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -285,7 +357,7 @@ class ApiService {
   }
 
   async getTaskActivities(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/tasks/${id}/activities`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}/activities`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch activities');
     return response.json();
   }
@@ -300,19 +372,19 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
-    const response = await fetch(`${API_BASE_URL}/contracts/?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch contracts');
     return response.json();
   }
 
   async getContract(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch contract');
     return response.json();
   }
 
   async createContract(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -322,7 +394,7 @@ class ApiService {
   }
 
   async updateContract(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -332,7 +404,7 @@ class ApiService {
   }
 
   async approveContract(id: number, action: string, comments?: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}/approve`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}/approve`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ action, comments }),
@@ -342,7 +414,7 @@ class ApiService {
   }
 
   async deleteContract(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -351,7 +423,7 @@ class ApiService {
   }
 
   async generateContractPdf(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}/generate-pdf`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}/generate-pdf`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -360,7 +432,7 @@ class ApiService {
   }
 
   async getContractApprovals(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/contracts/${id}/approvals`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}/approvals`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch approvals');
     return response.json();
   }
@@ -375,19 +447,19 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
-    const response = await fetch(`${API_BASE_URL}/projects/?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/projects/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch projects');
     return response.json();
   }
 
   async getProject(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/projects/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/projects/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch project');
     return response.json();
   }
 
   async createProject(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/projects/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/projects/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -397,7 +469,7 @@ class ApiService {
   }
 
   async updateProject(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/projects/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -407,7 +479,7 @@ class ApiService {
   }
 
   async deleteProject(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/projects/${id}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -426,25 +498,25 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     // Trailing slash required — see note on getComplaints().
-    const response = await fetch(`${API_BASE_URL}/teams/?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/teams/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch teams');
     return response.json();
   }
 
   async getActiveTeams(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/teams/active`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/teams/active`, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch active teams');
     return response.json();
   }
 
   async getTeam(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/teams/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/teams/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch team');
     return response.json();
   }
 
   async createTeam(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/teams/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/teams/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -454,7 +526,7 @@ class ApiService {
   }
 
   async updateTeam(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/teams/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/teams/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -469,13 +541,13 @@ class ApiService {
 
   // ── Settings ──
   async getSettings(): Promise<Record<string, any[]>> {
-    const response = await fetch(`${API_BASE_URL}/settings/`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/settings/`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch settings');
     return response.json();
   }
 
   async updateSettings(items: any[]): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/settings/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/settings/`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ items }),
@@ -485,7 +557,7 @@ class ApiService {
   }
 
   async createTaskFromComplaint(complaintId: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/complaints/${complaintId}/create-task`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${complaintId}/create-task`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -496,20 +568,20 @@ class ApiService {
 
   // ── Dashboard ──
   async getDashboardStats(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/dashboard/stats`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/dashboard/stats`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch dashboard stats');
     return response.json();
   }
 
   async getRecentActivity(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/dashboard/recent-activity`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/dashboard/recent-activity`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch recent activity');
     return response.json();
   }
 
   // ── Locations ──
   async getAreas(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/locations/areas`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/areas`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch areas');
     return response.json();
   }
@@ -517,7 +589,7 @@ class ApiService {
   async getBuildings(areaId?: number): Promise<any[]> {
     const qp = new URLSearchParams();
     if (areaId) qp.append('area_id', areaId.toString());
-    const response = await fetch(`${API_BASE_URL}/locations/buildings?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/buildings?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch buildings');
     return response.json();
   }
@@ -540,19 +612,19 @@ class ApiService {
     if (params?.has_contract_coverage) qp.append('has_contract_coverage', 'true');
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/locations/list?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/list?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch locations');
     return response.json();
   }
 
   async getLocationTree(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/locations/tree`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/tree`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location tree');
     return response.json();
   }
 
   async getLocationDetail(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location detail');
     return response.json();
   }
@@ -560,7 +632,7 @@ class ApiService {
   async getLocationComplaints(id: number, statusFilter?: string): Promise<any> {
     const qp = new URLSearchParams();
     if (statusFilter) qp.append('status_filter', statusFilter);
-    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/complaints?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/complaints?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location complaints');
     return response.json();
   }
@@ -568,19 +640,19 @@ class ApiService {
   async getLocationTasks(id: number, statusFilter?: string): Promise<any> {
     const qp = new URLSearchParams();
     if (statusFilter) qp.append('status_filter', statusFilter);
-    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/tasks?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/tasks?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location tasks');
     return response.json();
   }
 
   async getLocationContracts(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/contracts`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/contracts`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location contracts');
     return response.json();
   }
 
   async getLocationActivity(id: number): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/activity`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/activity`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location activity');
     return response.json();
   }
@@ -588,19 +660,19 @@ class ApiService {
   async getLocationStats(locationType?: string): Promise<any[]> {
     const qp = new URLSearchParams();
     if (locationType) qp.append('location_type', locationType);
-    const response = await fetch(`${API_BASE_URL}/locations/stats/all?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/stats/all?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location stats');
     return response.json();
   }
 
   async getLocationReportSummary(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/reports/summary`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/reports/summary`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location report');
     return response.json();
   }
 
   async createLocation(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -613,7 +685,7 @@ class ApiService {
   }
 
   async updateLocation(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -626,7 +698,7 @@ class ApiService {
   }
 
   async deleteLocation(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/${id}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -638,7 +710,7 @@ class ApiService {
   }
 
   async getLocationMapData(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/detail/${id}/map-data`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/map-data`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch location map data');
     return response.json();
   }
@@ -647,7 +719,7 @@ class ApiService {
     const qp = new URLSearchParams();
     if (params?.location_type) qp.append('location_type', params.location_type);
     if (params?.status) qp.append('status', params.status);
-    const response = await fetch(`${API_BASE_URL}/locations/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to export location report');
@@ -656,13 +728,13 @@ class ApiService {
   }
 
   async getContractLocations(contractId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/contracts/${contractId}/locations`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/contracts/${contractId}/locations`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch contract locations');
     return response.json();
   }
 
   async linkContractToLocation(contractId: number, locationId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -674,7 +746,7 @@ class ApiService {
   }
 
   async unlinkContractFromLocation(contractId: number, locationId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/contracts/link?contract_id=${contractId}&location_id=${locationId}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -686,7 +758,7 @@ class ApiService {
   }
 
   async getGeoDashboard(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/locations/geo-dashboard`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/locations/geo-dashboard`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch geo dashboard');
     return response.json();
   }
@@ -699,19 +771,19 @@ class ApiService {
     if (params?.is_active !== undefined) qp.append('is_active', params.is_active.toString());
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/users?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/users?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch users');
     return response.json();
   }
 
   async getUser(id: number): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch user');
     return response.json();
   }
 
   async createUser(data: any): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/users/`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -724,7 +796,7 @@ class ApiService {
   }
 
   async updateUser(id: number, data: any): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -737,7 +809,7 @@ class ApiService {
   }
 
   async deactivateUser(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
@@ -749,7 +821,7 @@ class ApiService {
     id: number,
     payload: { new_password: string; require_change_on_next_login?: boolean },
   ): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/users/${id}/reset-password`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}/reset-password`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({
@@ -768,7 +840,7 @@ class ApiService {
     current_password: string;
     new_password: string;
   }): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/change-password`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(payload),
@@ -792,7 +864,7 @@ class ApiService {
     const token = localStorage.getItem('access_token');
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_BASE_URL}/uploads/?category=${encodeURIComponent(category)}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/uploads/?category=${encodeURIComponent(category)}`, {
       method: 'POST',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
@@ -804,7 +876,7 @@ class ApiService {
   async uploadFilePublic(file: File): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_BASE_URL}/uploads/public`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/uploads/public`, {
       method: 'POST',
       body: formData,
     });
@@ -823,7 +895,7 @@ class ApiService {
     if (params?.contract_type) qp.append('contract_type', params.contract_type);
     if (params?.priority) qp.append('priority', params.priority);
     if (params?.assigned_to_id) qp.append('assigned_to_id', params.assigned_to_id.toString());
-    const response = await fetch(`${API_BASE_URL}/reports/summary?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/reports/summary?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch report summary');
     return response.json();
   }
@@ -835,7 +907,7 @@ class ApiService {
         if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
       });
     }
-    const response = await fetch(`${API_BASE_URL}/reports/complaints?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/reports/complaints?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch complaints report');
     return response.json();
   }
@@ -847,7 +919,7 @@ class ApiService {
         if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
       });
     }
-    const response = await fetch(`${API_BASE_URL}/reports/tasks?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/reports/tasks?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch tasks report');
     return response.json();
   }
@@ -859,7 +931,7 @@ class ApiService {
         if (v !== undefined && v !== null && v !== '') qp.append(k, String(v));
       });
     }
-    const response = await fetch(`${API_BASE_URL}/reports/contracts?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/reports/contracts?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch contracts report');
     return response.json();
   }
@@ -871,7 +943,7 @@ class ApiService {
         if (v !== undefined && v !== null && v !== '' && v !== 'all') qp.append(k, String(v));
       });
     }
-    const response = await fetch(`${API_BASE_URL}/reports/${entity}/csv?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/reports/${entity}/csv?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to download CSV');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -890,7 +962,7 @@ class ApiService {
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/complaints/citizen/my-complaints?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/citizen/my-complaints?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch citizen complaints');
     return response.json();
   }
@@ -900,7 +972,7 @@ class ApiService {
     const qp = new URLSearchParams();
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
-    const response = await fetch(`${API_BASE_URL}/complaints/map/markers?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/map/markers?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch map markers');
     return response.json();
   }
@@ -911,13 +983,13 @@ class ApiService {
     if (params?.entity_type) qp.append('entity_type', params.entity_type);
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
-    const response = await fetch(`${API_BASE_URL}/gis/operations-map?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/gis/operations-map?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch operations map markers');
     return response.json();
   }
 
   async getAreaBoundaries(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/gis/area-boundaries`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/gis/area-boundaries`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch area boundaries');
     return response.json();
   }
@@ -928,13 +1000,13 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     if (params?.unread_only) qp.append('unread_only', 'true');
-    const response = await fetch(`${API_BASE_URL}/notifications?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/notifications?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch notifications');
     return response.json();
   }
 
   async markNotificationsRead(ids: number[]): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/notifications/mark-read`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/notifications/mark-read`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ notification_ids: ids }),
@@ -944,7 +1016,7 @@ class ApiService {
   }
 
   async markAllNotificationsRead(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/notifications/mark-all-read`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/notifications/mark-all-read`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -954,7 +1026,7 @@ class ApiService {
 
   // ── Contract Intelligence ──
   async getIntelligenceDashboard(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/dashboard`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/dashboard`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch intelligence dashboard');
     return response.json();
   }
@@ -964,7 +1036,7 @@ class ApiService {
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/queue?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/queue?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch processing queue');
     return response.json();
   }
@@ -973,7 +1045,7 @@ class ApiService {
     const token = localStorage.getItem('access_token');
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/upload`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/upload`, {
       method: 'POST',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
@@ -983,13 +1055,13 @@ class ApiService {
   }
 
   async getContractDocument(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch document');
     return response.json();
   }
 
   async updateContractDocument(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -999,7 +1071,7 @@ class ApiService {
   }
 
   async approveContractDocument(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/approve`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}/approve`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1008,7 +1080,7 @@ class ApiService {
   }
 
   async rejectContractDocument(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/reject`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}/reject`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1017,7 +1089,7 @@ class ApiService {
   }
 
   async reprocessDocument(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/reprocess`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}/reprocess`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1026,7 +1098,7 @@ class ApiService {
   }
 
   async convertDocumentToContract(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${id}/convert-to-contract`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}/convert-to-contract`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1039,7 +1111,7 @@ class ApiService {
     if (params?.document_id) qp.append('document_id', params.document_id.toString());
     if (params?.contract_id) qp.append('contract_id', params.contract_id.toString());
     if (params?.unresolved_only) qp.append('unresolved_only', 'true');
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/risks?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/risks?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch risks');
     return response.json();
   }
@@ -1047,7 +1119,7 @@ class ApiService {
   async resolveRiskFlag(id: number, notes?: string): Promise<any> {
     const qp = new URLSearchParams();
     if (notes) qp.append('resolution_notes', notes);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/risks/${id}/resolve?${qp}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/risks/${id}/resolve?${qp}`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1059,13 +1131,13 @@ class ApiService {
     const qp = new URLSearchParams();
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.document_id) qp.append('document_id', params.document_id.toString());
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/duplicates?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/duplicates?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch duplicates');
     return response.json();
   }
 
   async reviewDuplicate(id: number, data: { status: string; review_notes?: string }): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/duplicates/${id}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/duplicates/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
@@ -1078,7 +1150,7 @@ class ApiService {
     const token = localStorage.getItem('access_token');
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/preview-csv`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/bulk-import/preview-csv`, {
       method: 'POST',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
@@ -1091,7 +1163,7 @@ class ApiService {
     const token = localStorage.getItem('access_token');
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/execute-csv`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/bulk-import/execute-csv`, {
       method: 'POST',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
@@ -1104,7 +1176,7 @@ class ApiService {
     const token = localStorage.getItem('access_token');
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/scan-batch`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/bulk-import/scan-batch`, {
       method: 'POST',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
@@ -1114,13 +1186,13 @@ class ApiService {
   }
 
   async getContractIntelligence(contractId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/intelligence`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/intelligence`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch contract intelligence');
     return response.json();
   }
 
   async analyzeContractRisks(contractId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/analyze-risks`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/analyze-risks`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1129,7 +1201,7 @@ class ApiService {
   }
 
   async detectContractDuplicates(contractId: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/detect-duplicates`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/detect-duplicates`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
@@ -1142,7 +1214,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/preview-excel`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/bulk-import/preview-excel`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
@@ -1155,7 +1227,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/bulk-import/execute-excel`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/bulk-import/execute-excel`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
@@ -1166,7 +1238,7 @@ class ApiService {
 
   // OCR status
   async getOcrStatus(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/ocr-status`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/ocr-status`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch OCR status');
     return response.json();
   }
@@ -1185,7 +1257,7 @@ class ApiService {
   // Intelligence reports (with filters)
   async getIntelligenceReports(params?: Record<string, any>): Promise<any> {
     const qp = this._buildQueryParams(params);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/reports?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch intelligence reports');
     return response.json();
   }
@@ -1193,7 +1265,7 @@ class ApiService {
   // Intelligence report exports
   async downloadIntelligenceCsv(params?: Record<string, any>): Promise<void> {
     const qp = this._buildQueryParams(params);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to download CSV');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -1208,7 +1280,7 @@ class ApiService {
 
   async downloadIntelligencePdf(params?: Record<string, any>): Promise<void> {
     const qp = this._buildQueryParams(params);
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/reports/export/pdf?${qp}`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/reports/export/pdf?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to download PDF');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -1222,7 +1294,7 @@ class ApiService {
   }
 
   async downloadDocumentPdf(documentId: number): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/contract-intelligence/documents/${documentId}/export/pdf`, { headers: this.getAuthHeaders() });
+    const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${documentId}/export/pdf`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to download document PDF');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);

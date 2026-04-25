@@ -11,7 +11,13 @@
 // from a previous deploy must be evicted on the next page load. Chrome
 // aggressively keeps the previous SW + cache; bumping the name forces the
 // activate-handler below to delete every cache that doesn't match.
-const CACHE_NAME = 'dummar-pwa-v2';
+//
+// v3: previous versions cached EVERY navigation/static response including
+// non-OK ones (502/503/504 HTML error pages from upstream). When such a
+// response was cached, subsequent offline navigations would serve the
+// cached error page back to the user. v3 caches only `response.ok === true`
+// responses and evicts the v2 cache on activate.
+const CACHE_NAME = 'dummar-pwa-v3';
 
 // Static assets to pre-cache during install
 const PRECACHE_URLS = [
@@ -65,14 +71,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests: network-first, fallback to cache
+  // Navigation requests: network-first, fallback to cache.
+  // IMPORTANT: only cache OK responses — never cache 502/503/504 HTML error
+  // pages, otherwise an offline navigation could serve a stale error page
+  // back to the user.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache the latest version
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (response && response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => caches.match('/index.html'))
@@ -80,7 +90,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: stale-while-revalidate
+  // Static assets: stale-while-revalidate.
+  // Same rule as navigation: never cache non-OK responses.
   if (
     url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.css') ||
@@ -93,8 +104,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cached) => {
         const fetchPromise = fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (response && response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         });
         return cached || fetchPromise;
