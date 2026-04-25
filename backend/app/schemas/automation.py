@@ -21,7 +21,7 @@ SUPPORTED_OPERATORS = {"eq", "ne", "in", "not_in", "contains", "gt", "lt"}
 
 # Action types supported by the action executor. Kept in sync with
 # app.services.automation_engine._ACTION_HANDLERS.
-SUPPORTED_ACTION_TYPES = {"notification", "email", "create_task"}
+SUPPORTED_ACTION_TYPES = {"notification", "create_task"}
 
 
 class AutomationCondition(BaseModel):

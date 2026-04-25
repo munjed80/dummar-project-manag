@@ -1,6 +1,6 @@
 """Centralized execution log — records the outcome of every critical action.
 
-Every notification, automation action, background task and email goes through
+Every notification, automation action and background task goes through
 :func:`app.services.execution_log.record_execution` (or the
 ``track_execution`` context manager) which inserts a row here. Operators query
 ``GET /execution-logs`` to debug failures without trawling worker logs.
@@ -9,9 +9,8 @@ Status semantics:
   * ``success`` — the action ran to completion without raising.
   * ``failed``  — the action raised an exception. ``error`` holds the message
     and (truncated) traceback.
-  * ``skipped`` — preconditions weren't met (e.g. SMTP disabled, duplicate
-    email guard, missing entity). Recorded so operators can tell "no-op" from
-    "never tried".
+  * ``skipped`` — preconditions weren't met (e.g. missing entity). Recorded so
+    operators can tell "no-op" from "never tried".
 """
 
 from sqlalchemy import (
@@ -35,7 +34,6 @@ EXECUTION_STATUS_SKIPPED = "skipped"
 
 # Coarse buckets so the API can offer a useful filter in the UI.
 ACTION_TYPE_NOTIFICATION = "notification"
-ACTION_TYPE_EMAIL = "email"
 ACTION_TYPE_AUTOMATION = "automation"
 ACTION_TYPE_TASK = "task"
 
@@ -46,10 +44,10 @@ class ExecutionLog(Base):
     __tablename__ = "execution_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    # Coarse bucket: notification / email / automation / task.
+    # Coarse bucket: notification / automation / task.
     action_type = Column(String(50), nullable=False, index=True)
-    # Specific operation, e.g. "dummar.email.send", "create_notification",
-    # "automation.action.email", "automation.run".
+    # Specific operation, e.g. "create_notification", "automation.run",
+    # "dummar.contracts.generate_pdf".
     action_name = Column(String(200), nullable=False, index=True)
     status = Column(String(20), nullable=False, index=True)
 

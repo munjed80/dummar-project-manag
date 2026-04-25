@@ -21,10 +21,9 @@ Design notes
   blocks the others. Errors are logged and recorded on the row in
   ``last_error`` for operator visibility.
 * Fan-out is **synchronous** by design. The handful of supported actions
-  are cheap (insert a notification row, enqueue an email job, create a
-  task row); offloading them to Celery would buy little and would make
-  semantics harder to test. Email sending already uses the background-job
-  system internally via :func:`app.services.email_service.send_email`.
+  are cheap (insert a notification row, create a task row); offloading
+  them to Celery would buy little and would make semantics harder to
+  test.
 """
 
 from __future__ import annotations
@@ -184,30 +183,6 @@ def _action_notification(
     )
 
 
-def _action_email(
-    db: Session, params: Dict[str, Any], context: Dict[str, Any]
-) -> None:
-    """Send an email via the background-job-backed email service.
-
-    Required params: ``to_email``. Optional: ``subject``, ``body_html``
-    (both templated against the context).
-    """
-    from app.services.email_service import send_email
-
-    to_email = _resolve_template(params.get("to_email", ""), context)
-    if not to_email:
-        raise ValueError("email action requires 'to_email'")
-
-    subject = _resolve_template(
-        params.get("subject", "Dummar automation notification"), context
-    )
-    body_html = _resolve_template(
-        params.get("body_html", "<p>Automation triggered.</p>"), context
-    )
-
-    send_email(to_email=to_email, subject=subject, body_html=body_html)
-
-
 def _action_create_task(
     db: Session, params: Dict[str, Any], context: Dict[str, Any]
 ) -> None:
@@ -273,7 +248,6 @@ _ACTION_HANDLERS: Dict[
     str, Callable[[Session, Dict[str, Any], Dict[str, Any]], None]
 ] = {
     "notification": _action_notification,
-    "email": _action_email,
     "create_task": _action_create_task,
 }
 

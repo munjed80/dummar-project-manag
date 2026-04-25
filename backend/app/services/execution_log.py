@@ -32,7 +32,6 @@ from sqlalchemy.orm import Session
 
 from app.models.execution_log import (
     ACTION_TYPE_AUTOMATION,  # noqa: F401 — re-exported convenience
-    ACTION_TYPE_EMAIL,  # noqa: F401
     ACTION_TYPE_NOTIFICATION,  # noqa: F401
     ACTION_TYPE_TASK,  # noqa: F401
     EXECUTION_STATUS_FAILED,
@@ -236,12 +235,12 @@ def track_execution(
 
     Usage::
 
-        with track_execution(ACTION_TYPE_EMAIL, "dummar.email.send",
-                             entity_type="user", entity_id=user.id) as ctx:
-            ctx.payload = {"to": to_email, "subject": subject}
-            sent = _send(...)
-            if not sent:
-                ctx.skip("smtp_disabled")
+        with track_execution(ACTION_TYPE_TASK, "dummar.contracts.generate_pdf",
+                             entity_type="contract", entity_id=contract.id) as ctx:
+            ctx.payload = {"contract_number": contract.number}
+            run_pdf_generation(...)
+            if not_found:
+                ctx.skip("contract_not_found")
 
     On normal completion: status=success (or skipped if ``ctx.skip()`` was
     called). On exception: status=failed, error=traceback; the exception

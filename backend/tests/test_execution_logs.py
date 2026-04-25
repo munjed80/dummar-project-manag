@@ -3,8 +3,8 @@
 Covers:
 * The recorder service (success / failure / skipped, payload sanitisation,
   context manager re-raise behaviour, fresh-session fallback).
-* Instrumentation of the four critical pathways (notifications, automation
-  engine, email service, background jobs).
+* Instrumentation of the critical pathways (notifications, automation
+  engine, background jobs).
 * The /execution-logs API (filters, pagination, role gate).
 """
 
@@ -17,7 +17,6 @@ import pytest
 from app.models.automation import Automation, AutomationTrigger
 from app.models.execution_log import (
     ACTION_TYPE_AUTOMATION,
-    ACTION_TYPE_EMAIL,
     ACTION_TYPE_NOTIFICATION,
     ACTION_TYPE_TASK,
     EXECUTION_STATUS_FAILED,
@@ -119,7 +118,7 @@ def test_track_execution_failure_no_reraise(db):
 
 
 def test_track_execution_skip(db):
-    with track_execution(ACTION_TYPE_EMAIL, "unit.ctx.skip", db=db) as ctx:
+    with track_execution(ACTION_TYPE_TASK, "unit.ctx.skip", db=db) as ctx:
         ctx.skip("disabled")
     row = (
         db.query(ExecutionLog)
@@ -297,9 +296,9 @@ def test_automation_unknown_action_logged_as_failed(db):
 def test_automation_action_failure_logged(db):
     import json as _json
 
-    # email action without to_email raises ValueError inside the handler.
+    # create_task action without title raises ValueError inside the handler.
     automation = _make_automation(
-        db, "log-fail", _json.dumps([{"type": "email", "params": {}}])
+        db, "log-fail", _json.dumps([{"type": "create_task", "params": {}}])
     )
     from app.services.automation_engine import run_automation
 
@@ -309,39 +308,14 @@ def test_automation_action_failure_logged(db):
         db.query(ExecutionLog)
         .filter_by(
             action_type=ACTION_TYPE_AUTOMATION,
-            action_name="automation.action.email",
+            action_name="automation.action.create_task",
         )
         .order_by(ExecutionLog.id.desc())
         .first()
     )
     assert row is not None
     assert row.status == EXECUTION_STATUS_FAILED
-    assert "to_email" in (row.error or "")
-
-
-# ---------------------------------------------------------------------------
-# Email service instrumentation
-# ---------------------------------------------------------------------------
-
-
-def test_email_send_skipped_when_smtp_disabled(db, monkeypatch):
-    from app.core.config import settings
-    from app.services.email_service import _send_email_sync
-
-    monkeypatch.setattr(settings, "SMTP_ENABLED", False, raising=False)
-
-    sent = _send_email_sync("a@b.c", "subj-disabled", "<p/>")
-    assert sent is False
-
-    row = (
-        db.query(ExecutionLog)
-        .filter_by(action_type=ACTION_TYPE_EMAIL, action_name="email.send")
-        .order_by(ExecutionLog.id.desc())
-        .first()
-    )
-    assert row is not None
-    assert row.status == EXECUTION_STATUS_SKIPPED
-    assert "smtp_disabled" in (row.payload or "")
+    assert "title" in (row.error or "")
 
 
 # ---------------------------------------------------------------------------
@@ -400,11 +374,11 @@ def test_intelligence_task_skipped_when_doc_missing(db, director_user):
 def _seed_logs(db):
     """Insert a small variety of rows so list/filter assertions are meaningful."""
     rows = [
-        (ACTION_TYPE_EMAIL, "email.send", EXECUTION_STATUS_SUCCESS),
-        (ACTION_TYPE_EMAIL, "email.send", EXECUTION_STATUS_FAILED),
         (ACTION_TYPE_NOTIFICATION, "create_notification", EXECUTION_STATUS_SUCCESS),
-        (ACTION_TYPE_AUTOMATION, "automation.action.email", EXECUTION_STATUS_FAILED),
-        (ACTION_TYPE_TASK, "dummar.email.send", EXECUTION_STATUS_SUCCESS),
+        (ACTION_TYPE_NOTIFICATION, "create_notification", EXECUTION_STATUS_FAILED),
+        (ACTION_TYPE_AUTOMATION, "automation.action.create_task", EXECUTION_STATUS_FAILED),
+        (ACTION_TYPE_TASK, "dummar.contracts.generate_pdf", EXECUTION_STATUS_SUCCESS),
+        (ACTION_TYPE_TASK, "dummar.contracts.generate_pdf", EXECUTION_STATUS_FAILED),
     ]
     for atype, aname, status in rows:
         record_execution(
@@ -434,13 +408,13 @@ def test_list_filters_by_action_type(client, director_token, db):
     _seed_logs(db)
     resp = client.get(
         "/execution-logs/",
-        params={"action_type": ACTION_TYPE_EMAIL},
+        params={"action_type": ACTION_TYPE_TASK},
         headers=_auth_headers(director_token),
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["total_count"] >= 2
-    assert all(item["action_type"] == ACTION_TYPE_EMAIL for item in body["items"])
+    assert all(item["action_type"] == ACTION_TYPE_TASK for item in body["items"])
 
 
 def test_list_filters_by_status(client, director_token, db):
@@ -512,9 +486,9 @@ def test_summary_endpoint(client, director_token, db):
     body = resp.json()
     assert "by_action_type" in body
     by = body["by_action_type"]
-    assert ACTION_TYPE_EMAIL in by
-    assert by[ACTION_TYPE_EMAIL].get(EXECUTION_STATUS_SUCCESS, 0) >= 1
-    assert by[ACTION_TYPE_EMAIL].get(EXECUTION_STATUS_FAILED, 0) >= 1
+    assert ACTION_TYPE_TASK in by
+    assert by[ACTION_TYPE_TASK].get(EXECUTION_STATUS_SUCCESS, 0) >= 1
+    assert by[ACTION_TYPE_TASK].get(EXECUTION_STATUS_FAILED, 0) >= 1
 
 
 def test_summary_requires_director(client, field_token, db):

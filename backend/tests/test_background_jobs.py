@@ -6,8 +6,8 @@ every dispatched task executes inline. These tests therefore verify:
 
 * the dispatch helper invokes the task body and returns a result handle,
 * eager-mode Celery propagates exceptions to the caller,
-* the email / PDF / notification tasks are wired correctly to their
-  service implementations,
+* the PDF / notification tasks are wired correctly to their service
+  implementations,
 * retry policies and task names are configured as documented,
 * the ``GET /jobs/{id}`` endpoint reports task state.
 """
@@ -24,7 +24,7 @@ from app.jobs import celery_app, dispatch, is_eager_mode
 from app.jobs.tasks import (
     generate_contract_pdf_task,
     notify_contract_status_change_task,
-    send_email_task,
+    notify_task_assigned_task,
 )
 from app.models.contract import Contract, ContractStatus, ContractType
 from app.models.user import User, UserRole
@@ -45,7 +45,6 @@ def test_jobs_run_in_eager_mode_during_tests():
 
 def test_known_tasks_are_registered():
     names = set(celery_app.tasks.keys())
-    assert "dummar.email.send" in names
     assert "dummar.contracts.generate_pdf" in names
     assert "dummar.contract_intelligence.process_document" in names
     assert "dummar.notifications.complaint_status" in names
@@ -53,26 +52,31 @@ def test_known_tasks_are_registered():
     assert "dummar.notifications.contract_status" in names
 
 
-def test_send_email_task_has_retry_policy():
-    # autoretry_for is stored as the task option.
-    options = send_email_task.__dict__
-    # Celery exposes retry config via __wrapped__ but keeps the autoretry_for
-    # tuple on the task class. Validate via the task class attributes.
-    assert send_email_task.max_retries == 5
-    assert send_email_task.name == "dummar.email.send"
-
-
 # ---------------------------------------------------------------------------
 # Dispatch helper
 # ---------------------------------------------------------------------------
 
 
-def test_dispatch_runs_task_inline_and_returns_result():
-    result = dispatch(send_email_task, "user@example.com", "subj", "<p>hi</p>")
-    # Even with SMTP disabled the task returns False (no-op), which is what
-    # _send_email_sync returns when SMTP_ENABLED is False.
+def test_dispatch_runs_task_inline_and_returns_result(db, director_user):
+    # notify_task_assigned_task creates an in-app notification and returns None.
+    from app.models.task import Task, TaskSourceType
+    from app.models.notification import Notification
+
+    task = Task(
+        title="dispatch-test",
+        description="d",
+        source_type=TaskSourceType.INTERNAL,
+        assigned_to_id=director_user.id,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    before = db.query(Notification).filter(Notification.user_id == director_user.id).count()
+    result = dispatch(notify_task_assigned_task, task.id, task.title, director_user.id)
     assert result.successful()
-    assert result.result is False
+    after = db.query(Notification).filter(Notification.user_id == director_user.id).count()
+    assert after > before
 
 
 def test_dispatch_propagates_task_exceptions_in_eager_mode():
@@ -85,34 +89,6 @@ def test_dispatch_propagates_task_exceptions_in_eager_mode():
     ):
         with pytest.raises(RuntimeError, match="boom"):
             dispatch(notify_contract_status_change_task, 1, "C-1", "approve")
-
-
-# ---------------------------------------------------------------------------
-# send_email_task — retry on transient errors
-# ---------------------------------------------------------------------------
-
-
-def test_send_email_task_has_autoretry_for_transient_errors():
-    # In eager mode Celery does not actually loop on retries, so we verify
-    # the autoretry policy is wired correctly. The worker process honors
-    # this configuration in production.
-    autoretry = getattr(send_email_task, "autoretry_for", ())
-    assert ConnectionError in autoretry
-    assert TimeoutError in autoretry
-    assert OSError in autoretry
-    assert send_email_task.max_retries == 5
-
-
-def test_send_email_task_does_not_retry_on_non_transient_error():
-    """A logic error inside the SMTP send should be swallowed (returns False)."""
-    with patch(
-        "app.services.email_service._send_email_sync",
-        side_effect=ValueError("bad address"),
-    ):
-        result = dispatch(send_email_task, "u@example.com", "s", "<p>h</p>")
-
-    assert result.successful()
-    assert result.result is False
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +184,21 @@ def test_generate_pdf_endpoint_returns_pdf_path_in_eager_mode(
 # ---------------------------------------------------------------------------
 
 
-def test_jobs_endpoint_reports_completed_task(client, director_token):
+def test_jobs_endpoint_reports_completed_task(client, director_token, db, director_user):
     # Run a quick eager task so we have a real result to look up.
-    result = dispatch(send_email_task, "u@example.com", "s", "<p>h</p>")
+    from app.models.task import Task, TaskSourceType
+
+    task = Task(
+        title="job-status-test",
+        description="d",
+        source_type=TaskSourceType.INTERNAL,
+        assigned_to_id=director_user.id,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    result = dispatch(notify_task_assigned_task, task.id, task.title, director_user.id)
     resp = client.get(f"/jobs/{result.id}", headers=_auth_headers(director_token))
     assert resp.status_code == 200, resp.text
     body = resp.json()

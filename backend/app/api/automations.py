@@ -27,7 +27,7 @@ router = APIRouter(prefix="/automations", tags=["automations"])
 logger = logging.getLogger("dummar.automations.api")
 
 # Only project directors can configure automations — they can wire up
-# notifications, emails, and task creation that affect the entire org.
+# notifications and task creation that affect the entire org.
 _automation_managers = require_role(UserRole.PROJECT_DIRECTOR)
 
 

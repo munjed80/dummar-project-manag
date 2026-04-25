@@ -14,7 +14,6 @@ import { toast } from 'sonner';
 interface HealthData {
   status: string;
   database: { status: string; latency_ms?: number };
-  smtp: { status: string; message?: string };
   version: string;
 }
 
@@ -249,16 +248,6 @@ export default function SettingsPage() {
                     <Badge className={healthData.database.status === 'ok' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
                       {healthData.database.status === 'ok' ? 'متصلة' : 'غير متصلة'}
                       {healthData.database.latency_ms && ` (${healthData.database.latency_ms}ms)`}
-                    </Badge>
-                  ))}
-                  {detail('البريد الإلكتروني (SMTP)', (
-                    <Badge className={
-                      healthData.smtp.status === 'ok' ? 'bg-green-100 text-green-800' :
-                      healthData.smtp.status === 'disabled' ? 'bg-gray-100 text-gray-800' :
-                      'bg-red-100 text-red-800'
-                    }>
-                      {healthData.smtp.status === 'ok' ? 'متصل' :
-                       healthData.smtp.status === 'disabled' ? 'معطّل' : 'خطأ'}
                     </Badge>
                   ))}
                   {detail('إصدار API', healthData.version)}

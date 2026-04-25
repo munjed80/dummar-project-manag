@@ -66,60 +66,6 @@ def task_session() -> Iterator[Any]:
 
 
 # ---------------------------------------------------------------------------
-# Email — wraps app.services.email_service._send_email_sync
-# ---------------------------------------------------------------------------
-
-
-@celery_app.task(
-    bind=True,
-    name="dummar.email.send",
-    autoretry_for=(ConnectionError, TimeoutError, OSError),
-    retry_backoff=True,
-    retry_backoff_max=300,
-    retry_jitter=True,
-    max_retries=5,
-)
-def send_email_task(self: Task, to_email: str, subject: str, body_html: str) -> bool:
-    """Send a single email via the SMTP service.
-
-    Transient network errors trigger Celery's exponential-backoff retry; any
-    other exception is logged and the task is marked failed (never retried,
-    because retrying e.g. an authentication error wastes worker capacity).
-
-    The execution log is written by ``_send_email_sync`` itself, so this
-    wrapper does not double-record.
-    """
-    # Imported lazily so the email module can import dispatch helpers
-    # without causing a circular import at package load time.
-    from app.services.email_service import _send_email_sync
-
-    try:
-        sent = _send_email_sync(to_email, subject, body_html)
-        if sent:
-            logger.info(
-                "send_email_task ok: to=%s subject=%s attempt=%d",
-                to_email,
-                subject,
-                self.request.retries + 1,
-            )
-        return sent
-    except (ConnectionError, TimeoutError, OSError):
-        # Re-raise so autoretry_for kicks in.
-        logger.warning(
-            "send_email_task transient failure (will retry): to=%s subject=%s attempt=%d",
-            to_email,
-            subject,
-            self.request.retries + 1,
-        )
-        raise
-    except Exception:
-        logger.exception(
-            "send_email_task permanent failure: to=%s subject=%s", to_email, subject
-        )
-        return False
-
-
-# ---------------------------------------------------------------------------
 # Contract PDF generation
 # ---------------------------------------------------------------------------
 

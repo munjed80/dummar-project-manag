@@ -1,9 +1,9 @@
 """Background job system (Celery + Redis).
 
 This package wires Celery into the Dummar backend. Heavy or IO-bound work
-such as PDF generation, contract document OCR/intelligence, email sending
-and notification fan-out is enqueued as Celery tasks so that the HTTP
-request thread returns quickly.
+such as PDF generation, contract document OCR/intelligence and notification
+fan-out is enqueued as Celery tasks so that the HTTP request thread returns
+quickly.
 
 The system degrades gracefully:
 

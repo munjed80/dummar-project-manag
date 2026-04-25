@@ -6,7 +6,7 @@ Covers:
 * `AutomationCreate` / `AutomationUpdate` schemas (operator + action validation)
 * CRUD endpoints + RBAC (only PROJECT_DIRECTOR can mutate; internal staff can read)
 * `_evaluate_condition` for every supported operator
-* Action handlers: `notification`, `email`, `create_task` (incl. templating)
+* Action handlers: `notification`, `create_task` (incl. templating)
 * `fire_event` integrates with real complaint/task endpoints
 * Disabled automations are skipped
 * A failing rule does not block the others
@@ -16,7 +16,6 @@ Covers:
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
 
 import pytest
 
@@ -431,40 +430,6 @@ def test_complaint_status_changed_fires_create_task_action(
     assert auto_task.priority.value == "high"
 
 
-def test_email_action_calls_send_email(client, db, director_user):
-    _create_automation_row(
-        db,
-        actions=[
-            {
-                "type": "email",
-                "params": {
-                    "to_email": "ops@example.com",
-                    "subject": "New: {complaint.tracking_number}",
-                    "body_html": "<p>{complaint.tracking_number}</p>",
-                },
-            }
-        ],
-    )
-
-    with patch(
-        "app.services.email_service.send_email", return_value=True
-    ) as mocked:
-        client.post(
-            "/complaints/",
-            json={
-                "full_name": "Tester",
-                "phone": "0900000000",
-                "complaint_type": "infrastructure",
-                "description": "email test",
-            },
-        )
-
-    assert mocked.called
-    call_kwargs = mocked.call_args.kwargs
-    assert call_kwargs["to_email"] == "ops@example.com"
-    assert "CMP" in call_kwargs["subject"]
-
-
 def test_failing_action_does_not_block_other_automations(
     client, db, director_user
 ):
@@ -584,33 +549,36 @@ def test_manual_test_endpoint_runs_automation(
     assert body["errors"] == []
 
 
-def test_task_created_fires_email_action(client, db, director_user, director_token):
+def test_task_created_fires_notification_action(client, db, director_user, director_token):
     _create_automation_row(
         db,
         trigger="task_created",
         conditions=[],
         actions=[
             {
-                "type": "email",
+                "type": "notification",
                 "params": {
-                    "to_email": "ops@example.com",
-                    "subject": "Task {task.id}",
-                    "body_html": "<p>created</p>",
+                    "user_id": director_user.id,
+                    "title": "Task {task.id}",
+                    "message": "created",
                 },
             }
         ],
     )
 
-    with patch(
-        "app.services.email_service.send_email", return_value=True
-    ) as mocked:
-        resp = client.post(
-            "/tasks/",
-            headers=_auth_headers(director_token),
-            json={
-                "title": "auto-task-test",
-                "description": "task event fan-out",
-            },
-        )
+    from app.models.notification import Notification
+
+    before = db.query(Notification).filter(Notification.user_id == director_user.id).count()
+
+    resp = client.post(
+        "/tasks/",
+        headers=_auth_headers(director_token),
+        json={
+            "title": "auto-task-test",
+            "description": "task event fan-out",
+        },
+    )
     assert resp.status_code == 200, resp.text
-    assert mocked.called
+
+    after = db.query(Notification).filter(Notification.user_id == director_user.id).count()
+    assert after > before

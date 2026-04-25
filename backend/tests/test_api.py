@@ -496,68 +496,11 @@ class TestGISEndpoints:
 
 
 # ---------------------------------------------------------------------------
-# 11. Email service (unit-level, SMTP disabled)
-# ---------------------------------------------------------------------------
-
-class TestEmailService:
-    """Test that email service functions don't raise when SMTP is disabled."""
-
-    def test_send_email_noop_when_disabled(self):
-        from app.services.email_service import send_email
-        # Should not raise
-        send_email("test@example.com", "Test Subject", "<p>Test</p>")
-
-    def test_complaint_status_email_noop(self):
-        from app.services.email_service import send_complaint_status_email
-        send_complaint_status_email("test@example.com", "CMP001", "new", "resolved")
-
-    def test_task_assignment_email_noop(self):
-        from app.services.email_service import send_task_assignment_email
-        send_task_assignment_email("test@example.com", "Test Task", "Test User")
-
-    def test_contract_status_email_noop(self):
-        from app.services.email_service import send_contract_status_email
-        send_contract_status_email("test@example.com", "CTR-001", "approve")
-
-    def test_dedup_guard_returns_false_first_time(self):
-        """Dedup guard should allow the first send."""
-        from app.services.email_service import _is_duplicate, _dedup_cache
-        _dedup_cache.clear()
-        assert _is_duplicate("unique-dedup-test@test.com", "Unique Subject 12345") is False
-
-    def test_dedup_guard_blocks_duplicate(self):
-        """Dedup guard should block a repeated send within window."""
-        from app.services.email_service import _is_duplicate, _dedup_cache
-        _dedup_cache.clear()
-        _is_duplicate("dedup-repeat@test.com", "Repeated Subject 12345")
-        assert _is_duplicate("dedup-repeat@test.com", "Repeated Subject 12345") is True
-
-    def test_html_escape_in_templates(self):
-        """Verify that HTML escaping is applied to user-provided content."""
-        import html
-        from app.services.email_service import _render_html
-        xss_attempt = '<script>alert("xss")</script>'
-        result = _render_html("Title", html.escape(xss_attempt))
-        assert "<script>" not in result
-        assert "&lt;script&gt;" in result
-
-    def test_render_html_produces_valid_rtl(self):
-        """Verify template renders with RTL direction."""
-        from app.services.email_service import _render_html
-        result = _render_html("Test Title", "<p>Content</p>")
-        assert 'dir="rtl"' in result
-        assert 'lang="ar"' in result
-        assert "Test Title" in result
-        assert "<p>Content</p>" in result
-        assert "منصة إدارة مشروع دمّر" in result
-
-
-# ---------------------------------------------------------------------------
-# 12. Health endpoints
+# 11. Health endpoints
 # ---------------------------------------------------------------------------
 
 class TestHealthEndpoints:
-    """Test detailed health check and SMTP test endpoints."""
+    """Test detailed health check endpoints."""
 
     def test_detailed_health_requires_auth(self, client):
         """Detailed health is restricted to internal staff."""
@@ -571,20 +514,7 @@ class TestHealthEndpoints:
         data = resp.json()
         assert data["status"] == "healthy"
         assert data["database"]["status"] == "ok"
-        assert data["smtp"]["status"] == "disabled"  # SMTP disabled in CI
         assert "version" in data
-
-    def test_smtp_health_requires_auth(self, client):
-        """SMTP health endpoint requires authentication."""
-        resp = client.get("/health/smtp")
-        assert resp.status_code in (401, 403)
-
-    def test_smtp_health_returns_disabled(self, client, director_token):
-        """SMTP health returns disabled when SMTP_ENABLED=false."""
-        resp = client.get("/health/smtp", headers=_auth_headers(director_token))
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "disabled"
 
     def test_ocr_health_requires_auth(self, client):
         """OCR health endpoint requires authentication."""
