@@ -162,13 +162,20 @@ def test_update_team(client, director_token, db):
     assert data["is_active"] is False
 
 
-def test_settings_get_seeds_defaults(client, db):
-    resp = client.get("/settings/")
+def test_settings_get_seeds_defaults(client, director_token, db):
+    headers = {"Authorization": f"Bearer {director_token}"}
+    resp = client.get("/settings/", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert "project" in data
     assert "organization" in data
     assert "defaults" in data
+
+
+def test_settings_get_requires_auth(client, db):
+    """Anonymous callers must not be able to read settings."""
+    resp = client.get("/settings/")
+    assert resp.status_code in (401, 403)
 
 
 def test_settings_update_privileged(client, director_token, db):

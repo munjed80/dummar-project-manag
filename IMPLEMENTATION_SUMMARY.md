@@ -118,11 +118,10 @@ npm run dev
 6. **Mobile Optimization** - Progressive Web App features
 
 ### Phase 4 - Production Hardening
-1. **Email Integration** - Status change notifications
-2. **SMS Gateway** - Citizen tracking number SMS
-3. **Performance Optimization** - Database indexing, caching
-4. **Security Audit** - Penetration testing, rate limiting
-5. **Deployment** - Production Docker setup, CI/CD pipeline
+1. **SMS Gateway** - Citizen tracking number SMS
+2. **Performance Optimization** - Database indexing, caching
+3. **Security Audit** - Penetration testing, rate limiting
+4. **Deployment** - Production Docker setup, CI/CD pipeline
 
 ## 📁 Project Structure
 
@@ -267,7 +266,7 @@ Before deploying to production:
 3. [ ] Configure S3 or local storage for uploads
 4. [ ] Add HTTPS/TLS certificates
 5. [ ] Set up backup strategy
-6. [ ] Configure email/SMS gateways
+6. [ ] Configure SMS gateway (optional)
 7. [ ] Add monitoring (Sentry, DataDog, etc.)
 8. [ ] Set up CI/CD pipeline
 9. [ ] Load test the API

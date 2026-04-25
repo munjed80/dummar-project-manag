@@ -262,7 +262,7 @@ LOG_LEVEL=info
   (do this only behind an authenticated reverse proxy).
 - `/health` and `/health/ready` — public (used by container orchestrators
   and load balancers).
-- `/health/detailed`, `/health/smtp`, `/health/ocr`, `/metrics` — require
+- `/health/detailed`, `/health/ocr`, `/metrics` — require
   authenticated internal staff (`get_current_internal_user`).
 - `/uploads/contracts/*` and `/uploads/contract_intelligence/*` — proxied
   to the backend and require internal-staff auth (sensitive documents).
@@ -299,7 +299,6 @@ Proprietary - Damascus Dummar Project
 See [PRODUCTION_DEPLOYMENT_GUIDE.md](./PRODUCTION_DEPLOYMENT_GUIDE.md) for complete production deployment instructions covering:
 - PostgreSQL/PostGIS setup
 - Backend & frontend deployment
-- SMTP email configuration
 - CORS, security, and file upload settings
 - CI/CD pipeline details
 - Rollback procedures

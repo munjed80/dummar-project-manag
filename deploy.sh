@@ -193,14 +193,6 @@ LOG_LEVEL=info
 # Gunicorn workers — adjust to your server: 2×CPU + 1 (e.g. 2-core → 5)
 GUNICORN_WORKERS=4
 GUNICORN_TIMEOUT=120
-
-# Email (optional)
-SMTP_ENABLED=false
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_FROM_EMAIL=noreply@dummar.gov.sy
 EOF
 
     success ".env generated with random secrets."

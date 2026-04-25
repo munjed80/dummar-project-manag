@@ -625,3 +625,191 @@ class TestContractScoping:
         codes = {c["contract_number"] for c in r.json()["items"]}
         assert "CT-IN" in codes
         assert "CT-OUT" not in codes
+
+
+# ---------------------------------------------------------------------------
+# 5) Org-scope on additional endpoints (production-readiness pass)
+# ---------------------------------------------------------------------------
+
+
+class TestComplaintMapMarkersScoping:
+    def test_map_markers_filtered_to_subtree(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        _make_user(db, "u_sup_map", UserRole.AREA_SUPERVISOR, own.id)
+        h = _login(client, "u_sup_map")
+        c_in = Complaint(
+            tracking_number="CMP-MAP-IN",
+            full_name="x", phone="0",
+            complaint_type=ComplaintType.OTHER,
+            description="x", status=ComplaintStatus.NEW,
+            latitude=33.5, longitude=36.3,
+            org_unit_id=own.id,
+        )
+        c_out = Complaint(
+            tracking_number="CMP-MAP-OUT",
+            full_name="x", phone="0",
+            complaint_type=ComplaintType.OTHER,
+            description="x", status=ComplaintStatus.NEW,
+            latitude=33.5, longitude=36.3,
+            org_unit_id=other.id,
+        )
+        db.add_all([c_in, c_out])
+        db.commit()
+        r = client.get("/complaints/map/markers", headers=h)
+        assert r.status_code == 200
+        codes = {c["tracking_number"] for c in r.json()}
+        assert "CMP-MAP-IN" in codes
+        assert "CMP-MAP-OUT" not in codes
+
+
+def _make_active_contract(db, director, *, number, org_unit_id):
+    c = Contract(
+        contract_number=number,
+        title="t", contractor_name="c",
+        contract_type=ContractType.CONSTRUCTION,
+        contract_value=1,
+        start_date=date(2025, 1, 1),
+        end_date=date(2099, 12, 31),
+        scope_description="x",
+        created_by_id=director.id,
+        status=ContractStatus.ACTIVE,
+        org_unit_id=org_unit_id,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+class TestContractsExpiringSoonScoping:
+    def test_expiring_soon_filtered_to_subtree(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director = _make_user(db, "u_dir_exp", UserRole.PROJECT_DIRECTOR, None)
+        sup = _make_user(db, "u_sup_exp", UserRole.AREA_SUPERVISOR, own.id)
+        from datetime import timedelta
+        soon = date.today() + timedelta(days=10)
+        c_in = Contract(
+            contract_number="CT-EXP-IN", title="t", contractor_name="c",
+            contract_type=ContractType.CONSTRUCTION, contract_value=1,
+            start_date=date.today(), end_date=soon,
+            scope_description="x", created_by_id=director.id,
+            status=ContractStatus.ACTIVE, org_unit_id=own.id,
+        )
+        c_out = Contract(
+            contract_number="CT-EXP-OUT", title="t", contractor_name="c",
+            contract_type=ContractType.CONSTRUCTION, contract_value=1,
+            start_date=date.today(), end_date=soon,
+            scope_description="x", created_by_id=director.id,
+            status=ContractStatus.ACTIVE, org_unit_id=other.id,
+        )
+        db.add_all([c_in, c_out])
+        db.commit()
+        h = _login(client, "u_sup_exp")
+        r = client.get("/contracts/expiring-soon", headers=h)
+        assert r.status_code == 200
+        codes = {c["contract_number"] for c in r.json()}
+        assert "CT-EXP-IN" in codes
+        assert "CT-EXP-OUT" not in codes
+
+
+class TestContractInstanceAuthz:
+    def test_update_out_of_scope_contract_returns_403(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director = _make_user(db, "u_dir_cu", UserRole.PROJECT_DIRECTOR, None)
+        cm = _make_user(db, "u_cm_cu", UserRole.CONTRACTS_MANAGER, own.id)
+        c = _make_active_contract(db, director, number="CT-CU-OUT", org_unit_id=other.id)
+        h = _login(client, "u_cm_cu")
+        r = client.put(f"/contracts/{c.id}", json={"title": "nope"}, headers=h)
+        assert r.status_code == 403
+
+    def test_approve_out_of_scope_contract_returns_403(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director = _make_user(db, "u_dir_ca", UserRole.PROJECT_DIRECTOR, None)
+        cm = _make_user(db, "u_cm_ca", UserRole.CONTRACTS_MANAGER, own.id)
+        c = _make_active_contract(db, director, number="CT-CA-OUT", org_unit_id=other.id)
+        c.status = ContractStatus.DRAFT
+        db.commit()
+        h = _login(client, "u_cm_ca")
+        r = client.post(
+            f"/contracts/{c.id}/approve",
+            json={"action": "approve", "comments": "x"},
+            headers=h,
+        )
+        assert r.status_code == 403
+
+    def test_generate_pdf_out_of_scope_contract_returns_403(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director = _make_user(db, "u_dir_pdf", UserRole.PROJECT_DIRECTOR, None)
+        ft = _make_user(db, "u_ft_pdf", UserRole.FIELD_TEAM, own.id)
+        c = _make_active_contract(db, director, number="CT-PDF-OUT", org_unit_id=other.id)
+        h = _login(client, "u_ft_pdf")
+        r = client.post(f"/contracts/{c.id}/generate-pdf", headers=h)
+        assert r.status_code == 403
+
+
+class TestProjectInstanceAuthz:
+    def _make_project(self, db, director, *, code, org_unit_id):
+        from app.models.project import Project, ProjectStatus
+        p = Project(
+            title="P", code=code, description="d",
+            status=ProjectStatus.PLANNED,
+            created_by_id=director.id,
+            org_unit_id=org_unit_id,
+        )
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        return p
+
+    def test_get_out_of_scope_project_returns_403(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director = _make_user(db, "u_dir_pg", UserRole.PROJECT_DIRECTOR, None)
+        sup = _make_user(db, "u_sup_pg", UserRole.AREA_SUPERVISOR, own.id)
+        p = self._make_project(db, director, code="P-G-OUT", org_unit_id=other.id)
+        h = _login(client, "u_sup_pg")
+        r = client.get(f"/projects/{p.id}", headers=h)
+        assert r.status_code == 403
+
+    def test_update_out_of_scope_project_returns_403(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director = _make_user(db, "u_dir_pu", UserRole.PROJECT_DIRECTOR, None)
+        cm = _make_user(db, "u_cm_pu", UserRole.CONTRACTS_MANAGER, own.id)
+        p = self._make_project(db, director, code="P-U-OUT", org_unit_id=other.id)
+        h = _login(client, "u_cm_pu")
+        r = client.put(f"/projects/{p.id}", json={"title": "nope"}, headers=h)
+        assert r.status_code == 403
+
+    def test_delete_out_of_scope_project_returns_403(self, client, db, org_tree):
+        own = org_tree["dist_ga_m1_d1"]
+        other = org_tree["dist_gb_m1_d1"]
+        director_global = _make_user(db, "u_dir_pdg", UserRole.PROJECT_DIRECTOR, None)
+        director_scoped = _make_user(db, "u_dir_pds", UserRole.PROJECT_DIRECTOR, own.id)
+        p = self._make_project(db, director_global, code="P-D-OUT", org_unit_id=other.id)
+        h = _login(client, "u_dir_pds")
+        r = client.delete(f"/projects/{p.id}", headers=h)
+        assert r.status_code == 403
+
+
+class TestSettingsAuth:
+    def test_settings_get_anonymous_blocked(self, client, db):
+        r = client.get("/settings/")
+        assert r.status_code in (401, 403)
+
+    def test_settings_get_internal_user_ok(self, client, db, org_tree):
+        _make_user(db, "u_ft_set", UserRole.FIELD_TEAM, org_tree["dist_ga_m1_d1"].id)
+        h = _login(client, "u_ft_set")
+        r = client.get("/settings/", headers=h)
+        assert r.status_code == 200
+
+    def test_settings_get_citizen_blocked(self, client, db):
+        _make_user(db, "u_cit_set", UserRole.CITIZEN, None)
+        h = _login(client, "u_cit_set")
+        r = client.get("/settings/", headers=h)
+        assert r.status_code == 403

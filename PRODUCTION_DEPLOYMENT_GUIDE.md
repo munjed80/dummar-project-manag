@@ -14,21 +14,20 @@
 6. [Database Migrations](#database-migrations)
 7. [Seed Data Strategy](#seed-data-strategy)
 8. [Frontend Build & Serve](#frontend-build--serve)
-9. [SMTP Email Configuration](#smtp-email-configuration)
-10. [CORS Configuration](#cors-configuration)
-11. [File Upload / Storage](#file-upload--storage)
-12. [Tesseract OCR Setup (Contract Intelligence)](#tesseract-ocr-setup-contract-intelligence)
-13. [Arabic PDF Export](#arabic-pdf-export)
-14. [Security Checklist](#security-checklist)
-15. [SSL/TLS Setup with Let's Encrypt](#ssltls-setup-with-lets-encrypt)
-16. [CI/CD Pipeline](#cicd-pipeline)
-17. [Rollback & Migration Caution](#rollback--migration-caution)
-18. [Monitoring & Observability](#monitoring--observability)
-19. [Audit Trail](#audit-trail)
-20. [Troubleshooting](#troubleshooting)
-21. [Docker Deployment (Primary)](#docker-deployment-primary)
-22. [Load / Performance Testing](#load--performance-testing)
-23. [VPS Deployment Checklist](#vps-deployment-checklist)
+9. [CORS Configuration](#cors-configuration)
+10. [File Upload / Storage](#file-upload--storage)
+11. [Tesseract OCR Setup (Contract Intelligence)](#tesseract-ocr-setup-contract-intelligence)
+12. [Arabic PDF Export](#arabic-pdf-export)
+13. [Security Checklist](#security-checklist)
+14. [SSL/TLS Setup with Let's Encrypt](#ssltls-setup-with-lets-encrypt)
+15. [CI/CD Pipeline](#cicd-pipeline)
+16. [Rollback & Migration Caution](#rollback--migration-caution)
+17. [Monitoring & Observability](#monitoring--observability)
+18. [Audit Trail](#audit-trail)
+19. [Troubleshooting](#troubleshooting)
+20. [Docker Deployment (Primary)](#docker-deployment-primary)
+21. [Load / Performance Testing](#load--performance-testing)
+22. [VPS Deployment Checklist](#vps-deployment-checklist)
 
 ---
 
@@ -81,7 +80,6 @@ CORS_ORIGINS=https://dummar.example.com
 ENVIRONMENT=production
 ENABLE_API_DOCS=false
 BACKEND_BIND=127.0.0.1
-SMTP_ENABLED=false
 LOG_LEVEL=info
 EOF
 
@@ -171,14 +169,6 @@ CORS_ORIGINS=https://dummar.example.com
 
 # ── Logging ──
 LOG_LEVEL=info  # debug, info, warning, error
-
-# ── SMTP (optional — set SMTP_ENABLED=true to activate email) ──
-SMTP_ENABLED=false
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=noreply@dummar.gov.sy
-SMTP_PASSWORD=<SMTP_PASSWORD>
-SMTP_FROM_EMAIL=noreply@dummar.gov.sy
 ```
 
 **Important:**
@@ -454,85 +444,6 @@ sudo systemctl reload nginx
 
 ---
 
-## SMTP Email Configuration
-
-Email notifications are optional and controlled by environment variables.
-
-### Enable email
-
-Set these variables in `.env`:
-
-```bash
-SMTP_ENABLED=true
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=noreply@dummar.gov.sy
-SMTP_PASSWORD=<SMTP_PASSWORD>
-SMTP_FROM_EMAIL=noreply@dummar.gov.sy
-```
-
-### Email notifications are sent for:
-
-| Event                    | Recipients                              |
-|--------------------------|-----------------------------------------|
-| Complaint status change  | Assigned officer + complaints officers + project director |
-| Task assignment          | Assigned user                           |
-| Contract status change   | Contracts managers + project director   |
-
-### Verifying SMTP after configuration
-
-```bash
-# 1. Test SMTP connection (requires internal staff auth)
-curl -H "Authorization: Bearer <TOKEN>" https://api.dummar.example.com/health/smtp
-
-# 2. Check SMTP in detailed health
-curl https://api.dummar.example.com/health/detailed
-
-# 3. Send a real test email (requires auth + SMTP_ENABLED=true)
-curl -X POST -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"to_email": "admin@your-domain.com"}' \
-  https://api.dummar.example.com/health/smtp/test-send
-
-# 4. Watch logs for email send results
-journalctl -u dummar-api -f | grep -i email
-```
-
-### SMTP Production Verification Checklist
-
-Before considering SMTP fully operational in production, verify all of the following:
-
-- [ ] `SMTP_ENABLED=true` in environment
-- [ ] `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` are configured
-- [ ] `GET /health/smtp` returns `status: "ok"` with acceptable latency
-- [ ] `GET /health/detailed` shows SMTP status as `"ok"` (not `"error"` or `"disabled"`)
-- [ ] `POST /health/smtp/test-send` successfully delivers an email to a test mailbox
-- [ ] Check spam/junk folder if test email is not in inbox
-- [ ] Trigger a real workflow that sends email:
-  - Change a complaint status → verify email reaches complaints officer
-  - Assign a task → verify email reaches assigned user
-  - Approve a contract → verify email reaches contracts managers
-- [ ] Confirm emails are rendered correctly (Arabic RTL, proper formatting)
-- [ ] Confirm duplicate suppression works (repeat same action within 5 min, verify only 1 email sent)
-- [ ] Review application logs for any SMTP errors: `journalctl -u dummar-api | grep -i smtp`
-- [ ] Verify that SMTP failures do NOT block core operations (temporarily misconfigure SMTP and confirm complaints/tasks/contracts still work)
-
-### Disable email
-
-Set `SMTP_ENABLED=false` (default). The system will continue to create in-app notifications but skip email sending.
-
-### Fail-safe behavior
-
-- Email failures **never** block core operations
-- All failures are logged with full stack traces
-- If SMTP credentials are missing, the system logs an error and continues
-- **Deduplication**: Same email (same recipient + subject) is suppressed within a 5-minute window to prevent noisy duplicate notifications
-- **TLS handling**: Port 587 uses STARTTLS, port 465 uses direct SSL — automatic based on configured port
-- **Timeout**: All SMTP connections timeout after 30 seconds
-- **Return value**: `send_email()` returns `True`/`False` for programmatic verification
-
----
-
 ## CORS Configuration
 
 CORS origins are read from the `CORS_ORIGINS` environment variable (comma-separated):
@@ -754,7 +665,7 @@ These are now enforced by the Docker stack and code defaults; you get them for f
 - [x] `DB_PASSWORD` and `SECRET_KEY` are required in `.env` (compose uses `${VAR:?}`)
 - [x] `deploy.sh` refuses to launch with the legacy default values
 - [x] `/docs`, `/redoc`, `/openapi.json` disabled when `ENVIRONMENT=production`
-- [x] `/health/detailed`, `/health/smtp`, `/health/ocr`, `/metrics` require internal-staff auth
+- [x] `/health/detailed`, `/health/ocr`, `/metrics` require internal-staff auth
 - [x] `/uploads/contracts/*` and `/uploads/contract_intelligence/*` require auth (proxied to backend)
 - [x] `alembic upgrade head` failure is fatal (container exits non-zero)
 - [x] Docker `json-file` log rotation (10 MB × 5) on every service
@@ -771,7 +682,6 @@ These are now enforced by the Docker stack and code defaults; you get them for f
 - [ ] Enable HTTPS via `./ssl-setup.sh <domain> --auto`
 - [ ] Open only ports 22, 80, 443 in `ufw`; set up `fail2ban` for SSH and `/api/auth/`
 - [ ] Configure recurring `pg_dump` backups of the `db` container volume
-- [ ] If SMTP is needed, test with `POST /health/smtp/test-send` before relying on notifications
 - [ ] Rotate SSH keys, disable root login, disable password SSH
 
 ### Optional fail2ban (Ubuntu)
@@ -1035,9 +945,8 @@ alembic history
 | Endpoint            | Auth Required | Purpose                                         |
 |---------------------|---------------|--------------------------------------------------|
 | `GET /health`       | No            | Basic liveness probe (returns `{"status":"healthy"}`) |
-| `GET /health/detailed` | No         | Checks DB + SMTP connectivity with latency      |
+| `GET /health/detailed` | No         | Checks DB connectivity with latency             |
 | `GET /health/ready` | No            | Readiness probe — returns 503 if DB unreachable  |
-| `GET /health/smtp`  | Yes (staff)   | Tests SMTP connection + authentication           |
 | `GET /health/ocr`   | Yes (staff)   | OCR engine status + Arabic text verification     |
 | `GET /metrics`      | No            | Uptime, request counts, version info             |
 
@@ -1062,7 +971,6 @@ journalctl -u dummar-api -f
 # Filter by component
 journalctl -u dummar-api | grep "dummar.audit"      # Audit events
 journalctl -u dummar-api | grep "dummar.requests"    # Request logs
-journalctl -u dummar-api | grep "email"              # Email send results
 
 # nginx logs
 /var/log/nginx/access.log
@@ -1073,7 +981,7 @@ journalctl -u dummar-api | grep "email"              # Email send results
 
 ```bash
 # Example: Simple cron-based health check with alerting
-*/5 * * * * curl -sf http://localhost:8000/health/ready || echo "ALERT: Dummar API not ready" | mail -s "Dummar Health Alert" admin@example.com
+*/5 * * * * curl -sf http://localhost:8000/health/ready || logger -t dummar "ALERT: Dummar API not ready"
 
 # Example: Prometheus-compatible scraping (metrics endpoint)
 curl http://localhost:8000/metrics
@@ -1085,9 +993,7 @@ curl http://localhost:8000/metrics
 - API response times (from request logs)
 - Error rate (5xx responses — logged at WARNING level)
 - Database connectivity (via `/health/ready`)
-- SMTP connectivity (via `/health/detailed`)
 - Disk space (especially upload directory)
-- Email delivery failures (check application logs for "Failed to send email")
 - Audit log for unusual activity (`/audit-logs/` endpoint)
 - Application uptime (`/metrics` endpoint)
 
@@ -1176,25 +1082,6 @@ psql postgresql://dummar:<password>@localhost:5432/dummar_db -c "SELECT 1"
 curl http://localhost:8000/health/ready
 ```
 
-### Emails not sending
-
-```bash
-# 1. Check if SMTP is enabled
-curl http://localhost:8000/health/detailed | python3 -m json.tool
-
-# 2. Test SMTP connection (requires auth)
-curl -H "Authorization: Bearer <TOKEN>" http://localhost:8000/health/smtp
-
-# 3. Check logs for send failures
-journalctl -u dummar-api | grep -i "email\|smtp" | tail -20
-
-# Common issues:
-# - SMTP_ENABLED=false (default — must explicitly enable)
-# - SMTP credentials incorrect
-# - Firewall blocking outbound port 587/465
-# - TLS/SSL certificate issues
-```
-
 ### Frontend build fails
 
 ```bash
@@ -1248,7 +1135,6 @@ cat > .env <<EOF
 DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
 CORS_ORIGINS=https://dummar.example.com
-SMTP_ENABLED=false
 LOG_LEVEL=info
 GUNICORN_WORKERS=4
 EOF
@@ -1371,15 +1257,6 @@ Use this checklist when deploying to a new VPS for the first time:
 - [ ] Verify HTTPS: `curl -I https://your-domain.com`
 - [ ] On future updates use `./deploy.sh --rebuild --domain=your-domain.com` —
       it will self-heal nginx.conf back to the SSL version after `git pull`.
-
-### SMTP Configuration (Optional)
-
-- [ ] Set `SMTP_ENABLED=true` in `.env`
-- [ ] Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
-- [ ] Restart backend: `docker compose restart backend`
-- [ ] Verify: `GET /health/smtp` returns `"status": "ok"`
-- [ ] Test email: `POST /health/smtp/test-send` with test email address
-- [ ] Trigger a real workflow (complaint status change) and verify email delivery
 
 ### Post-Deployment Verification
 

@@ -134,13 +134,14 @@ def get_expiring_contracts(
     from datetime import date
     threshold_date = date.today() + timedelta(days=days)
     
-    contracts = db.query(Contract).filter(
+    query = db.query(Contract).filter(
         Contract.status == ContractStatus.ACTIVE,
         Contract.end_date <= threshold_date,
         Contract.end_date >= date.today()
-    ).all()
-    
-    return contracts
+    )
+    query = perms.scope_query(query, db, current_user, Contract)
+
+    return query.all()
 
 
 @router.get("/{contract_id}", response_model=ContractResponse)
@@ -170,6 +171,10 @@ def update_contract(
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.UPDATE, perms.ResourceType.CONTRACT, resource=contract
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     update_data = contract_update.model_dump(exclude_unset=True)
 
@@ -199,6 +204,10 @@ def approve_contract(
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.APPROVE, perms.ResourceType.CONTRACT, resource=contract
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
     
     if approval_request.action == "approve":
         contract.status = ContractStatus.APPROVED
@@ -259,6 +268,12 @@ def generate_contract_pdf_endpoint(
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.EXPORT, perms.ResourceType.CONTRACT, resource=contract
+    ) and not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.CONTRACT, resource=contract
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
 
     from app.jobs import dispatch, is_eager_mode
     from app.jobs.tasks import generate_contract_pdf_task
