@@ -9,7 +9,7 @@ The :class:`Automation` row encodes a single rule:
   evaluated against the event context. All conditions must match for the
   actions to run (logical AND). An empty list matches everything.
 * ``actions`` — JSON list of {type, params} entries executed in order.
-  Supported action types: ``notification``, ``email``, ``create_task``.
+  Supported action types: ``notification``, ``create_task``.
 * ``enabled`` — soft-toggle so operators can pause a rule without
   deleting it.
 

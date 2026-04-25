@@ -105,8 +105,8 @@ services:
 
   worker:
     # Celery worker — runs background jobs (PDF generation, OCR pipeline,
-    # email sending, notification fan-out). Shares the backend image so it
-    # has access to the same code and Python dependencies.
+    # notification fan-out). Shares the backend image so it has access to
+    # the same code and Python dependencies.
     build:
       context: ./backend
       dockerfile: Dockerfile
