@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, MapPin, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, Globe, FolderOpen, Plus } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, FolderOpen, Plus } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -15,14 +15,30 @@ interface NavItem {
   path: string;
   icon: React.ElementType;
   label: string;
-  /** If set, only these roles see this item. Empty = everyone. */
+  /** If set, only these roles see this item. Empty/undefined = everyone. */
   roles?: UserRole[];
+}
+
+// Read the cached role straight from localStorage as a synchronous fallback
+// for the first render of a freshly-mounted Layout. Even though the
+// AuthProvider seeds its initial state from the same cache, this fallback
+// guarantees the navigation NEVER renders without a role on a hard refresh
+// where the cached_user JSON parse and the React render race.
+function readCachedRole(): UserRole | null {
+  try {
+    const raw = localStorage.getItem('cached_user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { role?: string };
+    return (parsed?.role as UserRole) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { role } = useAuth();
+  const { role, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Close mobile menu on route change
@@ -36,27 +52,53 @@ export function Layout({ children }: LayoutProps) {
     navigate('/login');
   };
 
-  const allNavItems: NavItem[] = [
+  // Effective role: prefer the live auth role, but fall back to the cached
+  // role from localStorage whenever the live role is momentarily null. This
+  // is what stops the nav from collapsing during route changes / /auth/me
+  // refreshes — the cached value remains valid until an explicit 401 clears
+  // the cache (handled centrally in AuthProvider).
+  const effectiveRole: UserRole | null = role ?? readCachedRole();
+
+  const allNavItems: NavItem[] = useMemo(() => [
     { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
     { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/complaints-map', icon: MapTrifold, label: 'خريطة الشكاوى' },
     { path: '/tasks', icon: ListChecks, label: 'المهام', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/contracts', icon: FileText, label: 'العقود', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/teams', icon: UsersThree, label: 'الفرق التنفيذية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/contract-intelligence', icon: Brain, label: 'ذكاء العقود', roles: ['project_director', 'contracts_manager'] },
-    { path: '/locations', icon: MapPin, label: 'المواقع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/locations/geo-dashboard', icon: Globe, label: 'لوحة جغرافية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
+    // Single consolidated geographic entry. The Locations list and Geo
+    // Dashboard pages are still routable directly, and surfaced as internal
+    // tabs from inside the Complaints Map page.
+    { path: '/complaints-map', icon: MapTrifold, label: 'خريطة الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
     { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },
-  ];
+  ], []);
 
-  const navItems = allNavItems.filter((item) => {
-    if (!item.roles || item.roles.length === 0) return true;
-    return role ? item.roles.includes(role) : false;
-  });
+  // Filter nav items by the EFFECTIVE role. When effectiveRole is null we
+  // intentionally show only the always-visible items (Settings) — but in
+  // practice this branch is only reached on the very first mount before any
+  // auth state exists, which is also the only situation where the user has
+  // no cached identity to filter against.
+  const navItems = useMemo(
+    () =>
+      allNavItems.filter((item) => {
+        if (!item.roles || item.roles.length === 0) return true;
+        return effectiveRole ? item.roles.includes(effectiveRole) : false;
+      }),
+    [allNavItems, effectiveRole],
+  );
+
+  // If the user is truly unauthenticated (no token AND no cached identity)
+  // on a protected page, send them to /login instead of rendering a partial
+  // menu. We only redirect once auth has finished loading so that an
+  // in-flight refresh doesn't bounce a legitimately-authenticated user out.
+  // Placed after all hook calls to keep hook order stable across renders.
+  if (!loading && !effectiveRole && !apiService.isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -77,7 +119,7 @@ export function Layout({ children }: LayoutProps) {
             {/* Intake shortcut for staff who help walk-in / phone citizens.
                 Opens the public submit form in a new tab so the staff session
                 stays intact. Visible only to roles that actually do intake. */}
-            {role && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(role) && (
+            {effectiveRole && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(effectiveRole) && (
               <a
                 href="/complaints/new"
                 target="_blank"

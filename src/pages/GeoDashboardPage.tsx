@@ -16,6 +16,7 @@ import {
 } from '@phosphor-icons/react';
 import { MapView } from '@/components/MapView';
 import type { MapMarker } from '@/components/MapView';
+import { GeoSubNav } from '@/components/GeoSubNav';
 
 const TYPE_LABELS: Record<string, string> = {
   island: 'جزيرة', sector: 'قطاع', block: 'بلوك', building: 'مبنى',
@@ -103,6 +104,7 @@ export default function GeoDashboardPage() {
   return (
     <Layout>
       <div className="space-y-6">
+        <GeoSubNav active="geo" />
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold flex items-center gap-2">

@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MapView } from '@/components/MapView';
 import type { MapMarker, AreaPolygon } from '@/components/MapView';
 import { apiService } from '@/services/api';
+import { GeoSubNav } from '@/components/GeoSubNav';
 import { MapPin, Funnel } from '@phosphor-icons/react';
 
 const entityFilters = [
@@ -119,6 +120,12 @@ function ComplaintsMapPage() {
   return (
     <Layout>
       <div className="space-y-4">
+        {/* Internal sub-navigation for the consolidated geographic section.
+            The top nav now exposes only one geographic entry ("خريطة الشكاوى");
+            Locations and Geo Dashboard live as tabs here so the routes stay
+            reachable without cluttering the main menu. */}
+        <GeoSubNav active="map" />
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <MapPin size={28} className="text-primary" weight="fill" />

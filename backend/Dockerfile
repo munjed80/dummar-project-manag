@@ -26,9 +26,14 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # Copy application code
 COPY . .
 
-# Create non-root user and set up directories
+# Create non-root user and set up directories.
+# --create-home ensures /home/appuser exists and is owned by appuser so that
+# gunicorn's arbiter control socket (and any other tool that writes to $HOME)
+# can initialise correctly. Without it gunicorn logs
+# "[ERROR] Control server error: [Errno 13] Permission denied: '/home/appuser'"
+# which degrades worker lifecycle management and can cause intermittent 502s.
 RUN mkdir -p /app/uploads && \
-    useradd --system --no-create-home appuser && \
+    useradd --system --create-home appuser && \
     chown -R appuser:appuser /app/uploads && \
     chmod +x /app/entrypoint.sh
 

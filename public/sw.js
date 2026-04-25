@@ -7,7 +7,11 @@
  * - Navigation requests: network-first, fallback to cached shell
  */
 
-const CACHE_NAME = 'dummar-pwa-v1';
+// CACHE_NAME is bumped whenever the SW logic changes OR when stale assets
+// from a previous deploy must be evicted on the next page load. Chrome
+// aggressively keeps the previous SW + cache; bumping the name forces the
+// activate-handler below to delete every cache that doesn't match.
+const CACHE_NAME = 'dummar-pwa-v2';
 
 // Static assets to pre-cache during install
 const PRECACHE_URLS = [

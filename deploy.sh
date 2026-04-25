@@ -423,9 +423,27 @@ check_endpoint() {
     fi
 }
 
-check_endpoint "Frontend (SPA)"     "$BASE_URL/"
-check_endpoint "API health/ready"   "$BASE_URL/api/health/ready"  200
-check_endpoint "API root"            "$BASE_URL/api/"              200
+# ---------------------------------------------------------------------------
+# Detect whether nginx is running in SSL mode before running local probes.
+# When SSL is active, every http://localhost request gets a 301 redirect to
+# HTTPS — making the three checks below always fail with "expected 200, got
+# 301" even though the stack is working correctly. In that case we skip the
+# plain-HTTP local probes (the HTTPS local check below exercises the same
+# paths) to avoid false [ERROR] lines that mislead the operator.
+# ---------------------------------------------------------------------------
+SSL_ENABLED=false
+if [ -f nginx.conf ] && grep -q 'listen 443 ssl' nginx.conf; then
+    SSL_ENABLED=true
+fi
+
+if [ "$SSL_ENABLED" = false ]; then
+    check_endpoint "Frontend (SPA)"     "$BASE_URL/"
+    check_endpoint "API health/ready"   "$BASE_URL/api/health/ready"  200
+    check_endpoint "API root"            "$BASE_URL/api/"              200
+else
+    info "SSL mode active — skipping plain-HTTP local probes (all HTTP requests redirect 301→HTTPS)."
+    info "HTTPS local probes and public endpoint checks below cover the same paths."
+fi
 
 # ---------------------------------------------------------------------------
 # Local HTTPS acceptance probe — the test that previously caught no one out.
@@ -442,10 +460,6 @@ check_endpoint "API root"            "$BASE_URL/api/"              200
 # a cached/stale Cloudflare response or be silently absent (the previous
 # behavior), letting CF return 521 in production.
 # ---------------------------------------------------------------------------
-SSL_ENABLED=false
-if [ -f nginx.conf ] && grep -q 'listen 443 ssl' nginx.conf; then
-    SSL_ENABLED=true
-fi
 
 if [ "$SSL_ENABLED" = true ]; then
     HTTPS_PORT_LOCAL=$(grep '^HTTPS_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "443")

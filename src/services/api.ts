@@ -164,7 +164,7 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to fetch user');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch user');
     return response.json();
   }
 
@@ -172,7 +172,7 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to fetch permissions');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch permissions');
     return response.json();
   }
 
