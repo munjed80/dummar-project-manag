@@ -121,7 +121,7 @@ export default function LocationsListPage() {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  async function loadData() {
     setLoading(true);
     try {
       const [treeData, listData, statsData] = await Promise.all([
@@ -137,7 +137,7 @@ export default function LocationsListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // Filtered list
   const filteredLocations = useMemo(() => {
