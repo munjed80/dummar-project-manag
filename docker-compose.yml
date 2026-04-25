@@ -179,10 +179,22 @@ services:
       # probe hit "http://localhost:80/", which under the SSL-enabled config
       # returns 301 → https://<server_name>/ and then fails TLS inside the
       # container, causing false "unhealthy" even when the site was fine.
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/nginx-health"]
+      #
+      # We probe 127.0.0.1 (not "localhost") because BusyBox wget inside
+      # nginx:alpine resolves "localhost" to ::1 first, but our config is
+      # mounted read-only so the docker-entrypoint helper that adds an
+      # IPv6 listen directive cannot patch it. Probing the IPv4 loopback
+      # directly avoids that mismatch.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/nginx-health"]
       interval: 30s
       timeout: 5s
       retries: 3
+      # start_period gives nginx time to load config (and the deploy.sh SSL
+      # self-heal time to swap nginx.conf + reload) before the first health
+      # probe counts toward the failure budget. Without it, a transient
+      # restart during deploy could mark the container unhealthy and never
+      # recover until the next container restart.
+      start_period: 15s
     logging:
       driver: json-file
       options:

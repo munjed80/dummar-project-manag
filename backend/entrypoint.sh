@@ -4,7 +4,7 @@ set -e
 echo "=== Dummar Backend Entrypoint ==="
 echo "Waiting for database to be ready..."
 
-# Wait for PostgreSQL (max 30s)
+# Wait for PostgreSQL (max 30s) — required for both API and worker startup.
 MAX_RETRIES=30
 RETRY=0
 until pg_isready -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-dummar}" -q 2>/dev/null; do
@@ -16,6 +16,16 @@ until pg_isready -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-dummar
     echo "Waiting for database... ($RETRY/$MAX_RETRIES)"
     sleep 1
 done
+
+# When a custom command is supplied (e.g. the celery worker invoked via the
+# docker-compose `command:` key), skip migrations + the API startup banner
+# and exec the override directly. The backend container is the single source
+# of truth for migrations, so secondary containers (worker, one-off jobs)
+# must NOT race to run `alembic upgrade head`.
+if [ "$#" -gt 0 ]; then
+    echo "Custom command detected — exec: $*"
+    exec "$@"
+fi
 
 echo "Running database migrations..."
 if ! alembic upgrade head; then
