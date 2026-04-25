@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/tabs';
 import { Spinner, TreeStructure, ListBullets, MapPin, CaretDown, CaretLeft, ChatCircleDots, ListChecks, FileText, WarningCircle, Plus } from '@phosphor-icons/react';
 import { LocationFormDialog } from '@/components/LocationFormDialog';
+import { GeoSubNav } from '@/components/GeoSubNav';
 
 const LOCATION_TYPE_LABELS: Record<string, string> = {
   island: 'جزيرة',
@@ -185,6 +186,7 @@ export default function LocationsListPage() {
   return (
     <Layout>
       <div className="space-y-6">
+        <GeoSubNav active="locations" />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">المواقع والجغرافيا التشغيلية</h1>
           <div className="flex gap-2">
