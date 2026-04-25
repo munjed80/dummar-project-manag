@@ -56,7 +56,6 @@ _REDACTED_KEYS = frozenset(
         "access_token",
         "refresh_token",
         "secret",
-        "smtp_password",
         "api_key",
     }
 )
@@ -196,7 +195,7 @@ class _TrackingContext:
     """Mutable handle yielded by :func:`track_execution`.
 
     Callers can call :meth:`skip` to mark the execution as skipped (e.g.
-    SMTP disabled, dedup hit) instead of success.
+    feature disabled, dedup hit) instead of success.
     """
 
     __slots__ = ("entity_type", "entity_id", "user_id", "payload", "_status_override")

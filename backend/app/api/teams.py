@@ -182,7 +182,6 @@ def _enrich_team_response(db: Session, team: Team) -> TeamResponse:
         team_type=team.team_type,
         contact_name=team.contact_name,
         contact_phone=team.contact_phone,
-        contact_email=team.contact_email,
         is_active=team.is_active,
         location_id=team.location_id,
         project_id=team.project_id,

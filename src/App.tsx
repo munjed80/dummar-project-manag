@@ -37,6 +37,7 @@ const TeamDetailsPage = lazy(() => import('@/pages/TeamDetailsPage'));
 const UsersPage = lazy(() => import('@/pages/UsersPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const PublicLandingPage = lazy(() => import('@/pages/PublicLandingPage'));
 
 function PageLoader() {
@@ -51,6 +52,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!apiService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
+  if (
+    localStorage.getItem('must_change_password') === '1' &&
+    window.location.pathname !== '/change-password'
+  ) {
+    return <Navigate to="/change-password" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -59,6 +66,13 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
 
   if (!apiService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (
+    localStorage.getItem('must_change_password') === '1' &&
+    window.location.pathname !== '/change-password'
+  ) {
+    return <Navigate to="/change-password" replace />;
   }
 
   if (loading) return null;
@@ -110,6 +124,14 @@ function App() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/change-password"
+            element={
+              apiService.isAuthenticated()
+                ? <ChangePasswordPage />
+                : <Navigate to="/login" replace />
+            }
+          />
           <Route path="/complaints/new" element={<ComplaintSubmitPage />} />
           <Route path="/complaints/track" element={<ComplaintTrackPage />} />
           

@@ -51,7 +51,6 @@ export default function UsersListPage() {
     return (
       u.full_name?.toLowerCase().includes(q) ||
       u.username?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
       u.phone?.includes(q)
     );
   });
@@ -77,7 +76,7 @@ export default function UsersListPage() {
           <div className="relative max-w-md">
             <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
             <Input
-              placeholder="بحث بالاسم أو اسم المستخدم أو البريد..."
+              placeholder="بحث بالاسم أو اسم المستخدم أو الهاتف..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pr-10"
@@ -94,7 +93,6 @@ export default function UsersListPage() {
                 <TableRow>
                   <TableHead className="text-right">الاسم الكامل</TableHead>
                   <TableHead className="text-right">اسم المستخدم</TableHead>
-                  <TableHead className="text-right">البريد الإلكتروني</TableHead>
                   <TableHead className="text-right">الهاتف</TableHead>
                   <TableHead className="text-right">الدور</TableHead>
                   <TableHead className="text-right">الحالة</TableHead>
@@ -104,7 +102,7 @@ export default function UsersListPage() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       لا يوجد مستخدمون
                     </TableCell>
                   </TableRow>
@@ -113,7 +111,6 @@ export default function UsersListPage() {
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">{u.full_name}</TableCell>
                       <TableCell className="font-mono text-sm">{u.username}</TableCell>
-                      <TableCell>{u.email || '-'}</TableCell>
                       <TableCell dir="ltr" className="text-right">{u.phone || '-'}</TableCell>
                       <TableCell>
                         <Badge className={roleColors[u.role] || 'bg-gray-100 text-gray-800'}>

@@ -24,8 +24,13 @@ export default function LoginPage() {
 
     try {
       await apiService.login({ username, password });
-      toast.success('تم تسجيل الدخول بنجاح');
-      navigate('/dashboard');
+      if (localStorage.getItem('must_change_password') === '1') {
+        toast.info('يجب تغيير كلمة المرور قبل المتابعة');
+        navigate('/change-password');
+      } else {
+        toast.success('تم تسجيل الدخول بنجاح');
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast.error('فشل تسجيل الدخول. تحقق من اسم المستخدم وكلمة المرور.');
     } finally {

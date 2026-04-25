@@ -20,7 +20,6 @@ class Team(Base):
     team_type = Column(SQLEnum(TeamType), nullable=False, default=TeamType.INTERNAL_TEAM)
     contact_name = Column(String(200), nullable=True)
     contact_phone = Column(String(50), nullable=True)
-    contact_email = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True, index=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
