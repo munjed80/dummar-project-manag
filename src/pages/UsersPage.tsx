@@ -20,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MagnifyingGlass, Spinner, UserPlus, PencilSimple, UserMinus } from '@phosphor-icons/react';
+import { MagnifyingGlass, Spinner, UserPlus, PencilSimple, UserMinus, Key } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -68,6 +68,10 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
 
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetForceChange, setResetForceChange] = useState(true);
+  const [resetting, setResetting] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -106,7 +110,15 @@ export default function UsersPage() {
     setSaving(true);
     try {
       if (editingUser) {
-        const updateData: any = { full_name: formData.full_name, email: formData.email || undefined, phone: formData.phone || undefined, role: formData.role };
+        // Admin edit: full_name, email (optional), phone, role, active status.
+        // Password is NOT changed here — use the dedicated reset action.
+        const updateData: any = {
+          full_name: formData.full_name,
+          email: formData.email || undefined,
+          phone: formData.phone || undefined,
+          role: formData.role,
+          is_active: editingUser.is_active,
+        };
         await apiService.updateUser(editingUser.id, updateData);
         toast.success('تم تحديث المستخدم بنجاح');
       } else {
@@ -115,7 +127,21 @@ export default function UsersPage() {
           setSaving(false);
           return;
         }
-        await apiService.createUser(formData);
+        if (formData.password.length < 8) {
+          toast.error('يجب أن تكون كلمة المرور 8 أحرف على الأقل');
+          setSaving(false);
+          return;
+        }
+        const createPayload: any = {
+          username: formData.username,
+          full_name: formData.full_name,
+          password: formData.password,
+          role: formData.role,
+          phone: formData.phone || undefined,
+          must_change_password: true,
+        };
+        if (formData.email) createPayload.email = formData.email;
+        await apiService.createUser(createPayload);
         toast.success('تم إنشاء المستخدم بنجاح');
       }
       setDialogOpen(false);
@@ -124,6 +150,30 @@ export default function UsersPage() {
       toast.error(err.message || 'فشل حفظ المستخدم');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTarget) return;
+    if (resetPassword.length < 8) {
+      toast.error('يجب أن تكون كلمة المرور 8 أحرف على الأقل');
+      return;
+    }
+    setResetting(true);
+    try {
+      await apiService.resetUserPassword(resetTarget.id, {
+        new_password: resetPassword,
+        require_change_on_next_login: resetForceChange,
+      });
+      toast.success('تم تغيير كلمة المرور بنجاح');
+      setResetTarget(null);
+      setResetPassword('');
+      setResetForceChange(true);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'فشل تغيير كلمة المرور');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -219,11 +269,19 @@ export default function UsersPage() {
                         <TableCell>{u.created_at ? format(new Date(u.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => openEditDialog(u)}>
+                            <Button variant="ghost" size="sm" onClick={() => openEditDialog(u)} title="تعديل">
                               <PencilSimple size={16} />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setResetTarget(u); setResetPassword(''); setResetForceChange(true); }}
+                              title="إعادة تعيين كلمة المرور"
+                            >
+                              <Key size={16} />
+                            </Button>
                             {u.is_active ? (
-                              <Button variant="ghost" size="sm" onClick={() => setDeactivateTarget(u)} className="text-destructive">
+                              <Button variant="ghost" size="sm" onClick={() => setDeactivateTarget(u)} className="text-destructive" title="إلغاء التفعيل">
                                 <UserMinus size={16} />
                               </Button>
                             ) : null}
@@ -267,7 +325,7 @@ export default function UsersPage() {
               <Input value={formData.full_name} onChange={(e) => setFormData(f => ({ ...f, full_name: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>البريد الإلكتروني</Label>
+              <Label>البريد الإلكتروني (اختياري)</Label>
               <Input type="email" value={formData.email} onChange={(e) => setFormData(f => ({ ...f, email: e.target.value }))} />
             </div>
             {!editingUser && (
@@ -297,6 +355,48 @@ export default function UsersPage() {
             <Button onClick={handleSave} disabled={saving}>
               {saving && <Spinner className="animate-spin ml-2" size={16} />}
               {editingUser ? 'حفظ التغييرات' : 'إنشاء'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setResetPassword(''); } }}>
+        <DialogContent className="sm:max-w-[450px]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>إعادة تعيين كلمة المرور</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              تعيين كلمة مرور جديدة للمستخدم{' '}
+              <span className="font-semibold">{resetTarget?.full_name}</span> ({resetTarget?.username}).
+            </p>
+            <div className="space-y-2">
+              <Label>كلمة المرور الجديدة *</Label>
+              <Input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                minLength={8}
+                placeholder="8 أحرف على الأقل"
+                autoComplete="new-password"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={resetForceChange}
+                onChange={(e) => setResetForceChange(e.target.checked)}
+                className="h-4 w-4"
+              />
+              مطالبة المستخدم بتغيير كلمة المرور عند تسجيل الدخول التالي
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetTarget(null)}>إلغاء</Button>
+            <Button onClick={handleResetPassword} disabled={resetting}>
+              {resetting && <Spinner className="animate-spin ml-2" size={16} />}
+              تعيين كلمة المرور
             </Button>
           </DialogFooter>
         </DialogContent>

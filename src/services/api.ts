@@ -10,6 +10,7 @@ export interface LoginCredentials {
 export interface AuthToken {
   access_token: string;
   token_type: string;
+  must_change_password?: boolean;
 }
 
 export interface User {
@@ -20,6 +21,7 @@ export interface User {
   role: string;
   phone?: string;
   is_active: number;
+  must_change_password?: boolean;
   created_at: string;
   org_unit_id?: number | null;
 }
@@ -136,6 +138,11 @@ class ApiService {
     if (!response.ok) throw new Error('Login failed');
     const data: AuthToken = await response.json();
     localStorage.setItem('access_token', data.access_token);
+    if (data.must_change_password) {
+      localStorage.setItem('must_change_password', '1');
+    } else {
+      localStorage.removeItem('must_change_password');
+    }
     // Pre-fetch and cache user info for RBAC
     try {
       const userResp = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -739,6 +746,48 @@ class ApiService {
     return response.json();
   }
 
+  async resetUserPassword(
+    id: number,
+    payload: { new_password: string; require_change_on_next_login?: boolean },
+  ): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/users/${id}/reset-password`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({
+        new_password: payload.new_password,
+        require_change_on_next_login: payload.require_change_on_next_login ?? true,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to reset password');
+    }
+    return response.json();
+  }
+
+  async changeMyPassword(payload: {
+    current_password: string;
+    new_password: string;
+  }): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to change password');
+    }
+    const updated: User = await response.json();
+    localStorage.removeItem('must_change_password');
+    try {
+      localStorage.setItem('cached_user', JSON.stringify(updated));
+    } catch {
+      // ignore quota errors
+    }
+    return updated;
+  }
+
   // ── File Upload ──
   async uploadFile(file: File, category: string): Promise<any> {
     const token = localStorage.getItem('access_token');
@@ -1190,6 +1239,7 @@ class ApiService {
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');
+    localStorage.removeItem('must_change_password');
   }
 
   isAuthenticated(): boolean {
