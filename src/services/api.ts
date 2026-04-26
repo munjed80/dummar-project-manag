@@ -1317,6 +1317,60 @@ class ApiService {
     URL.revokeObjectURL(url);
   }
 
+  // ── Investment Properties ──
+  async listInvestmentProperties(params?: {
+    type?: string;
+    status?: string;
+    q?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<any>> {
+    const qp = new URLSearchParams();
+    if (params?.type) qp.append('type', params.type);
+    if (params?.status) qp.append('status', params.status);
+    if (params?.q) qp.append('q', params.q);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch investment properties');
+    return response.json();
+  }
+
+  async getInvestmentProperty(id: number): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch investment property');
+    return response.json();
+  }
+
+  async createInvestmentProperty(data: any): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to create investment property');
+    return response.json();
+  }
+
+  async updateInvestmentProperty(id: number, data: any): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to update investment property');
+    return response.json();
+  }
+
+  async deleteInvestmentProperty(id: number): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to delete investment property');
+    return response.json();
+  }
+
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');

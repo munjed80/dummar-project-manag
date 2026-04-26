@@ -39,6 +39,8 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const PublicLandingPage = lazy(() => import('@/pages/PublicLandingPage'));
+const InvestmentPropertiesPage = lazy(() => import('@/pages/InvestmentPropertiesPage'));
+const InvestmentPropertyDetailsPage = lazy(() => import('@/pages/InvestmentPropertyDetailsPage'));
 
 function PageLoader() {
   return (
@@ -106,6 +108,12 @@ const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
   'project_director', 'contracts_manager',
 ];
 
+// Roles that can access investment properties
+const INVESTMENT_PROPERTIES_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager', 'engineer_supervisor',
+  'complaints_officer', 'area_supervisor',
+];
+
 function RootRoute() {
   // Unauthenticated visitors see the public landing page so the complaint
   // intake CTAs are the very first thing they see — not the staff login.
@@ -165,6 +173,8 @@ function App() {
           <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/investment-properties" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertiesPage /></RoleProtectedRoute>} />
+          <Route path="/investment-properties/:id" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertyDetailsPage /></RoleProtectedRoute>} />
         </Routes>
       </Suspense>
     </BrowserRouter>

@@ -28,6 +28,7 @@ from app.models.execution_log import (
     ACTION_TYPE_AUTOMATION,
     ACTION_TYPE_TASK,
 )
+from app.models.investment_property import InvestmentProperty, PropertyType, PropertyStatus
 
 __all__ = [
     "Base",
@@ -79,4 +80,7 @@ __all__ = [
     "ACTION_TYPE_NOTIFICATION",
     "ACTION_TYPE_AUTOMATION",
     "ACTION_TYPE_TASK",
+    "InvestmentProperty",
+    "PropertyType",
+    "PropertyStatus",
 ]

@@ -41,6 +41,7 @@ class ResourceType(str, enum.Enum):
     LOCATION = "location"
     ORGANIZATION = "organization"
     NOTIFICATION = "notification"
+    INVESTMENT_PROPERTY = "investment_property"
 
 
 class Action(str, enum.Enum):
@@ -81,6 +82,9 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.PROJECT, Action.UPDATE),
         (ResourceType.TASK, Action.CREATE),
         (ResourceType.TASK, Action.UPDATE),
+        (ResourceType.INVESTMENT_PROPERTY, Action.CREATE),
+        (ResourceType.INVESTMENT_PROPERTY, Action.UPDATE),
+        (ResourceType.INVESTMENT_PROPERTY, Action.DELETE),
     },
     UserRole.ENGINEER_SUPERVISOR: _ALL_INTERNAL_READ
     | {
