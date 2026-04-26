@@ -191,7 +191,6 @@ export default function ComplaintDetailsPage() {
             '\n\nهل ترغب في إنشاء مهمة إضافية على أي حال؟'
         );
         if (proceed) {
-          setConverting(false);
           await handleConvertSubmit(true);
           return;
         }

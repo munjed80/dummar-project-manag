@@ -416,6 +416,9 @@ def create_task_from_complaint(
     )),
     db: Session = Depends(get_db)
 ):
+    from app.models.task import Task, TaskActivity, TaskSourceType, TaskStatus
+    from app.schemas.task import TaskResponse
+
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
@@ -424,15 +427,13 @@ def create_task_from_complaint(
     # explicitly opts in via {"force": true}. An "active" task is anything
     # not in CANCELLED state — completed tasks still count, so a second
     # task implies a follow-up that the operator should consciously confirm.
-    from app.models.task import Task as _Task, TaskStatus as _TaskStatus
-
     force = bool(task_data.get("force"))
     if not force:
         existing = (
-            db.query(_Task)
+            db.query(Task)
             .filter(
-                _Task.complaint_id == complaint.id,
-                _Task.status != _TaskStatus.CANCELLED,
+                Task.complaint_id == complaint.id,
+                Task.status != TaskStatus.CANCELLED,
             )
             .first()
         )
@@ -445,11 +446,8 @@ def create_task_from_complaint(
                 ),
             )
 
-    from app.models.task import TaskActivity, TaskSourceType
-    from app.schemas.task import TaskResponse
-
     # Create task with data from complaint
-    new_task = _Task(
+    new_task = Task(
         title=task_data.get("title", f"Task from complaint {complaint.tracking_number}"),
         description=task_data.get("description", complaint.description),
         source_type=TaskSourceType.COMPLAINT,
