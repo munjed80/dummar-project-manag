@@ -771,8 +771,9 @@ class ApiService {
     if (params?.is_active !== undefined) qp.append('is_active', params.is_active.toString());
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetchWithRetry(`${API_BASE_URL}/users?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch users');
+    // Trailing slash required — backend route is `@router.get("/")`.
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch users');
     return response.json();
   }
 
@@ -788,10 +789,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to create user');
-    }
+    if (!response.ok) await throwApiError(response, 'Failed to create user');
     return response.json();
   }
 
@@ -801,10 +799,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(data),
     });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to update user');
-    }
+    if (!response.ok) await throwApiError(response, 'Failed to update user');
     return response.json();
   }
 
@@ -813,7 +808,7 @@ class ApiService {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to deactivate user');
+    if (!response.ok) await throwApiError(response, 'Failed to deactivate user');
     return response.json();
   }
 
@@ -829,10 +824,7 @@ class ApiService {
         require_change_on_next_login: payload.require_change_on_next_login ?? true,
       }),
     });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to reset password');
-    }
+    if (!response.ok) await throwApiError(response, 'Failed to reset password');
     return response.json();
   }
 
@@ -1000,7 +992,8 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     if (params?.unread_only) qp.append('unread_only', 'true');
-    const response = await fetchWithRetry(`${API_BASE_URL}/notifications?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — backend route is `@router.get("/")`.
+    const response = await fetchWithRetry(`${API_BASE_URL}/notifications/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch notifications');
     return response.json();
   }

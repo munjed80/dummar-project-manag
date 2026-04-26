@@ -83,7 +83,7 @@ export default function LocationDetailPage() {
     loadDetail(parseInt(id));
   }, [id]);
 
-  const loadDetail = async (locationId: number) => {
+  async function loadDetail(locationId: number) {
     setLoading(true);
     try {
       const [detailData, complaintsData, tasksData, contractsData, activityData, mapDataResult] = await Promise.all([
@@ -105,7 +105,7 @@ export default function LocationDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   if (loading || !detail) {
     return (
