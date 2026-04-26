@@ -123,6 +123,140 @@ class TestFieldTeamTaskUpdates:
         assert resp.status_code == 200, resp.text
 
 
+class TestFieldTeamTaskListScoping:
+    """List/detail visibility: field_team & contractor see only their own."""
+
+    def test_field_team_list_excludes_unassigned_tasks(
+        self, client, db, field_user, field_token, director_user
+    ):
+        own = _make_task(db, assigned_to_id=field_user.id)
+        other = _make_task(db, assigned_to_id=director_user.id)
+        unassigned = _make_task(db, assigned_to_id=None)
+        resp = client.get("/tasks/", headers=_auth_headers(field_token))
+        assert resp.status_code == 200, resp.text
+        ids = {t["id"] for t in resp.json()["items"]}
+        assert own.id in ids
+        assert other.id not in ids
+        assert unassigned.id not in ids
+
+    def test_contractor_list_excludes_unassigned_tasks(
+        self, client, db, contractor_user, contractor_token, director_user
+    ):
+        own = _make_task(db, assigned_to_id=contractor_user.id)
+        other = _make_task(db, assigned_to_id=director_user.id)
+        resp = client.get("/tasks/", headers=_auth_headers(contractor_token))
+        assert resp.status_code == 200, resp.text
+        ids = {t["id"] for t in resp.json()["items"]}
+        assert own.id in ids
+        assert other.id not in ids
+
+    def test_field_team_get_unassigned_task_returns_403(
+        self, client, db, field_token, director_user
+    ):
+        t = _make_task(db, assigned_to_id=director_user.id)
+        resp = client.get(f"/tasks/{t.id}", headers=_auth_headers(field_token))
+        assert resp.status_code == 403
+
+    def test_director_still_sees_all_tasks(
+        self, client, db, field_user, director_token
+    ):
+        # Sanity: management roles are unaffected by the field-team filter.
+        t1 = _make_task(db, assigned_to_id=field_user.id)
+        t2 = _make_task(db, assigned_to_id=None)
+        resp = client.get("/tasks/", headers=_auth_headers(director_token))
+        assert resp.status_code == 200, resp.text
+        ids = {t["id"] for t in resp.json()["items"]}
+        assert t1.id in ids
+        assert t2.id in ids
+
+
+class TestComplaintToTaskDuplicatePrevention:
+    """POST /complaints/{id}/create-task must avoid silently creating
+    duplicate tasks for the same complaint unless force=true."""
+
+    def _make_heating_complaint(self, db) -> Complaint:
+        c = Complaint(
+            tracking_number="CMPHEATDUP1",
+            full_name="Dup",
+            phone="0994444444",
+            complaint_type=ComplaintType.HEATING_NETWORK,
+            description="leak",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(c)
+        db.commit()
+        db.refresh(c)
+        return c
+
+    def test_first_conversion_succeeds(self, client, db, director_token):
+        c = self._make_heating_complaint(db)
+        resp = client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "Repair", "description": "Fix"},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200, resp.text
+
+    def test_second_conversion_blocked_with_409(
+        self, client, db, director_token
+    ):
+        c = self._make_heating_complaint(db)
+        r1 = client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "Repair", "description": "Fix"},
+            headers=_auth_headers(director_token),
+        )
+        assert r1.status_code == 200, r1.text
+        r2 = client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "Repair2", "description": "Fix2"},
+            headers=_auth_headers(director_token),
+        )
+        assert r2.status_code == 409
+        assert "already exists" in (r2.json().get("detail") or "")
+
+    def test_force_flag_allows_additional_task(
+        self, client, db, director_token
+    ):
+        c = self._make_heating_complaint(db)
+        client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "Repair", "description": "Fix"},
+            headers=_auth_headers(director_token),
+        )
+        r2 = client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "Followup", "description": "Followup", "force": True},
+            headers=_auth_headers(director_token),
+        )
+        assert r2.status_code == 200, r2.text
+
+    def test_cancelled_task_does_not_block_new_one(
+        self, client, db, director_token
+    ):
+        c = self._make_heating_complaint(db)
+        r1 = client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "Repair", "description": "Fix"},
+            headers=_auth_headers(director_token),
+        )
+        first_id = r1.json()["id"]
+        # Cancel the first task
+        cancel = client.put(
+            f"/tasks/{first_id}",
+            json={"status": "cancelled"},
+            headers=_auth_headers(director_token),
+        )
+        assert cancel.status_code == 200, cancel.text
+        # Now a new one should be allowed without force
+        r2 = client.post(
+            f"/complaints/{c.id}/create-task",
+            json={"title": "New", "description": "New"},
+            headers=_auth_headers(director_token),
+        )
+        assert r2.status_code == 200, r2.text
+
+
 class TestHeatingComplaintType:
     def test_public_can_submit_heating_request(self, client):
         payload = {

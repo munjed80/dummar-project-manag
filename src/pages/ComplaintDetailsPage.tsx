@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { apiService } from '@/services/api';
+import { apiService, ApiError } from '@/services/api';
 import { FileUpload } from '@/components/FileUpload';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -158,7 +158,7 @@ export default function ComplaintDetailsPage() {
     setConvertOpen(true);
   };
 
-  const handleConvertSubmit = async () => {
+  const handleConvertSubmit = async (force: boolean = false) => {
     if (!id || !convertTitle.trim() || !convertDescription.trim()) {
       toast.error('العنوان والوصف مطلوبان');
       return;
@@ -173,6 +173,7 @@ export default function ComplaintDetailsPage() {
       if (convertAssignee) payload.assigned_to_id = Number(convertAssignee);
       if (convertTeam) payload.team_id = Number(convertTeam);
       if (convertPriority) payload.priority = convertPriority;
+      if (force) payload.force = true;
       const newTask = await apiService.createTaskFromComplaint(Number(id), payload);
       toast.success('تم إنشاء المهمة وتم ربطها بالشكوى');
       setConvertOpen(false);
@@ -181,8 +182,21 @@ export default function ComplaintDetailsPage() {
       } else {
         fetchData();
       }
-    } catch {
-      toast.error('فشل تحويل الشكوى إلى مهمة');
+    } catch (err) {
+      // Backend returns 409 if a task already exists for this complaint.
+      // Offer the operator a chance to confirm creating an additional task.
+      if (err instanceof ApiError && err.status === 409) {
+        const proceed = window.confirm(
+          (err.detail || 'توجد مهمة مرتبطة بهذه الشكوى مسبقاً.') +
+            '\n\nهل ترغب في إنشاء مهمة إضافية على أي حال؟'
+        );
+        if (proceed) {
+          await handleConvertSubmit(true);
+          return;
+        }
+      } else {
+        toast.error('فشل تحويل الشكوى إلى مهمة');
+      }
     } finally {
       setConverting(false);
     }
@@ -534,7 +548,7 @@ export default function ComplaintDetailsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={converting}>إلغاء</Button>
-            <Button onClick={handleConvertSubmit} disabled={converting}>
+            <Button onClick={() => handleConvertSubmit()} disabled={converting}>
               {converting ? <Spinner className="animate-spin ml-2" size={16} /> : null}
               إنشاء المهمة
             </Button>
