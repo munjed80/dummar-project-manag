@@ -431,10 +431,20 @@ export default function InvestmentContractsPage() {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center flex-wrap gap-2">
-            <CardTitle className="text-2xl flex items-center gap-2">
-              <FileText size={28} />
-              العقود الاستثمارية
-            </CardTitle>
+            <div className="space-y-2">
+              <CardTitle className="text-2xl flex items-center gap-2">
+                <FileText size={28} />
+                العقود الاستثمارية
+              </CardTitle>
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={() => navigate('/contract-intelligence')}>
+                  تحليل عقد استثماري
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => navigate('/contract-intelligence/queue')}>
+                  استيراد من مركز ذكاء العقود
+                </Button>
+              </div>
+            </div>
             {canManage && (
               <Button onClick={handleCreate} disabled={properties.length === 0}>
                 <Plus size={20} className="ml-1" />

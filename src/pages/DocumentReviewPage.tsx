@@ -125,7 +125,7 @@ export default function DocumentReviewPage() {
           break;
         case 'convert': {
           const result = await apiService.convertDocumentToContract(numId);
-          toast.success(`تم إنشاء عقد رقم ${result.contract_number}`);
+          toast.success(`تم تحويل نتيجة التحليل وإعداد عقد رقم ${result.contract_number}`);
           navigate(`/contracts/${result.contract_id}`);
           return;
         }
@@ -181,8 +181,9 @@ export default function DocumentReviewPage() {
     approve: 'هل أنت متأكد من اعتماد هذا المستند؟',
     reject: 'هل أنت متأكد من رفض هذا المستند؟',
     reprocess: 'هل تريد إعادة معالجة هذا المستند؟',
-    convert: 'هل أنت متأكد من تحويل هذا المستند إلى عقد؟',
+    convert: 'هل أنت متأكد من تحويل نتيجة التحليل إلى عقد استثماري؟',
   };
+  const hasAnalysisResult = !!(document?.extracted_fields || document?.ocr_text || document?.auto_summary);
 
   return (
     <Layout>
@@ -196,6 +197,13 @@ export default function DocumentReviewPage() {
             </Badge>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/investment-contracts')}
+            >
+              عرض العقود الاستثمارية
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -223,14 +231,16 @@ export default function DocumentReviewPage() {
               {actionLoading === 'approve' ? <Spinner className="animate-spin ml-1" size={16} /> : <CheckCircle size={16} className="ml-1" />}
               اعتماد
             </Button>
-            <Button
-              size="sm"
-              onClick={() => setConfirmAction('convert')}
-              disabled={!!actionLoading}
-            >
-              {actionLoading === 'convert' && <Spinner className="animate-spin ml-1" size={16} />}
-              تحويل إلى عقد
-            </Button>
+            {hasAnalysisResult && (
+              <Button
+                size="sm"
+                onClick={() => setConfirmAction('convert')}
+                disabled={!!actionLoading}
+              >
+                {actionLoading === 'convert' && <Spinner className="animate-spin ml-1" size={16} />}
+                تحويل النتيجة إلى عقد استثماري
+              </Button>
+            )}
           </div>
         </div>
 

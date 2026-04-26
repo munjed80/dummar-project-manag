@@ -10,54 +10,41 @@ export default function ManualContractsPage() {
       <div className="space-y-6">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">صفحة العقود الأخرى للإدارة اليدوية</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">العقود التشغيلية</h1>
             <p className="text-muted-foreground mt-1">
-              إدارة العقود اليدوية (العقود العامة + العقود الاستثمارية) مع إمكانية الانتقال إلى مركز ذكاء العقود.
+              إدارة العقود غير الاستثمارية فقط (عقود صيانة، خدمات، تنفيذ، متعهدين، ومشاريع تشغيلية).
             </p>
           </div>
-          <Link to="/contract-intelligence">
-            <Button variant="outline" className="gap-2">
-              <Brain size={18} />
-              الانتقال إلى مركز ذكاء العقود
-            </Button>
-          </Link>
+          <div className="flex gap-2 flex-wrap">
+            <Link to="/investment-contracts">
+              <Button variant="outline" className="gap-2">
+                عرض العقود الاستثمارية
+              </Button>
+            </Link>
+            <Link to="/contract-intelligence">
+              <Button variant="outline" className="gap-2">
+                <Brain size={18} />
+                مركز ذكاء العقود
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText size={22} />
-                العقود (الإدارة اليدوية)
+                العقود التشغيلية (إدارة يدوية)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                إدخال ومتابعة العقود اليدوية المعتادة داخل النظام.
+                هذه الصفحة مخصصة للعقود التشغيلية والإدارية فقط وليست للعقود الاستثمارية.
               </p>
               <Link to="/contracts">
                 <Button className="w-full gap-2">
-                  فتح صفحة العقود
-                  <ArrowLeft size={16} />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText size={22} />
-                العقود الاستثمارية
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                إدارة العقود الاستثمارية وملفاتها وبيانات المستثمرين يدوياً.
-              </p>
-              <Link to="/investment-contracts">
-                <Button className="w-full gap-2">
-                  فتح العقود الاستثمارية
+                  فتح العقود التشغيلية
                   <ArrowLeft size={16} />
                 </Button>
               </Link>
