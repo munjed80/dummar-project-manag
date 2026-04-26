@@ -44,6 +44,13 @@ const sourceLabels: Record<string, string> = {
   complaint: 'شكوى', internal: 'داخلي', contract: 'عقد',
 };
 
+// Field-team / contractor users may only flip status to one of these values
+// when reporting progress on a task assigned to them.
+const FIELD_TEAM_STATUS_OPTIONS: Array<[string, string]> = [
+  ['in_progress', statusLabels['in_progress']],
+  ['completed', statusLabels['completed']],
+];
+
 export default function TaskDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const { canManageTasks, user, role } = useAuth();
@@ -188,11 +195,6 @@ export default function TaskDetailsPage() {
   const showFullUpdateCard = canManageTasks;
   const showFieldUpdateCard = !canManageTasks && isFieldRole && isAssignedToMe;
   const canUploadPhotos = canManageTasks || (isFieldRole && isAssignedToMe);
-
-  const fieldStatusOptions: Array<[string, string]> = [
-    ['in_progress', statusLabels['in_progress']],
-    ['completed', statusLabels['completed']],
-  ];
 
   const detail = (label: string, value: React.ReactNode) => (
     <div className="flex flex-col gap-1">
@@ -354,7 +356,7 @@ export default function TaskDetailsPage() {
                 <Select value={newStatus} onValueChange={setNewStatus}>
                   <SelectTrigger><SelectValue placeholder="اختر الحالة" /></SelectTrigger>
                   <SelectContent>
-                    {fieldStatusOptions.map(([k, v]) => (
+                    {FIELD_TEAM_STATUS_OPTIONS.map(([k, v]) => (
                       <SelectItem key={k} value={k}>{v}</SelectItem>
                     ))}
                   </SelectContent>
