@@ -100,6 +100,7 @@ export default function ComplaintsListPage() {
 
   const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name_ar || a.name]));
   const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
+  const resolveComplaintAreaOrAddress = (c: any) => areaMap[c.area_id] || c.location_text || '-';
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -174,7 +175,7 @@ export default function ComplaintsListPage() {
                       <TableHead className="text-right">النوع</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">الأولوية</TableHead>
-                      <TableHead className="text-right">المنطقة</TableHead>
+                      <TableHead className="text-right">المنطقة / العنوان</TableHead>
                       <TableHead className="text-right">المشروع</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                     </TableRow>
@@ -206,7 +207,7 @@ export default function ComplaintsListPage() {
                               {priorityLabels[c.priority] || c.priority}
                             </Badge>
                           </TableCell>
-                          <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
+                          <TableCell>{resolveComplaintAreaOrAddress(c)}</TableCell>
                           <TableCell>{c.project_id ? (projectMap[c.project_id] || `#${c.project_id}`) : '-'}</TableCell>
                           <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                         </TableRow>
@@ -240,10 +241,10 @@ export default function ComplaintsListPage() {
                         <Badge className={`text-xs ${priorityColors[c.priority] || 'bg-gray-100 text-gray-800'}`}>
                           {priorityLabels[c.priority] || c.priority}
                         </Badge>
-                        {areaMap[c.area_id] && (
+                        {resolveComplaintAreaOrAddress(c) !== '-' && (
                           <>
                             <span>•</span>
-                            <span>{areaMap[c.area_id]}</span>
+                            <span>{resolveComplaintAreaOrAddress(c)}</span>
                           </>
                         )}
                         {c.project_id && (

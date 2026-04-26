@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { describeLoadError } from '@/lib/loadError';
 
 const statusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -64,6 +65,7 @@ export default function ComplaintDetailsPage() {
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [complaintPriority, setComplaintPriority] = useState('');
   const [projectId, setProjectId] = useState('');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
@@ -101,9 +103,10 @@ export default function ComplaintDetailsPage() {
         setTeams(Array.isArray(teamsData) ? teamsData : []);
         setProjects((projectsData as any).items || []);
         setLinkedTasks((linkedTasksData as any).items || []);
+        setComplaintPriority(complaintData?.priority || '');
         setProjectId(complaintData?.project_id ? String(complaintData.project_id) : '');
       })
-      .catch(() => setError('فشل تحميل بيانات الشكوى'))
+      .catch((err) => setError(describeLoadError(err, 'بيانات الشكوى').message))
       .finally(() => setLoading(false));
   };
 
@@ -117,6 +120,7 @@ export default function ComplaintDetailsPage() {
       if (newStatus) updateData.status = newStatus;
       if (notes) updateData.notes = notes;
       if (assignee) updateData.assigned_to_id = Number(assignee);
+      if (complaintPriority && complaintPriority !== complaint?.priority) updateData.priority = complaintPriority;
       // Project: send only when value differs from persisted complaint, so an
       // unchanged form does not blank the existing project link.
       if (projectId !== (complaint?.project_id ? String(complaint.project_id) : '')) {
@@ -127,6 +131,7 @@ export default function ComplaintDetailsPage() {
       setNewStatus('');
       setNotes('');
       setAssignee('');
+      setComplaintPriority('');
       setConfirmAction(null);
       fetchData();
     } catch {
@@ -366,6 +371,17 @@ export default function ComplaintDetailsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-medium">أولوية الشكوى</label>
+                <Select value={complaintPriority} onValueChange={setComplaintPriority}>
+                  <SelectTrigger><SelectValue placeholder="اختر الأولوية" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(priorityLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium">المشروع المرتبط</label>
                 <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
                   <SelectTrigger><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
@@ -393,6 +409,7 @@ export default function ComplaintDetailsPage() {
               }}
               disabled={
                 (!newStatus && !notes && !assignee &&
+                 complaintPriority === (complaint?.priority || '') &&
                  projectId === (complaint?.project_id ? String(complaint.project_id) : '')) ||
                 updating
               }

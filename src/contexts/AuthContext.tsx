@@ -168,28 +168,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (credentials: { username: string; password: string }) => {
-    if (refreshing.current) return;
     setLoading(true);
     setError(null);
-    await apiService.login(credentials);
+    // A fresh credential login must never be blocked by a background refresh.
+    // Clear any stale auth artifacts first so we start from a known state.
+    apiService.logout();
+    setUser(null);
+    setCachedUser(null);
+    setPermissions(null);
 
-    // apiService.login() stores the token immediately and opportunistically
-    // caches `/auth/me`. Prefer that cached user first to update state
-    // synchronously, then fetch fresh permissions.
-    const cached = getCachedUser();
-    if (cached) {
-      setUser(cached);
-    } else {
+    try {
+      await apiService.login(credentials);
+      // apiService.login() stores the token immediately and may cache `/auth/me`.
+      // Still force-load the current user to guarantee state hydration before
+      // consumers navigate away from /login.
       const u = await apiService.getCurrentUser();
       setUser(u);
       setCachedUser(u);
-    }
 
-    try {
-      const p = await apiService.getCurrentUserPermissions();
-      setPermissions(p);
-    } catch {
-      setPermissions(null);
+      try {
+        const p = await apiService.getCurrentUserPermissions();
+        setPermissions(p);
+      } catch {
+        setPermissions(null);
+      }
     } finally {
       setLoading(false);
     }

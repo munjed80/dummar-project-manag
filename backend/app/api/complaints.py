@@ -67,7 +67,6 @@ def _coerce_task_priority(
         try:
             return TaskPriority(value)
         except ValueError:
-            # Fallback defensively; should not happen with current schema.
             return TaskPriority.MEDIUM
 
     return TaskPriority.MEDIUM
@@ -490,8 +489,6 @@ def create_task_from_complaint(
         )
 
     task_priority = _coerce_task_priority(task_data.get("priority"), complaint.priority)
-    if task_priority is None:
-        task_priority = TaskPriority.MEDIUM
 
     # Create task with data from complaint
     new_task = Task(
