@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { apiService } from '@/services/api';
+import { apiService, ApiError } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,6 +56,10 @@ export default function ProjectDetailsPage() {
   }, [id]);
 
   const handleSave = async () => {
+    if (!formData.title.trim() || !formData.code.trim()) {
+      toast.error('العنوان والكود مطلوبان');
+      return;
+    }
     try {
       if (id && id !== 'new') {
         await apiService.updateProject(Number(id), formData);
@@ -68,8 +72,11 @@ export default function ProjectDetailsPage() {
         toast.success('تم إنشاء المشروع');
         navigate(`/projects/${created.id}`);
       }
-    } catch {
-      toast.error('فشل حفظ المشروع');
+    } catch (err) {
+      const message = err instanceof ApiError
+        ? (err.detail ? `فشل حفظ المشروع: ${err.detail}` : 'فشل حفظ المشروع')
+        : 'فشل حفظ المشروع';
+      toast.error(message);
     }
   };
 
