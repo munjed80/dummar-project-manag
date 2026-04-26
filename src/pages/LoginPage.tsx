@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -13,9 +13,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     if (!username.trim() || !password.trim()) {
       toast.error('يرجى إدخال اسم المستخدم وكلمة المرور');
       return;
@@ -23,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await apiService.login({ username, password });
+      await login({ username, password });
       if (localStorage.getItem('must_change_password') === '1') {
         toast.info('يجب تغيير كلمة المرور قبل المتابعة');
         navigate('/change-password');

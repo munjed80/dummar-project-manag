@@ -75,7 +75,7 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
     return <Navigate to="/change-password" replace />;
   }
 
-  if (loading) return null;
+  if (loading) return <PageLoader />;
 
   if (role && roles.includes(role)) {
     return <>{children}</>;
@@ -86,7 +86,7 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
     return <Navigate to="/citizen" replace />;
   }
 
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/login" replace />;
 }
 
 // Internal staff roles (all roles except citizen)

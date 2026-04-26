@@ -68,6 +68,10 @@ export interface AuthState {
   permissions: MePermissionsResponse | null;
   /** Refresh user from API */
   refresh: () => Promise<void>;
+  /** Login and hydrate auth state before route navigation. */
+  login: (credentials: { username: string; password: string }) => Promise<void>;
+  /** Logout and clear auth state. */
+  logout: () => void;
 }
 
 const CACHE_KEY = 'cached_user';
@@ -161,6 +165,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const login = useCallback(async (credentials: { username: string; password: string }) => {
+    if (refreshing.current) return;
+    setLoading(true);
+    setError(null);
+    await apiService.login(credentials);
+
+    // apiService.login() stores the token immediately and opportunistically
+    // caches `/auth/me`. Prefer that cached user first to update state
+    // synchronously, then fetch fresh permissions.
+    const cached = getCachedUser();
+    if (cached) {
+      setUser(cached);
+    } else {
+      const u = await apiService.getCurrentUser();
+      setUser(u);
+      setCachedUser(u);
+    }
+
+    try {
+      const p = await apiService.getCurrentUserPermissions();
+      setPermissions(p);
+    } catch {
+      setPermissions(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    apiService.logout();
+    setUser(null);
+    setPermissions(null);
+    setError(null);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     refresh();
     // We intentionally only run this on mount; subsequent refreshes are
@@ -202,8 +242,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       can,
       permissions,
       refresh,
+      login,
+      logout,
     }),
-    [user, loading, error, role, permissions, hasRole, can, refresh],
+    [user, loading, error, role, permissions, hasRole, can, refresh, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -233,5 +275,7 @@ export function useAuthContext(): AuthState {
     can: () => false,
     permissions: null,
     refresh: async () => {},
+    login: async () => {},
+    logout: () => {},
   };
 }
