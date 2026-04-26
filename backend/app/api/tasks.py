@@ -146,6 +146,12 @@ def list_tasks(
     query = db.query(Task)
     query = perms.scope_query(query, db, current_user, Task)
 
+    # Field team / contractor users may only see tasks assigned to them.
+    # Org scope alone would let them browse unrelated tasks in their unit
+    # — restrict to ownership so the list view matches what they can act on.
+    if current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER):
+        query = query.filter(Task.assigned_to_id == current_user.id)
+
     if status_filter:
         query = query.filter(Task.status == status_filter)
     
@@ -197,6 +203,13 @@ def get_task(
         db, current_user, perms.Action.READ, perms.ResourceType.TASK, resource=task
     ):
         raise HTTPException(status_code=403, detail="Out of organization scope")
+    # Field team / contractor users may only fetch tasks assigned to them,
+    # mirroring the list-endpoint restriction.
+    if (
+        current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER)
+        and task.assigned_to_id != current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="Task is not assigned to you")
     return task
 
 
