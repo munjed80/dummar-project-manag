@@ -131,7 +131,6 @@ export default function ComplaintDetailsPage() {
       setNewStatus('');
       setNotes('');
       setAssignee('');
-      setComplaintPriority('');
       setConfirmAction(null);
       fetchData();
     } catch {
