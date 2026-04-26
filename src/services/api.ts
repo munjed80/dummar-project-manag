@@ -420,6 +420,19 @@ class ApiService {
     const sanitizedData = sanitizeJsonPayload(data);
     const idempotencyKey = generateIdempotencyKey(`task-${id}`);
     try {
+      const afterRepairPhotos = options?.afterRepairPhotos || [];
+      if (afterRepairPhotos.length > 0) {
+        const uploadedPaths: string[] = [];
+        for (const file of afterRepairPhotos) {
+          const upload = await this.uploadFile(file, 'tasks');
+          uploadedPaths.push(upload.path);
+        }
+        const existing = Array.isArray((sanitizedData as any)?.after_photos)
+          ? (sanitizedData as any).after_photos
+          : [];
+        (sanitizedData as any).after_photos = [...existing, ...uploadedPaths];
+      }
+
       const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, {
         method: 'PUT',
         headers: { ...this.getAuthHeaders(), 'X-Idempotency-Key': idempotencyKey },

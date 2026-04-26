@@ -41,6 +41,38 @@ _complaint_managers = require_role(
 )
 
 
+def _coerce_task_priority(
+    raw_priority: object,
+    complaint_priority: object,
+):
+    """Map incoming complaint/task priority into TaskPriority safely."""
+    from app.models.task import TaskPriority
+
+    if raw_priority is not None:
+        if isinstance(raw_priority, TaskPriority):
+            return raw_priority
+        if isinstance(raw_priority, str):
+            try:
+                return TaskPriority(raw_priority)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid task priority '{raw_priority}'",
+                ) from exc
+        raise HTTPException(status_code=422, detail="Invalid task priority type")
+
+    if complaint_priority is not None:
+        # Complaint priority is an enum with matching values (low/medium/high/urgent).
+        value = getattr(complaint_priority, "value", complaint_priority)
+        try:
+            return TaskPriority(value)
+        except ValueError:
+            # Fallback defensively; should not happen with current schema.
+            return TaskPriority.MEDIUM
+
+    return TaskPriority.MEDIUM
+
+
 def generate_tracking_number(db: Session) -> str:
     while True:
         tracking_number = "CMP" + "".join(random.choices(string.digits, k=8))
@@ -416,7 +448,7 @@ def create_task_from_complaint(
     )),
     db: Session = Depends(get_db)
 ):
-    from app.models.task import Task, TaskActivity, TaskSourceType, TaskStatus
+    from app.models.task import Task, TaskActivity, TaskPriority, TaskSourceType, TaskStatus
     from app.schemas.task import TaskResponse
 
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
@@ -446,6 +478,21 @@ def create_task_from_complaint(
                 ),
             )
 
+    assigned_to_id = task_data.get("assigned_to_id")
+    team_id = task_data.get("team_id")
+    if team_id and not assigned_to_id:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Selecting team_id without assigned_to_id is not supported yet. "
+                "Please assign a responsible user."
+            ),
+        )
+
+    task_priority = _coerce_task_priority(task_data.get("priority"), complaint.priority)
+    if task_priority is None:
+        task_priority = TaskPriority.MEDIUM
+
     # Create task with data from complaint
     new_task = Task(
         title=task_data.get("title", f"Task from complaint {complaint.tracking_number}"),
@@ -454,13 +501,15 @@ def create_task_from_complaint(
         complaint_id=complaint.id,
         area_id=complaint.area_id,
         location_id=complaint.location_id,
+        location_text=complaint.location_text,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
-        priority=task_data.get("priority", complaint.priority if complaint.priority else "medium"),
+        priority=task_priority,
         due_date=task_data.get("due_date"),
-        assigned_to_id=task_data.get("assigned_to_id"),
-        team_id=task_data.get("team_id"),
+        assigned_to_id=assigned_to_id,
+        team_id=team_id,
         project_id=task_data.get("project_id"),
+        before_photos=complaint.images,
     )
     
     db.add(new_task)
@@ -516,7 +565,7 @@ def create_task_from_complaint(
         due_date=new_task.due_date,
         priority=new_task.priority,
         status=new_task.status,
-        before_photos=None,
+        before_photos=new_task.before_photos,
         after_photos=None,
         notes=new_task.notes,
         created_at=new_task.created_at,
