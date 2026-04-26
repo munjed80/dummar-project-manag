@@ -65,16 +65,15 @@ export function Layout({ children }: LayoutProps) {
     { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
     { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/tasks', icon: ListChecks, label: 'المهام', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/contracts', icon: FileText, label: 'العقود', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/manual-contracts', icon: FileText, label: 'العقود الأخرى (يدوي)', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'investment_manager', 'property_manager'] },
     { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/teams', icon: UsersThree, label: 'الفرق التنفيذية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/contract-intelligence', icon: Brain, label: 'ذكاء العقود', roles: ['project_director', 'contracts_manager'] },
+    { path: '/contract-intelligence', icon: Brain, label: 'مركز ذكاء العقود', roles: ['project_director', 'contracts_manager'] },
     // Single consolidated geographic entry. The Locations list and Geo
     // Dashboard pages are still routable directly, and surfaced as internal
     // tabs from inside the Complaints Map page.
     { path: '/complaints-map', icon: MapTrifold, label: 'خريطة الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/investment-properties', icon: Buildings, label: 'الأملاك', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
-    { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
     { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },

@@ -319,6 +319,13 @@ class TestAttachments:
             owner_id_copy="/uploads/investment_contracts/own-id.pdf",
             ownership_proof="/uploads/investment_contracts/proof.pdf",
             handover_report="/uploads/investment_contracts/handover.pdf",
+            handover_property_images=[
+                "/uploads/investment_contracts/handover-1.jpg",
+                "/uploads/investment_contracts/handover-2.jpg",
+            ],
+            financial_documents=[
+                "/uploads/investment_contracts/finance-1.pdf",
+            ],
             additional_attachments=[
                 "/uploads/investment_contracts/extra1.pdf",
                 "/uploads/investment_contracts/extra2.pdf",
@@ -335,6 +342,8 @@ class TestAttachments:
         assert data["owner_id_copy"].endswith("own-id.pdf")
         assert data["ownership_proof"].endswith("proof.pdf")
         assert data["handover_report"].endswith("handover.pdf")
+        assert len(data["handover_property_images"]) == 2
+        assert len(data["financial_documents"]) == 1
         assert isinstance(data["additional_attachments"], list)
         assert len(data["additional_attachments"]) == 2
 
@@ -355,6 +364,13 @@ class TestAttachments:
         resp = client.put(
             f"/investment-contracts/{c.id}",
             json={
+                "handover_property_images": [
+                    "/uploads/investment_contracts/h1.jpg",
+                    "/uploads/investment_contracts/h2.jpg",
+                ],
+                "financial_documents": [
+                    "/uploads/investment_contracts/f1.pdf",
+                ],
                 "additional_attachments": [
                     "/uploads/investment_contracts/a.pdf",
                     "/uploads/investment_contracts/b.pdf",
@@ -363,6 +379,8 @@ class TestAttachments:
             headers=_auth(director_token),
         )
         assert resp.status_code == 200
+        assert len(resp.json()["handover_property_images"]) == 2
+        assert len(resp.json()["financial_documents"]) == 1
         assert len(resp.json()["additional_attachments"]) == 2
 
 

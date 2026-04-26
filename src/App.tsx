@@ -20,6 +20,7 @@ const TaskDetailsPage = lazy(() => import('@/pages/TaskDetailsPage'));
 const ContractsListPage = lazy(() => import('@/pages/ContractsListPage'));
 const ContractDetailsPage = lazy(() => import('@/pages/ContractDetailsPage'));
 const ContractIntelligencePage = lazy(() => import('@/pages/ContractIntelligencePage'));
+const ManualContractsPage = lazy(() => import('@/pages/ManualContractsPage'));
 const ProcessingQueuePage = lazy(() => import('@/pages/ProcessingQueuePage'));
 const DocumentReviewPage = lazy(() => import('@/pages/DocumentReviewPage'));
 const BulkImportPage = lazy(() => import('@/pages/BulkImportPage'));
@@ -124,6 +125,11 @@ const INVESTMENT_CONTRACTS_ROLES: UserRole[] = [
   'investment_manager', 'property_manager',
 ];
 
+const MANUAL_CONTRACTS_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager', 'investment_manager', 'property_manager',
+  'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
+];
+
 function RootRoute() {
   // Unauthenticated visitors see the public landing page so the complaint
   // intake CTAs are the very first thing they see — not the staff login.
@@ -170,6 +176,7 @@ function App() {
           <Route path="/teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
+          <Route path="/manual-contracts" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/documents/:id" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DocumentReviewPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/bulk-import" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><BulkImportPage /></RoleProtectedRoute>} />

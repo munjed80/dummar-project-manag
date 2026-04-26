@@ -116,9 +116,14 @@ export default function ContractIntelligencePage() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">مركز ذكاء العقود</h1>
-          <p className="text-muted-foreground">تحليل ومعالجة مستندات العقود تلقائيًا</p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">مركز ذكاء العقود</h1>
+            <p className="text-muted-foreground">تحليل ومعالجة مستندات العقود تلقائيًا</p>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/manual-contracts')}>
+            الانتقال إلى صفحة العقود الأخرى
+          </Button>
         </div>
 
         {error && (
