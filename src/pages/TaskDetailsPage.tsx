@@ -70,6 +70,7 @@ export default function TaskDetailsPage() {
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [afterRepairFiles, setAfterRepairFiles] = useState<File[]>([]);
 
   const fetchData = () => {
     if (!id) return;
@@ -128,13 +129,18 @@ export default function TaskDetailsPage() {
       if (projectId !== (task?.project_id ? String(task.project_id) : '')) {
         updateData.project_id = projectId ? Number(projectId) : null;
       }
-      await apiService.updateTask(Number(id), updateData);
-      toast.success('تم تحديث المهمة بنجاح');
+      const result = await apiService.updateTask(Number(id), updateData, { afterRepairPhotos: afterRepairFiles });
+      if (result?.queued) {
+        toast.success('تم حفظ الطلب محليًا وسيتم إرساله عند عودة الاتصال');
+      } else {
+        toast.success('تم تحديث المهمة بنجاح');
+      }
       setNewStatus('');
       setNotes('');
       setAssignee('');
+      setAfterRepairFiles([]);
       setConfirmCancel(false);
-      fetchData();
+      if (!result?.queued) fetchData();
     } catch {
       toast.error('فشل تحديث المهمة');
     } finally {
@@ -368,9 +374,23 @@ export default function TaskDetailsPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
+            <div className="space-y-2">
+              <label className="text-sm font-medium">صور بعد الإصلاح (اختياري)</label>
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.gif"
+                multiple
+                onChange={(e) => setAfterRepairFiles(Array.from(e.target.files || []))}
+              />
+              {afterRepairFiles.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  سيتم مزامنة {afterRepairFiles.length} صورة تلقائياً عند توفر الاتصال.
+                </p>
+              )}
+            </div>
             <Button
               onClick={handleUpdate}
-              disabled={(!newStatus && !notes) || updating}
+              disabled={(!newStatus && !notes && afterRepairFiles.length === 0) || updating}
             >
               {updating ? <Spinner className="animate-spin ml-2" size={16} /> : null}
               حفظ التحديث
@@ -439,6 +459,20 @@ export default function TaskDetailsPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
+            <div className="space-y-2">
+              <label className="text-sm font-medium">صور بعد الإصلاح (اختياري)</label>
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.gif"
+                multiple
+                onChange={(e) => setAfterRepairFiles(Array.from(e.target.files || []))}
+              />
+              {afterRepairFiles.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  سيتم رفع الصور الآن أو حفظها محلياً إذا كان الاتصال ضعيفاً.
+                </p>
+              )}
+            </div>
             <Button
               onClick={() => {
                 if (newStatus === 'cancelled') {
@@ -448,7 +482,7 @@ export default function TaskDetailsPage() {
                 }
               }}
               disabled={
-                !newStatus && !notes && !assignee &&
+                !newStatus && !notes && !assignee && afterRepairFiles.length === 0 &&
                 teamId === (task?.team_id ? String(task.team_id) : '') &&
                 projectId === (task?.project_id ? String(task.project_id) : '') ||
                 updating

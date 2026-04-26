@@ -127,11 +127,11 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
       if (form.area.trim()) payload.area = Number(form.area);
 
       if (isEdit) {
-        await apiService.updateInvestmentProperty(editData.id, payload);
-        toast.success('تم تحديث العقار بنجاح');
+        const result = await apiService.updateInvestmentProperty(editData.id, payload);
+        toast.success(result?.queued ? 'تم حفظ الطلب محليًا وسيتم إرساله عند عودة الاتصال' : 'تم تحديث العقار بنجاح');
       } else {
-        await apiService.createInvestmentProperty(payload);
-        toast.success('تم إضافة العقار بنجاح');
+        const result = await apiService.createInvestmentProperty(payload);
+        toast.success(result?.queued ? 'تم حفظ الطلب محليًا وسيتم إرساله عند عودة الاتصال' : 'تم إضافة العقار بنجاح');
       }
       onSuccess();
       onOpenChange(false);

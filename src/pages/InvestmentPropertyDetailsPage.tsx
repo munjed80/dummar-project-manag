@@ -119,9 +119,14 @@ export default function InvestmentPropertyDetailsPage() {
       if (form.area.trim()) payload.area = Number(form.area);
 
       const updated = await apiService.updateInvestmentProperty(Number(id), payload);
-      setProperty(updated);
-      setEditing(false);
-      toast.success('تم تحديث العقار بنجاح');
+      if (updated?.queued) {
+        setEditing(false);
+        toast.success('تم حفظ الطلب محليًا وسيتم إرساله عند عودة الاتصال');
+      } else {
+        setProperty(updated);
+        setEditing(false);
+        toast.success('تم تحديث العقار بنجاح');
+      }
     } catch (err) {
       const message = err instanceof ApiError
         ? (err.detail ? `فشل التحديث: ${err.detail}` : 'فشل تحديث العقار')

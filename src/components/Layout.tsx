@@ -5,6 +5,7 @@ import { House, ChatCircleDots, ListChecks, FileText, SignOut, UsersThree, Chart
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
+import { OfflineSyncBanner } from '@/components/OfflineSyncBanner';
 import type { UserRole } from '@/hooks/useAuth';
 
 interface LayoutProps {
@@ -142,6 +143,8 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </header>
+
+      <OfflineSyncBanner />
 
       {/* Desktop nav — horizontal bar */}
       <nav className="hidden md:block bg-secondary text-secondary-foreground shadow-sm">

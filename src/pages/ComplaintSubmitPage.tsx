@@ -53,24 +53,20 @@ export default function ComplaintSubmitPage() {
 
     setSubmitting(true);
     try {
-      const imagePaths: string[] = [];
-      if (imageFiles.length > 0) {
-        setUploading(true);
-        for (const file of imageFiles) {
-          const res = await apiService.uploadFilePublic(file);
-          imagePaths.push(res.path);
-        }
-        setUploading(false);
-      }
-
-      const result = await apiService.createComplaint({
+      const result = await apiService.submitComplaintWithAttachments({
         full_name: fullName,
         phone,
         complaint_type: complaintType,
         description,
         location_text: locationText,
-        ...(imagePaths.length > 0 ? { images: imagePaths } : {}),
-      });
+      }, imageFiles);
+
+      if (result?.queued) {
+        toast.success('تم حفظ الطلب محليًا وسيتم إرساله عند عودة الاتصال');
+        setSubmitted(true);
+        setTrackingNumber('LOCAL-PENDING');
+        return;
+      }
 
       setTrackingNumber(result.tracking_number);
       setSubmitted(true);
