@@ -153,6 +153,9 @@ export interface MapMarker {
   entity_type?: string; // 'complaint' | 'task' | 'project' | 'location'
   reference?: string;
   priority?: string;
+  location_accuracy?: 'exact' | 'estimated';
+  confidence?: 'high' | 'medium' | 'low';
+  match_reason?: string;
 }
 
 export interface AreaPolygon {
@@ -206,6 +209,17 @@ const entityTypeLabels: Record<string, string> = {
   task: 'مهمة',
   project: 'مشروع',
   location: 'موقع مرجعي',
+};
+
+const locationAccuracyLabels: Record<string, string> = {
+  exact: 'موقع دقيق',
+  estimated: 'موقع تقديري',
+};
+
+const confidenceLabels: Record<string, string> = {
+  high: 'مرتفعة',
+  medium: 'متوسطة',
+  low: 'منخفضة',
 };
 
 // ---------------------------------------------------------------------------
@@ -286,6 +300,12 @@ export function MapView({
                   )}
                 </p>
                 <p className="text-xs mb-1">{marker.title}</p>
+                {marker.location_accuracy && (
+                  <p className="text-xs mb-1 text-muted-foreground">
+                    {locationAccuracyLabels[marker.location_accuracy] || marker.location_accuracy}
+                    {marker.confidence ? ` • ثقة: ${confidenceLabels[marker.confidence] || marker.confidence}` : ''}
+                  </p>
+                )}
                 {marker.status && (
                   <span
                     className="inline-block px-2 py-0.5 rounded text-xs text-white"

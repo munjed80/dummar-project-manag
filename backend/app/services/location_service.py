@@ -18,6 +18,8 @@ Design:
 import logging
 import math
 import re
+import json
+from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -34,6 +36,19 @@ _MIN_FUZZY_SCORE = 0.6
 
 # Earth's mean radius in meters
 _EARTH_RADIUS_M = 6_371_000.0
+
+_LOCATION_KEYWORDS = (
+    "الجزيرة", "السوق", "الشارع", "الحي", "البناء", "المنطقة",
+    "جزيره", "سوق", "شارع", "حي", "بناء", "منطقه",
+)
+
+
+@dataclass
+class LocationMatchResult:
+    location: Optional[Location]
+    confidence: str  # high | medium | low | none
+    score: float
+    reason: str
 
 
 # ─────────────────────────────────────────────────────────────
@@ -103,6 +118,115 @@ def _text_similarity(a: str, b: str) -> float:
     intersection = tg_a & tg_b
     union = tg_a | tg_b
     return len(intersection) / len(union) if union else 0.0
+
+
+def _extract_location_terms(text: str) -> str:
+    """Keep likely geographic terms to improve fuzzy recall on partial addresses."""
+    text_n = _normalize_arabic(text or "")
+    if not text_n:
+        return ""
+    parts = re.split(r"[،,;:|/\-]+|\s+", text_n)
+    kept = [p for p in parts if p and (len(p) >= 3 or p in _LOCATION_KEYWORDS)]
+    return " ".join(kept[:12])
+
+
+def _location_aliases(loc: Location) -> list[str]:
+    aliases: list[str] = []
+    if loc.description:
+        aliases.append(loc.description)
+    if loc.metadata_json:
+        try:
+            data = json.loads(loc.metadata_json) if isinstance(loc.metadata_json, str) else loc.metadata_json
+            if isinstance(data, dict):
+                for key in ("aliases", "alternative_names", "alt_names", "keywords"):
+                    raw = data.get(key)
+                    if isinstance(raw, list):
+                        aliases.extend([str(x) for x in raw if x])
+                    elif isinstance(raw, str):
+                        aliases.append(raw)
+        except Exception:
+            pass
+    return aliases
+
+
+def infer_location_from_address(
+    db: Session,
+    *,
+    location_text: Optional[str] = None,
+    detailed_address: Optional[str] = None,
+) -> LocationMatchResult:
+    """
+    Infer a reference location from partially-structured Arabic text with
+    confidence scoring.
+    """
+    source = " ".join(x for x in [location_text, detailed_address] if x and x.strip()).strip()
+    if not source:
+        return LocationMatchResult(location=None, confidence="none", score=0.0, reason="empty_text")
+
+    source_norm = _normalize_arabic(source)
+    source_terms = _extract_location_terms(source)
+    candidates = db.query(Location).filter(Location.is_active == 1).all()
+    if not candidates:
+        return LocationMatchResult(location=None, confidence="none", score=0.0, reason="no_candidates")
+
+    best: Optional[Location] = None
+    best_score = 0.0
+    best_reason = "no_match"
+
+    for loc in candidates:
+        name_n = _normalize_arabic(loc.name or "")
+        code_n = _normalize_arabic(loc.code or "")
+        score_name = _text_similarity(source_norm, name_n)
+        score_terms = _text_similarity(source_terms, name_n) if source_terms else 0.0
+        score_code = _text_similarity(source_norm, code_n) if code_n else 0.0
+        score_alias = 0.0
+        for alias in _location_aliases(loc):
+            score_alias = max(score_alias, _text_similarity(source_norm, alias))
+
+        keyword_bonus = 0.0
+        if any(k in source_norm for k in _LOCATION_KEYWORDS):
+            if any(k in name_n for k in _LOCATION_KEYWORDS):
+                keyword_bonus = 0.05
+
+        token_overlap = 0.0
+        source_tokens = set(source_terms.split()) if source_terms else set()
+        name_tokens = set(name_n.split()) if name_n else set()
+        if source_tokens and name_tokens:
+            common = source_tokens & name_tokens
+            if common:
+                token_overlap = min(0.88, 0.75 + (0.06 * len(common)))
+
+        score = max(score_name, score_terms, score_code, score_alias, token_overlap) + keyword_bonus
+        reason = "fuzzy"
+        if score_name >= 0.99 or score_code >= 0.99:
+            score = max(score, 1.0)
+            reason = "exact"
+        elif name_n and (name_n in source_norm or source_norm in name_n):
+            score = max(score, 0.88)
+            reason = "partial"
+        elif score_alias >= 0.8:
+            reason = "alias"
+
+        if score > best_score:
+            best = loc
+            best_score = score
+            best_reason = reason
+
+    if not best:
+        return LocationMatchResult(location=None, confidence="none", score=0.0, reason="no_match")
+
+    if best_score >= 0.9:
+        confidence = "high"
+    elif best_score >= 0.72:
+        confidence = "medium"
+    elif best_score >= 0.56:
+        confidence = "low"
+    else:
+        confidence = "none"
+
+    if confidence in ("none", "low"):
+        return LocationMatchResult(location=best, confidence="low", score=best_score, reason=best_reason)
+    return LocationMatchResult(location=best, confidence=confidence, score=best_score, reason=best_reason)
 
 
 def fuzzy_match_location(

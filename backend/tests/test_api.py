@@ -546,6 +546,166 @@ class TestGISEndpoints:
         unlocated = payload["items_without_coordinates"]
         assert any(i["reference"] == "PRJ-NO-COORD" and i["entity_type"] == "project" for i in unlocated)
 
+    def test_complaint_location_text_exact_name_is_inferred(self, client, db, director_token):
+        from app.models.location import Location, LocationType, LocationStatus
+        from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+
+        loc = Location(
+            name="الجزيرة 1",
+            code="LOC-J1",
+            location_type=LocationType.OTHER,
+            status=LocationStatus.ACTIVE,
+            latitude=33.541,
+            longitude=36.221,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+
+        complaint = Complaint(
+            tracking_number="CMP-LOC-TEXT-1",
+            full_name="Test",
+            phone="0999999002",
+            complaint_type=ComplaintType.OTHER,
+            description="شكوى عند الجزيرة 1",
+            location_text="الجزيرة 1",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+
+        resp = client.get("/gis/operations-map?entity_type=complaint", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        markers = resp.json()["markers"]
+        found = [m for m in markers if m["reference"] == "CMP-LOC-TEXT-1"]
+        assert found
+        assert found[0]["location_accuracy"] in ("exact", "estimated")
+        assert found[0]["confidence"] in ("high", "medium")
+
+    def test_complaint_partial_text_is_estimated_when_matched(self, client, db, director_token):
+        from app.models.location import Location, LocationType, LocationStatus
+        from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+
+        loc = Location(
+            name="السوق المركزي",
+            code="LOC-SOUQ-1",
+            location_type=LocationType.OTHER,
+            status=LocationStatus.ACTIVE,
+            latitude=33.542,
+            longitude=36.222,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+
+        complaint = Complaint(
+            tracking_number="CMP-LOC-TEXT-2",
+            full_name="Test",
+            phone="0999999003",
+            complaint_type=ComplaintType.OTHER,
+            description="شكوى قرب السوق",
+            location_text="قرب السوق",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+
+        resp = client.get("/gis/operations-map?entity_type=complaint", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        markers = resp.json()["markers"]
+        found = [m for m in markers if m["reference"] == "CMP-LOC-TEXT-2"]
+        assert found
+        assert found[0]["location_accuracy"] == "estimated"
+
+    def test_unknown_address_stays_in_unlocated(self, client, db, director_token):
+        from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+
+        complaint = Complaint(
+            tracking_number="CMP-UNKNOWN-LOC",
+            full_name="Test",
+            phone="0999999004",
+            complaint_type=ComplaintType.OTHER,
+            description="عنوان غير معروف بالكامل",
+            location_text="مكان غير معروف",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+
+        resp = client.get("/gis/operations-map?entity_type=complaint", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        unlocated = resp.json()["items_without_coordinates"]
+        assert any(i["reference"] == "CMP-UNKNOWN-LOC" for i in unlocated)
+
+    def test_task_created_from_complaint_inherits_inferred_location(self, client, db, director_token):
+        from app.models.location import Location, LocationType, LocationStatus
+        from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+
+        loc = Location(
+            name="الجزيرة 2",
+            code="LOC-J2",
+            location_type=LocationType.OTHER,
+            status=LocationStatus.ACTIVE,
+            latitude=33.543,
+            longitude=36.223,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+
+        complaint = Complaint(
+            tracking_number="CMP-TASK-INFER-1",
+            full_name="Test",
+            phone="0999999005",
+            complaint_type=ComplaintType.OTHER,
+            description="شكوى عند الجزيرة 2",
+            location_text="الجزيرة 2",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+        db.refresh(complaint)
+
+        resp = client.post(
+            f"/complaints/{complaint.id}/create-task",
+            headers=_auth_headers(director_token),
+            json={"title": "مهمة من الشكوى"},
+        )
+        assert resp.status_code == 200
+        task = resp.json()
+        assert task["location_text"] == "الجزيرة 2"
+        assert task["location_id"] == loc.id
+
+    def test_manual_correction_persists_after_refresh(self, client, db, director_token):
+        from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+
+        complaint = Complaint(
+            tracking_number="CMP-MANUAL-LOC-1",
+            full_name="Test",
+            phone="0999999006",
+            complaint_type=ComplaintType.OTHER,
+            description="شكوى تحتاج تحديد",
+            location_text="مكان غير دقيق",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+        db.refresh(complaint)
+
+        upd = client.put(
+            f"/complaints/{complaint.id}",
+            headers=_auth_headers(director_token),
+            json={"latitude": 33.544, "longitude": 36.224},
+        )
+        assert upd.status_code == 200
+
+        resp = client.get("/gis/operations-map?entity_type=complaint", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        markers = resp.json()["markers"]
+        found = [m for m in markers if m["reference"] == "CMP-MANUAL-LOC-1"]
+        assert found
+        assert found[0]["latitude"] == 33.544
+
 
 # ---------------------------------------------------------------------------
 # 11. Health endpoints

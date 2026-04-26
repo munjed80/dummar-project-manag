@@ -24,6 +24,10 @@ class ComplaintCreate(ComplaintBase):
 
 
 class ComplaintUpdate(BaseModel):
+    location_text: Optional[str] = None
+    location_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     status: Optional[ComplaintStatus] = None
     priority: Optional[ComplaintPriority] = None
     assigned_to_id: Optional[int] = None
