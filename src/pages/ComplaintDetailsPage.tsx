@@ -45,7 +45,8 @@ const priorityColors: Record<string, string> = {
 
 const typeLabels: Record<string, string> = {
   infrastructure: 'البنية التحتية', cleaning: 'النظافة', electricity: 'الكهرباء',
-  water: 'المياه', roads: 'الطرق', lighting: 'الإنارة', other: 'أخرى',
+  water: 'المياه', roads: 'الطرق', lighting: 'الإنارة',
+  heating_network: 'طلب صيانة شبكة التدفئة', other: 'أخرى',
 };
 
 export default function ComplaintDetailsPage() {

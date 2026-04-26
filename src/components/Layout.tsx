@@ -113,7 +113,7 @@ export function Layout({ children }: LayoutProps) {
             >
               {mobileMenuOpen ? <X size={24} /> : <List size={24} />}
             </button>
-            <h1 className="text-lg md:text-2xl font-bold truncate">منصة إدارة مشروع دمّر</h1>
+            <h1 className="text-lg md:text-2xl font-bold truncate">إدارة التجمع - مشروع دمر</h1>
           </div>
           <div className="flex items-center gap-1 md:gap-2">
             {/* Intake shortcut for staff who help walk-in / phone citizens.
@@ -193,7 +193,7 @@ export function Layout({ children }: LayoutProps) {
 
       <footer className="bg-muted mt-8 md:mt-12 py-4 md:py-6">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-xs md:text-sm">
-          <p>© 2024 مشروع دمر - دمشق | جميع الحقوق محفوظة</p>
+          <p>© 2024 إدارة التجمع - مشروع دمر - دمشق | جميع الحقوق محفوظة</p>
         </div>
       </footer>
     </div>

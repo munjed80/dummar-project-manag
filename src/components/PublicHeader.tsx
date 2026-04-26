@@ -23,17 +23,17 @@ export function PublicHeader() {
       <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <Link to="/" className="flex items-center gap-2 min-w-0">
           <House size={22} weight="fill" />
-          <h1 className="text-base md:text-lg font-bold truncate">منصة إدارة مشروع دمّر</h1>
+          <h1 className="text-base md:text-lg font-bold truncate">إدارة التجمع - مشروع دمر</h1>
         </Link>
         <nav className="flex items-center gap-1 md:gap-2">
           <Link to="/complaints/new" className={navLinkClass(pathname === '/complaints/new')}>
             <Plus size={16} />
-            <span className="hidden sm:inline">تقديم شكوى</span>
-            <span className="sm:hidden">شكوى</span>
+            <span className="hidden sm:inline">تقديم طلب / شكوى</span>
+            <span className="sm:hidden">طلب / شكوى</span>
           </Link>
           <Link to="/complaints/track" className={navLinkClass(pathname === '/complaints/track')}>
             <MagnifyingGlass size={16} />
-            <span className="hidden sm:inline">تتبع شكوى</span>
+            <span className="hidden sm:inline">تتبع طلب / شكوى</span>
             <span className="sm:hidden">تتبع</span>
           </Link>
           <Link to="/login" className={navLinkClass(pathname === '/login')}>
@@ -54,7 +54,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
       <footer className="bg-muted py-4 mt-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-xs md:text-sm">
-          <p>© 2024 مشروع دمّر - دمشق | جميع الحقوق محفوظة</p>
+          <p>© 2024 إدارة التجمع - مشروع دمر - دمشق | جميع الحقوق محفوظة</p>
         </div>
       </footer>
     </div>

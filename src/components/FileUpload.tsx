@@ -19,9 +19,12 @@ interface FileUploadProps {
   existingFiles?: string[];
   onUploadComplete?: (files: string[]) => void;
   label?: string;
+  /** When true, hides the upload control and removes per-file delete buttons.
+   * Used to render read-only file lists for users without write permission. */
+  disabled?: boolean;
 }
 
-export function FileUpload({ category, accept = 'all', multiple = true, existingFiles = [], onUploadComplete, label }: FileUploadProps) {
+export function FileUpload({ category, accept = 'all', multiple = true, existingFiles = [], onUploadComplete, label, disabled = false }: FileUploadProps) {
   const [uploadedFiles, setUploadedFiles] = useState<{ path: string; original_name: string }[]>(
     existingFiles.map(f => ({ path: f, original_name: f.split('/').pop() || f }))
   );
@@ -96,20 +99,22 @@ export function FileUpload({ category, accept = 'all', multiple = true, existing
     <div className="space-y-3">
       {label && <label className="text-sm font-medium">{label}</label>}
 
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-        >
-          {uploading ? <Spinner className="animate-spin ml-2" size={16} /> : <Upload className="ml-2" size={16} />}
-          {uploading ? 'جاري الرفع...' : 'رفع ملف'}
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          الحد الأقصى: 10 ميغابايت | {accept === 'images' ? 'صور فقط' : accept === 'documents' ? 'مستندات فقط' : 'صور ومستندات'}
-        </span>
-      </div>
+      {!disabled && (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Spinner className="animate-spin ml-2" size={16} /> : <Upload className="ml-2" size={16} />}
+            {uploading ? 'جاري الرفع...' : 'رفع ملف'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            الحد الأقصى: 10 ميغابايت | {accept === 'images' ? 'صور فقط' : accept === 'documents' ? 'مستندات فقط' : 'صور ومستندات'}
+          </span>
+        </div>
+      )}
 
       <input
         ref={fileInputRef}
@@ -133,9 +138,11 @@ export function FileUpload({ category, accept = 'all', multiple = true, existing
               >
                 {file.original_name}
               </a>
-              <Button type="button" variant="ghost" size="sm" onClick={() => removeFile(idx)} className="h-6 w-6 p-0">
-                <X size={14} />
-              </Button>
+              {!disabled && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => removeFile(idx)} className="h-6 w-6 p-0">
+                  <X size={14} />
+                </Button>
+              )}
             </div>
           ))}
         </div>

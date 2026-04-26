@@ -92,7 +92,7 @@ function CitizenDashboardPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">مرحباً، {user?.full_name || 'مواطن'}</h1>
-            <p className="text-muted-foreground mt-1">لوحة تحكم شكاواك في مشروع دمّر</p>
+            <p className="text-muted-foreground mt-1">لوحة تحكم طلباتك وشكاواك في إدارة التجمع - مشروع دمر</p>
           </div>
           <Link to="/complaints/new">
             <Button>

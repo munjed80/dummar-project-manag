@@ -17,11 +17,11 @@ export default function PublicLandingPage() {
         {/* Hero */}
         <div className="text-center mb-8 md:mb-12">
           <h2 className="text-2xl md:text-4xl font-bold text-foreground">
-            منصة استقبال شكاوى مشروع دمّر السكني
+            منصة استقبال الطلبات والشكاوى — إدارة التجمع - مشروع دمر
           </h2>
           <p className="mt-3 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
-            قدّم شكواك مباشرة، وتابع حالتها برقم المتابعة في أي وقت. ستصل شكواك
-            للجهة المعنية وستتم معالجتها ضمن خطة العمل اليومية للمشروع.
+            قدّم طلبك أو شكواك مباشرة، وتابع حالتها برقم المتابعة في أي وقت. سيصل
+            طلبك للجهة المعنية وستتم معالجته ضمن خطة العمل اليومية للمشروع.
           </p>
         </div>
 
@@ -33,14 +33,14 @@ export default function PublicLandingPage() {
                 <Plus size={32} className="text-primary" weight="bold" />
               </div>
               <div>
-                <h3 className="text-xl font-bold mb-1">تقديم شكوى جديدة</h3>
+                <h3 className="text-xl font-bold mb-1">تقديم طلب / شكوى جديدة</h3>
                 <p className="text-sm text-muted-foreground">
-                  املأ نموذجاً قصيراً يصف المشكلة والموقع، وستحصل على رقم متابعة فوري.
+                  املأ نموذجاً قصيراً يصف الطلب أو المشكلة والعنوان التفصيلي، وستحصل على رقم متابعة فوري.
                 </p>
               </div>
               <Link to="/complaints/new" className="block">
                 <Button size="lg" className="w-full gap-2">
-                  ابدأ بتقديم الشكوى
+                  ابدأ بتقديم الطلب / الشكوى
                   <ArrowLeft size={18} />
                 </Button>
               </Link>
@@ -53,14 +53,14 @@ export default function PublicLandingPage() {
                 <MagnifyingGlass size={32} className="text-accent" weight="bold" />
               </div>
               <div>
-                <h3 className="text-xl font-bold mb-1">تتبع شكوى سابقة</h3>
+                <h3 className="text-xl font-bold mb-1">تتبع طلب / شكوى سابقة</h3>
                 <p className="text-sm text-muted-foreground">
-                  أدخل رقم المتابعة ورقم الهاتف لمعرفة حالة شكواك ومراحل تنفيذها.
+                  أدخل رقم المتابعة ورقم الهاتف لمعرفة حالة طلبك ومراحل تنفيذه.
                 </p>
               </div>
               <Link to="/complaints/track" className="block">
                 <Button size="lg" variant="secondary" className="w-full gap-2">
-                  تتبع الشكوى الآن
+                  تتبع الطلب / الشكوى الآن
                   <ArrowLeft size={18} />
                 </Button>
               </Link>

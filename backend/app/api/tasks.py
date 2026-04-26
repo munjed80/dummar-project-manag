@@ -19,6 +19,16 @@ from app.services.location_service import infer_location_id
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 logger = logging.getLogger("dummar.tasks")
 
+
+# Field-team / contractor users may only update these task fields, and may
+# only set status to one of these values (progress reporting + photo upload).
+_FIELD_TEAM_ALLOWED_FIELDS = frozenset(
+    {"status", "notes", "before_photos", "after_photos"}
+)
+_FIELD_TEAM_ALLOWED_STATUSES = frozenset(
+    {TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED}
+)
+
 # Roles allowed to manage tasks
 _task_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
@@ -195,7 +205,7 @@ def update_task(
     task_id: int,
     task_update: TaskUpdate,
     request: Request,
-    current_user: User = Depends(_task_managers),
+    current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -205,10 +215,37 @@ def update_task(
         db, current_user, perms.Action.UPDATE, perms.ResourceType.TASK, resource=task
     ):
         raise HTTPException(status_code=403, detail="Out of organization scope")
-    
+
+    # Field-team / contractor users are restricted to safe field updates on
+    # tasks assigned to them: they may report progress (status/notes/photos)
+    # but cannot reassign, re-scope, or change titles/priorities.
+    is_field_role = current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER)
+    if is_field_role:
+        update_data_keys = task_update.model_dump(exclude_unset=True).keys()
+        forbidden = set(update_data_keys) - _FIELD_TEAM_ALLOWED_FIELDS
+        if forbidden:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Field team / contractor users can only update: "
+                    + ", ".join(sorted(_FIELD_TEAM_ALLOWED_FIELDS))
+                ),
+            )
+        if (
+            task_update.status is not None
+            and task_update.status not in _FIELD_TEAM_ALLOWED_STATUSES
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Field team / contractor users can only set status to "
+                    "in_progress or completed"
+                ),
+            )
+
     old_status = task.status
     old_assigned_to_id = task.assigned_to_id
-    
+
     update_data = task_update.model_dump(exclude_unset=True)
 
     # Serialize file list fields to JSON for DB storage

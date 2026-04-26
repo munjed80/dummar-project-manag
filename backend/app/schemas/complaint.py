@@ -67,3 +67,17 @@ class ComplaintActivityResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ComplaintRepairResult(BaseModel):
+    """Public-safe summary of repair work shown on the tracking page."""
+    task_status: Optional[str] = None
+    notes: Optional[str] = None
+    after_photos: Optional[List[str]] = None
+    completed_at: Optional[datetime] = None
+
+
+class ComplaintTrackResponse(ComplaintResponse):
+    """Returned by /complaints/track. Adds a public-safe repair summary
+    pulled from the most recent linked task once the complaint is resolved."""
+    repair_result: Optional[ComplaintRepairResult] = None

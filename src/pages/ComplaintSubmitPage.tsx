@@ -47,7 +47,7 @@ export default function ComplaintSubmitPage() {
     e.preventDefault();
 
     if (!complaintType) {
-      toast.error('يرجى اختيار نوع الشكوى');
+      toast.error('يرجى اختيار نوع الطلب');
       return;
     }
 
@@ -74,12 +74,12 @@ export default function ComplaintSubmitPage() {
 
       setTrackingNumber(result.tracking_number);
       setSubmitted(true);
-      toast.success('تم تقديم الشكوى بنجاح');
+      toast.success('تم تقديم الطلب / الشكوى بنجاح');
     } catch (error) {
       if (error instanceof ApiError && error.detail) {
-        toast.error(`فشل تقديم الشكوى: ${error.detail}`);
+        toast.error(`فشل تقديم الطلب: ${error.detail}`);
       } else {
-        toast.error('فشل تقديم الشكوى. حاول مرة أخرى.');
+        toast.error('فشل تقديم الطلب. حاول مرة أخرى.');
       }
     } finally {
       setUploading(false);
@@ -96,9 +96,9 @@ export default function ComplaintSubmitPage() {
               <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-2">
                 <CheckCircle size={36} className="text-green-600" weight="fill" />
               </div>
-              <CardTitle className="text-2xl">تم استلام شكواك بنجاح</CardTitle>
+              <CardTitle className="text-2xl">تم استلام طلبك بنجاح</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                احتفظ برقم المتابعة التالي — ستحتاجه لتتبع حالة شكواك لاحقاً.
+                احتفظ برقم المتابعة التالي — ستحتاجه لتتبع حالة طلبك / شكواك لاحقاً.
               </p>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -123,16 +123,16 @@ export default function ComplaintSubmitPage() {
                   ماذا يحدث بعد الآن؟
                 </p>
                 <ol className="list-decimal pr-5 space-y-1 text-muted-foreground">
-                  <li>سيقوم فريق الاستقبال بمراجعة شكواك خلال أيام العمل القادمة.</li>
-                  <li>عند تحويلها إلى مهمة تنفيذية، سيتم تعيين الفريق المختص لمعالجتها.</li>
-                  <li>يمكنك تتبع كل مرحلة برقم المتابعة ورقم هاتفك في صفحة "تتبع شكوى".</li>
+                  <li>سيقوم فريق الاستقبال بمراجعة طلبك خلال أيام العمل القادمة.</li>
+                  <li>عند تحويله إلى مهمة تنفيذية، سيتم تعيين الفريق المختص لمعالجته.</li>
+                  <li>يمكنك تتبع كل مرحلة برقم المتابعة ورقم هاتفك في صفحة "تتبع طلب / شكوى".</li>
                 </ol>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Link to="/complaints/track" className="block">
                   <Button className="w-full gap-2">
-                    تتبع الشكوى الآن
+                    تتبع الطلب الآن
                     <ArrowLeft size={16} />
                   </Button>
                 </Link>
@@ -152,11 +152,11 @@ export default function ComplaintSubmitPage() {
       <div className="container mx-auto px-4 py-6 md:py-10 max-w-2xl" dir="rtl">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">تقديم شكوى جديدة</CardTitle>
+            <CardTitle className="text-2xl">تقديم طلب / شكوى جديدة</CardTitle>
             <p className="text-sm text-muted-foreground">
-              املأ الحقول التالية بدقة لمساعدتنا في توجيه شكواك للجهة المعنية بأسرع وقت.
+              املأ الحقول التالية بدقة لمساعدتنا في توجيه طلبك للجهة المعنية بأسرع وقت.
               <Link to="/complaints/track" className="text-primary hover:underline mr-1">
-                لديك شكوى سابقة؟ تتبعها من هنا
+                لديك طلب أو شكوى سابقة؟ تتبعها من هنا
               </Link>
             </p>
           </CardHeader>
@@ -183,10 +183,10 @@ export default function ComplaintSubmitPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="complaintType">نوع الشكوى *</Label>
+                <Label htmlFor="complaintType">نوع الطلب *</Label>
                 <Select value={complaintType} onValueChange={setComplaintType}>
                   <SelectTrigger>
-                    <SelectValue placeholder="اختر نوع الشكوى" />
+                    <SelectValue placeholder="اختر نوع الطلب" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="infrastructure">البنية التحتية</SelectItem>
@@ -195,6 +195,7 @@ export default function ComplaintSubmitPage() {
                     <SelectItem value="water">المياه</SelectItem>
                     <SelectItem value="roads">الطرق</SelectItem>
                     <SelectItem value="lighting">الإنارة</SelectItem>
+                    <SelectItem value="heating_network">طلب صيانة شبكة التدفئة</SelectItem>
                     <SelectItem value="other">أخرى</SelectItem>
                   </SelectContent>
                 </Select>
@@ -212,20 +213,20 @@ export default function ComplaintSubmitPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="locationText">الموقع</Label>
+                <Label htmlFor="locationText">العنوان التفصيلي</Label>
                 <Input
                   id="locationText"
                   value={locationText}
                   onChange={(e) => setLocationText(e.target.value)}
-                  placeholder="مثال: جزيرة أ، البرج 1"
+                  placeholder="مثال: جزيرة أ، البرج 1، الطابق 3، الشقة 12"
                 />
                 <p className="text-xs text-muted-foreground">
-                  حاول كتابة موقع واضح (الجزيرة/البرج/الشارع) ليصل الفريق بسرعة.
+                  حاول كتابة عنوان تفصيلي واضح (الجزيرة/البرج/الشارع/الطابق) ليصل الفريق بسرعة.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label>صور مرفقة</Label>
+                <Label>صور مرفقة (صورة قبل التنفيذ إن وُجدت)</Label>
                 <div
                   className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => fileInputRef.current?.click()}
@@ -257,7 +258,7 @@ export default function ComplaintSubmitPage() {
               </div>
 
               <Button type="submit" className="w-full" disabled={submitting || uploading}>
-                {uploading ? 'جارٍ رفع الملفات...' : submitting ? 'جارٍ الإرسال...' : 'تقديم الشكوى'}
+                {uploading ? 'جارٍ رفع الملفات...' : submitting ? 'جارٍ الإرسال...' : 'تقديم الطلب / الشكوى'}
               </Button>
             </form>
           </CardContent>

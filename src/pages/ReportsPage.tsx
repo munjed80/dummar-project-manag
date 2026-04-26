@@ -31,7 +31,8 @@ const contractStatusLabels: Record<string, string> = {
 };
 const complaintTypeLabels: Record<string, string> = {
   infrastructure: 'البنية التحتية', cleaning: 'النظافة', electricity: 'الكهرباء',
-  water: 'المياه', roads: 'الطرق', lighting: 'الإنارة', other: 'أخرى',
+  water: 'المياه', roads: 'الطرق', lighting: 'الإنارة',
+  heating_network: 'طلب صيانة شبكة التدفئة', other: 'أخرى',
 };
 const contractTypeLabels: Record<string, string> = {
   construction: 'إنشاء', maintenance: 'صيانة', supply: 'توريد',
