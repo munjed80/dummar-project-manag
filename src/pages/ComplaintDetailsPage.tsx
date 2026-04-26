@@ -216,6 +216,10 @@ export default function ComplaintDetailsPage() {
       toast.error('يرجى تحديد تاريخ الاستحقاق.');
       return;
     }
+    if (!convertPriority) {
+      toast.error('يرجى اختيار أولوية المهمة.');
+      return;
+    }
 
     const selectedRole = roleByAuthority[convertAuthority];
     const hasActiveRoleUser = users.some((u: any) => u.is_active && u.role === selectedRole);
@@ -287,11 +291,11 @@ export default function ComplaintDetailsPage() {
         description: convertDescription.trim(),
         location_text: complaint.location_text || '',
         before_photos: Array.isArray(complaint.images) && complaint.images.length > 0 ? complaint.images : undefined,
+        due_date: convertDueDate,
+        priority: convertPriority,
       };
-      if (convertDueDate) payload.due_date = convertDueDate;
       if (convertAssignee) payload.assigned_to_id = Number(convertAssignee);
       if (convertTeam) payload.team_id = Number(convertTeam);
-      if (convertPriority) payload.priority = convertPriority;
       if (force) payload.force = true;
       await apiService.createTaskFromComplaint(Number(id), payload);
       toast.success('تم إنشاء المهمة وربطها بالشكوى وإسنادها بنجاح');
