@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { apiService } from '@/services/api';
+import { apiService, ApiError } from '@/services/api';
 import { toast } from 'sonner';
 import { UploadSimple, X, CheckCircle, Copy, ArrowLeft, Info } from '@phosphor-icons/react';
 import { PublicShell } from '@/components/PublicHeader';
@@ -46,6 +46,11 @@ export default function ComplaintSubmitPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!complaintType) {
+      toast.error('يرجى اختيار نوع الشكوى');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const imagePaths: string[] = [];
@@ -71,7 +76,11 @@ export default function ComplaintSubmitPage() {
       setSubmitted(true);
       toast.success('تم تقديم الشكوى بنجاح');
     } catch (error) {
-      toast.error('فشل تقديم الشكوى. حاول مرة أخرى.');
+      if (error instanceof ApiError && error.detail) {
+        toast.error(`فشل تقديم الشكوى: ${error.detail}`);
+      } else {
+        toast.error('فشل تقديم الشكوى. حاول مرة أخرى.');
+      }
     } finally {
       setUploading(false);
       setSubmitting(false);

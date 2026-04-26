@@ -129,6 +129,25 @@ async function readErrorBody(response: Response): Promise<{ detail: string | nul
  * Throw a structured ApiError from a failed Response. Callers should `await`
  * this when `response.ok` is false.
  */
+
+
+function sanitizeJsonPayload<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeJsonPayload(item))
+      .filter((item) => item !== undefined) as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      const sv = sanitizeJsonPayload(v);
+      if (sv !== undefined) out[k] = sv;
+    }
+    return out as T;
+  }
+  if (typeof value === 'string' && value.trim() === '') return undefined as T;
+  return value;
+}
 async function throwApiError(response: Response, fallbackMessage: string): Promise<never> {
   const { detail, body } = await readErrorBody(response);
   throw new ApiError({
@@ -204,7 +223,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
+      body: JSON.stringify(sanitizeJsonPayload(credentials)),
     });
     if (!response.ok) throw new Error('Login failed');
     const data: AuthToken = await response.json();
@@ -278,9 +297,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to create complaint');
+    if (!response.ok) await throwApiError(response, 'Failed to create complaint');
     return response.json();
   }
 
@@ -288,7 +307,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/track`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tracking_number, phone }),
+      body: JSON.stringify(sanitizeJsonPayload({ tracking_number, phone })),
     });
     if (!response.ok) throw new Error('Complaint not found');
     return response.json();
@@ -298,7 +317,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) throw new Error('Failed to update complaint');
     return response.json();
@@ -340,9 +359,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/tasks/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to create task');
+    if (!response.ok) await throwApiError(response, 'Failed to create task');
     return response.json();
   }
 
@@ -350,9 +369,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to update task');
+    if (!response.ok) await throwApiError(response, 'Failed to update task');
     return response.json();
   }
 
@@ -387,9 +406,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/contracts/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to create contract');
+    if (!response.ok) await throwApiError(response, 'Failed to create contract');
     return response.json();
   }
 
@@ -397,9 +416,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to update contract');
+    if (!response.ok) await throwApiError(response, 'Failed to update contract');
     return response.json();
   }
 
@@ -407,7 +426,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}/approve`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ action, comments }),
+      body: JSON.stringify(sanitizeJsonPayload({ action, comments })),
     });
     if (!response.ok) throw new Error('Failed to approve contract');
     return response.json();
@@ -462,9 +481,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/projects/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to create project');
+    if (!response.ok) await throwApiError(response, 'Failed to create project');
     return response.json();
   }
 
@@ -472,9 +491,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/projects/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to update project');
+    if (!response.ok) await throwApiError(response, 'Failed to update project');
     return response.json();
   }
 
@@ -519,9 +538,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/teams/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to create team');
+    if (!response.ok) await throwApiError(response, 'Failed to create team');
     return response.json();
   }
 
@@ -529,9 +548,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/teams/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to update team');
+    if (!response.ok) await throwApiError(response, 'Failed to update team');
     return response.json();
   }
 
@@ -550,7 +569,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/settings/`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ items }),
+      body: JSON.stringify(sanitizeJsonPayload({ items })),
     });
     if (!response.ok) throw new Error('Failed to update settings');
     return response.json();
@@ -560,9 +579,9 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${complaintId}/create-task`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to create task from complaint');
+    if (!response.ok) await throwApiError(response, 'Failed to create task from complaint');
     return response.json();
   }
 
@@ -675,11 +694,10 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to create location');
+      await throwApiError(response, 'Failed to create location');
     }
     return response.json();
   }
@@ -688,11 +706,10 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to update location');
+      await throwApiError(response, 'Failed to update location');
     }
     return response.json();
   }
@@ -787,7 +804,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/users/`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) await throwApiError(response, 'Failed to create user');
     return response.json();
@@ -797,7 +814,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) await throwApiError(response, 'Failed to update user');
     return response.json();
@@ -835,7 +852,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/auth/change-password`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -1057,7 +1074,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) throw new Error('Failed to update document');
     return response.json();
@@ -1133,7 +1150,7 @@ class ApiService {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/duplicates/${id}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) throw new Error('Failed to review duplicate');
     return response.json();

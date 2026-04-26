@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { apiService } from '@/services/api';
+import { apiService, ApiError } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,6 +55,10 @@ export default function TeamDetailsPage() {
   }, [id]);
 
   const handleSave = async () => {
+    if (!formData.name.trim()) {
+      toast.error('اسم الفريق مطلوب');
+      return;
+    }
     try {
       if (id && id !== 'new') {
         await apiService.updateTeam(Number(id), formData);
@@ -67,8 +71,11 @@ export default function TeamDetailsPage() {
         toast.success('تم إنشاء الفريق');
         navigate(`/teams/${created.id}`);
       }
-    } catch {
-      toast.error('فشل حفظ الفريق');
+    } catch (err) {
+      const message = err instanceof ApiError
+        ? (err.detail ? `فشل حفظ الفريق: ${err.detail}` : 'فشل حفظ الفريق')
+        : 'فشل حفظ الفريق';
+      toast.error(message);
     }
   };
 
