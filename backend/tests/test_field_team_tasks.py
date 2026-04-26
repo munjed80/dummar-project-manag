@@ -12,9 +12,8 @@ Covers:
     the complaint is resolved and a linked task captured after-photos /
     notes.
 """
-from app.models.user import UserRole
-from app.models.task import Task, TaskStatus
-from app.models.complaint import Complaint, ComplaintStatus, ComplaintType
+from app.models.task import Task, TaskPriority, TaskStatus
+from app.models.complaint import Complaint, ComplaintPriority, ComplaintStatus, ComplaintType
 from tests.test_e2e import _auth_headers, _create_user, _login
 
 
@@ -328,3 +327,173 @@ class TestPublicTrackingRepairResult:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["repair_result"] is None
+
+
+class TestComplaintToMaintenanceWorkflow:
+    def test_end_to_end_heating_complaint_to_resolution(
+        self, client, db, director_token, field_user
+    ):
+        # 1) Resident submits heating complaint with a photo.
+        create = client.post(
+            "/complaints/",
+            json={
+                "full_name": "Resident A",
+                "phone": "0998888888",
+                "complaint_type": "heating_network",
+                "description": "Boiler leak in stairwell",
+                "location_text": "Building A - Floor 2",
+                "images": ["complaints/before_heat_1.jpg"],
+                "priority": "high",
+            },
+        )
+        assert create.status_code == 200, create.text
+        complaint = create.json()
+
+        # 2) Admin converts complaint to task and assigns a responsible user.
+        convert = client.post(
+            f"/complaints/{complaint['id']}/create-task",
+            json={
+                "title": "Fix heating leak",
+                "description": "Inspect and replace faulty valve",
+                "assigned_to_id": field_user.id,
+            },
+            headers=_auth_headers(director_token),
+        )
+        assert convert.status_code == 200, convert.text
+        task = convert.json()
+        assert task["complaint_id"] == complaint["id"]
+        assert task["location_text"] == "Building A - Floor 2"
+        assert task["before_photos"] == ["complaints/before_heat_1.jpg"]
+
+        # 3) Assigned field worker sees only own task and can execute it.
+        field_token = _login(client, field_user.username)
+        own_list = client.get("/tasks/", headers=_auth_headers(field_token))
+        assert own_list.status_code == 200, own_list.text
+        ids = {t["id"] for t in own_list.json()["items"]}
+        assert task["id"] in ids
+
+        in_progress = client.put(
+            f"/tasks/{task['id']}",
+            json={"status": "in_progress"},
+            headers=_auth_headers(field_token),
+        )
+        assert in_progress.status_code == 200, in_progress.text
+
+        completed = client.put(
+            f"/tasks/{task['id']}",
+            json={
+                "status": "completed",
+                "notes": "Valve replaced and pressure tested",
+                "after_photos": ["tasks/after_heat_1.jpg"],
+            },
+            headers=_auth_headers(field_token),
+        )
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["after_photos"] == ["tasks/after_heat_1.jpg"]
+
+        # 4) Director reviews task result and resolves the original complaint.
+        reviewed = client.get(f"/tasks/{task['id']}", headers=_auth_headers(director_token))
+        assert reviewed.status_code == 200, reviewed.text
+        assert reviewed.json()["status"] == "completed"
+        assert reviewed.json()["notes"] == "Valve replaced and pressure tested"
+        assert reviewed.json()["after_photos"] == ["tasks/after_heat_1.jpg"]
+
+        resolve = client.put(
+            f"/complaints/{complaint['id']}",
+            json={"status": "resolved"},
+            headers=_auth_headers(director_token),
+        )
+        assert resolve.status_code == 200, resolve.text
+        assert resolve.json()["status"] == "resolved"
+
+        # 5) Public tracking reveals repair_result only after resolution.
+        tracked = client.post(
+            "/complaints/track",
+            json={"tracking_number": complaint["tracking_number"], "phone": "0998888888"},
+        )
+        assert tracked.status_code == 200, tracked.text
+        repair = tracked.json()["repair_result"]
+        assert repair is not None
+        assert repair["notes"] == "Valve replaced and pressure tested"
+        assert repair["after_photos"] == ["tasks/after_heat_1.jpg"]
+        assert repair["task_status"] == "completed"
+
+    def test_create_task_requires_assigned_user_when_team_selected(
+        self, client, db, director_token
+    ):
+        complaint = Complaint(
+            tracking_number="CMPTEAMWARN1",
+            full_name="Resident",
+            phone="0991212121",
+            complaint_type=ComplaintType.HEATING_NETWORK,
+            description="desc",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+        db.refresh(complaint)
+
+        resp = client.post(
+            f"/complaints/{complaint.id}/create-task",
+            json={"title": "Repair", "description": "d", "team_id": 10},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 422
+        assert "assigned_to_id" in (resp.json().get("detail") or "")
+
+    def test_create_task_priority_is_safely_mapped(
+        self, client, db, director_token, field_user
+    ):
+        complaint = Complaint(
+            tracking_number="CMPPRIOR001",
+            full_name="Resident",
+            phone="0993434343",
+            complaint_type=ComplaintType.HEATING_NETWORK,
+            description="desc",
+            status=ComplaintStatus.NEW,
+            priority=ComplaintPriority.HIGH,
+        )
+        db.add(complaint)
+        db.commit()
+        db.refresh(complaint)
+
+        # Default from complaint priority
+        default_resp = client.post(
+            f"/complaints/{complaint.id}/create-task",
+            json={"title": "Repair", "description": "d", "assigned_to_id": field_user.id},
+            headers=_auth_headers(director_token),
+        )
+        assert default_resp.status_code == 200, default_resp.text
+        created = db.query(Task).filter(Task.id == default_resp.json()["id"]).first()
+        assert created is not None
+        assert created.priority == TaskPriority.HIGH
+
+        # Explicit valid task priority by value
+        second = client.post(
+            f"/complaints/{complaint.id}/create-task",
+            json={
+                "title": "Repair 2",
+                "description": "d2",
+                "assigned_to_id": field_user.id,
+                "priority": "urgent",
+                "force": True,
+            },
+            headers=_auth_headers(director_token),
+        )
+        assert second.status_code == 200, second.text
+        created2 = db.query(Task).filter(Task.id == second.json()["id"]).first()
+        assert created2 is not None
+        assert created2.priority == TaskPriority.URGENT
+
+        invalid = client.post(
+            f"/complaints/{complaint.id}/create-task",
+            json={
+                "title": "Repair 3",
+                "description": "d3",
+                "assigned_to_id": field_user.id,
+                "priority": "invalid_priority",
+                "force": True,
+            },
+            headers=_auth_headers(director_token),
+        )
+        assert invalid.status_code == 422

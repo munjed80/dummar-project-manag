@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum,
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.models.enum_utils import enum_values
 import enum
 
 
@@ -17,7 +18,16 @@ class Team(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
-    team_type = Column(SQLEnum(TeamType), nullable=False, default=TeamType.INTERNAL_TEAM)
+    team_type = Column(
+        SQLEnum(
+            TeamType,
+            name="teamtype",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=TeamType.INTERNAL_TEAM,
+    )
     contact_name = Column(String(200), nullable=True)
     contact_phone = Column(String(50), nullable=True)
     is_active = Column(Boolean, default=True, index=True)

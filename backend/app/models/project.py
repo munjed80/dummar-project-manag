@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum,
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.models.enum_utils import enum_values
 import enum
 
 
@@ -20,7 +21,16 @@ class Project(Base):
     title = Column(String(200), nullable=False)
     code = Column(String(50), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    status = Column(SQLEnum(ProjectStatus), nullable=False, default=ProjectStatus.ACTIVE)
+    status = Column(
+        SQLEnum(
+            ProjectStatus,
+            name="projectstatus",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=ProjectStatus.ACTIVE,
+    )
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
     location_id = Column(Integer, ForeignKey("locations.id"), nullable=True, index=True)

@@ -163,6 +163,10 @@ export default function ComplaintDetailsPage() {
       toast.error('العنوان والوصف مطلوبان');
       return;
     }
+    if (convertTeam && !convertAssignee) {
+      toast.error('اختيار فريق تنفيذي فقط غير كافٍ حالياً. يرجى تعيين مستخدم مسؤول عن المهمة.');
+      return;
+    }
     setConverting(true);
     try {
       const payload: any = {
@@ -545,6 +549,11 @@ export default function ComplaintDetailsPage() {
                 </Select>
               </div>
             </div>
+            {convertTeam && !convertAssignee && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                ملاحظة: تعيين الفريق وحده لا يُظهر المهمة لأفراده حالياً. يرجى اختيار مستخدم مسؤول.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={converting}>إلغاء</Button>

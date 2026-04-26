@@ -10,6 +10,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
+from app.models.enum_utils import enum_values
 
 
 class OrgLevel(str, enum.Enum):
@@ -38,7 +39,16 @@ class OrganizationUnit(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False, index=True)
     code = Column(String(50), unique=True, nullable=False, index=True)
-    level = Column(SQLEnum(OrgLevel, name="orglevel"), nullable=False, index=True)
+    level = Column(
+        SQLEnum(
+            OrgLevel,
+            name="orglevel",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+        index=True,
+    )
     parent_id = Column(
         Integer, ForeignKey("organization_units.id"), nullable=True, index=True
     )

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Enum as SQLEnum,
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.models.enum_utils import enum_values
 import enum
 
 
@@ -26,11 +27,24 @@ class InvestmentProperty(Base):
     __tablename__ = "investment_properties"
 
     id = Column(Integer, primary_key=True, index=True)
-    property_type = Column(SQLEnum(PropertyType, name="propertytype"), nullable=False)
+    property_type = Column(
+        SQLEnum(
+            PropertyType,
+            name="propertytype",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
     address = Column(Text, nullable=False)
     area = Column(Numeric(10, 2), nullable=True)
     status = Column(
-        SQLEnum(PropertyStatus, name="propertystatus"),
+        SQLEnum(
+            PropertyStatus,
+            name="propertystatus",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
         nullable=False,
         default=PropertyStatus.AVAILABLE,
     )
