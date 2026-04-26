@@ -15,6 +15,7 @@ import { Spinner, ArrowLeft, Buildings, PencilSimple, Trash } from '@phosphor-ic
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
+import { FileUpload } from '@/components/FileUpload';
 
 // ── Lookup maps ────────────────────────────────────────────────────────────
 
@@ -275,6 +276,50 @@ export default function InvestmentPropertyDetailsPage() {
                   <div className="md:col-span-2">
                     <Label className="text-muted-foreground text-xs">ملاحظات</Label>
                     <p className="mt-1 whitespace-pre-wrap">{property.notes}</p>
+                  </div>
+                )}
+                {(property.property_images?.length > 0 ||
+                  property.property_documents?.length > 0 ||
+                  property.owner_id_image ||
+                  property.additional_attachments?.length > 0) && (
+                  <div className="md:col-span-2 space-y-3">
+                    <Label className="text-muted-foreground text-xs">الصور والمرفقات</Label>
+                    {property.property_images?.length > 0 && (
+                      <FileUpload
+                        category="investment_contracts"
+                        accept="images"
+                        existingFiles={property.property_images}
+                        label="صور العقار"
+                        disabled
+                      />
+                    )}
+                    {property.property_documents?.length > 0 && (
+                      <FileUpload
+                        category="investment_contracts"
+                        accept="documents"
+                        existingFiles={property.property_documents}
+                        label="وثائق العقار"
+                        disabled
+                      />
+                    )}
+                    {property.owner_id_image && (
+                      <FileUpload
+                        category="investment_contracts"
+                        accept="images"
+                        existingFiles={[property.owner_id_image]}
+                        label="صورة هوية المالك"
+                        disabled
+                      />
+                    )}
+                    {property.additional_attachments?.length > 0 && (
+                      <FileUpload
+                        category="investment_contracts"
+                        accept="all"
+                        existingFiles={property.additional_attachments}
+                        label="مرفقات إضافية"
+                        disabled
+                      />
+                    )}
                   </div>
                 )}
                 <div>
