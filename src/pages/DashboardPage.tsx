@@ -141,6 +141,43 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        {/* Investment-contract expiry alerts (90/60/30 + expired). Shown
+            only when at least one bucket is non-zero so we don't add noise
+            for orgs that don't use the investment-contracts module yet. */}
+        {stats && (
+          (stats.investment_contracts_expired || 0) +
+          (stats.investment_contracts_within_90 || 0) > 0
+        ) && (
+          <Card className="border-yellow-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <WarningCircle size={20} className="text-yellow-600" />
+                تنبيهات العقود الاستثمارية
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <Link to="/investment-contracts" className="rounded border border-red-300 bg-red-50 p-3 hover:bg-red-100">
+                  <div className="text-xl font-bold text-red-700">{stats.investment_contracts_expired || 0}</div>
+                  <div className="text-xs text-red-700">منتهية</div>
+                </Link>
+                <Link to="/investment-contracts" className="rounded border border-red-200 bg-red-50/60 p-3 hover:bg-red-100">
+                  <div className="text-xl font-bold text-red-600">{stats.investment_contracts_within_30 || 0}</div>
+                  <div className="text-xs text-red-700">خلال 30 يوم</div>
+                </Link>
+                <Link to="/investment-contracts" className="rounded border border-orange-200 bg-orange-50/60 p-3 hover:bg-orange-100">
+                  <div className="text-xl font-bold text-orange-600">{stats.investment_contracts_within_60 || 0}</div>
+                  <div className="text-xs text-orange-700">خلال 60 يوم</div>
+                </Link>
+                <Link to="/investment-contracts" className="rounded border border-yellow-200 bg-yellow-50/60 p-3 hover:bg-yellow-100">
+                  <div className="text-xl font-bold text-yellow-700">{stats.investment_contracts_within_90 || 0}</div>
+                  <div className="text-xs text-yellow-700">خلال 90 يوم</div>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>

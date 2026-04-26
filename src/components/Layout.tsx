@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, FolderOpen, Plus } from '@phosphor-icons/react';
+import { House, ChatCircleDots, ListChecks, FileText, SignOut, UsersThree, ChartBar, GearSix, MapTrifold, UserCircle, List, X, Brain, FolderOpen, Plus, Buildings } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -72,6 +72,8 @@ export function Layout({ children }: LayoutProps) {
     // Dashboard pages are still routable directly, and surfaced as internal
     // tabs from inside the Complaints Map page.
     { path: '/complaints-map', icon: MapTrifold, label: 'خريطة الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/investment-properties', icon: Buildings, label: 'الأملاك', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
+    { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
     { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },

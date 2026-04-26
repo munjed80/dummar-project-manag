@@ -20,7 +20,9 @@ export type UserRole =
   | 'area_supervisor'
   | 'field_team'
   | 'contractor_user'
-  | 'citizen';
+  | 'citizen'
+  | 'property_manager'
+  | 'investment_manager';
 
 // ── Permission helpers ──
 const COMPLAINT_MANAGERS: UserRole[] = [
