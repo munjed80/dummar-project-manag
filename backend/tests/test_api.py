@@ -59,6 +59,7 @@ class TestPublicComplaintCreation:
         assert data["tracking_number"].startswith("CMP")
         assert data["full_name"] == "أحمد محمد"
         assert data["status"] == "new"
+        assert data["priority"] == "medium"
 
     def test_anon_complaint_with_images(self, client, sample_area):
         payload = {
@@ -74,6 +75,34 @@ class TestPublicComplaintCreation:
         # images must come back as an array
         assert isinstance(data["images"], list)
         assert len(data["images"]) == 2
+
+    def test_public_create_infers_location_id_from_location_text(self, client, db):
+        from app.models.location import Location, LocationType, LocationStatus
+
+        loc = Location(
+            name="الجزيرة 1",
+            code="LOC-PUBLIC-J1",
+            location_type=LocationType.OTHER,
+            status=LocationStatus.ACTIVE,
+            latitude=33.541,
+            longitude=36.221,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+
+        payload = {
+            "full_name": "محمد",
+            "phone": "0992222222",
+            "complaint_type": "other",
+            "description": "شكوى قرب الجزيرة 1",
+            "location_text": "الجزيرة 1",
+        }
+        resp = client.post("/complaints/", json=payload)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["location_id"] == loc.id
+        assert data["priority"] == "medium"
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import string
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.core.database import get_db
-from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus
+from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus, ComplaintPriority
 from app.models.user import User, UserRole
 from app.schemas.complaint import (
     ComplaintCreate,
@@ -93,6 +93,7 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
         area_id=complaint.area_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
+        location_text=complaint.location_text,
     )
     
     db_complaint = Complaint(
@@ -108,6 +109,7 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
         longitude=complaint.longitude,
         images=serialize_file_list(complaint.images),
         status=ComplaintStatus.NEW,
+        priority=ComplaintPriority.MEDIUM,
     )
     
     db.add(db_complaint)

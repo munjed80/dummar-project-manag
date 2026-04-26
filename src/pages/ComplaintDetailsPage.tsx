@@ -404,17 +404,17 @@ export default function ComplaintDetailsPage() {
                   {priorityLabels[complaint.priority] || complaint.priority}
                 </Badge>
               ))}
-              {detail('المنطقة', areaObj ? (
+              {detail('المنطقة / الحي', areaObj ? (
                 <span className="flex items-center gap-1"><MapPin size={14} /> {areaObj.name_ar || areaObj.name}</span>
               ) : '-')}
-              {detail('الموقع', complaint.location_text)}
+              {detail('العنوان التفصيلي', complaint.location_text)}
               {complaint.latitude && complaint.longitude && detail('الإحداثيات', `${complaint.latitude}, ${complaint.longitude}`)}
               {detail('المسؤول المعين', assignedUser ? assignedUser.full_name : '-')}
-              {detail('المشروع', complaint.project_id ? (
+              {detail('المشروع المرتبط', complaint.project_id ? (
                 <Link to={`/projects/${complaint.project_id}`} className="text-primary hover:underline">
                   {projects.find((p: any) => p.id === complaint.project_id)?.title || `#${complaint.project_id}`}
                 </Link>
-              ) : '-')}
+              ) : 'غير مرتبط بمشروع')}
               {detail('تاريخ الإنشاء', complaint.created_at ? format(new Date(complaint.created_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ التحديث', complaint.updated_at ? format(new Date(complaint.updated_at), 'yyyy/MM/dd HH:mm') : '-')}
               {complaint.resolved_at && detail('تاريخ الحل', format(new Date(complaint.resolved_at), 'yyyy/MM/dd HH:mm'))}

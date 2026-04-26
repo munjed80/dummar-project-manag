@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,18 +11,38 @@ import { toast } from 'sonner';
 import { UploadSimple, X, CheckCircle, Copy, ArrowLeft, Info } from '@phosphor-icons/react';
 import { PublicShell } from '@/components/PublicHeader';
 
+
+const FALLBACK_AREAS = [
+  'الجزيرة 1',
+  'الجزيرة 2',
+  'المنطقة التجارية المركزية',
+  'القطاع الشمالي',
+  'القطاع الجنوبي',
+  'منطقة الخدمات',
+  'الحزام الأخضر',
+  'أخرى',
+];
+
 export default function ComplaintSubmitPage() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [complaintType, setComplaintType] = useState('');
   const [description, setDescription] = useState('');
-  const [locationText, setLocationText] = useState('');
+  const [areas, setAreas] = useState<any[]>([]);
+  const [selectedArea, setSelectedArea] = useState('');
+  const [detailedAddress, setDetailedAddress] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    apiService.getAreas()
+      .then((data) => setAreas(Array.isArray(data) ? data : []))
+      .catch(() => setAreas([]));
+  }, []);
 
   const copyTracking = async () => {
     try {
@@ -53,12 +73,20 @@ export default function ComplaintSubmitPage() {
 
     setSubmitting(true);
     try {
+      const selectedAreaObj = areas.find((a: any) => String(a.id) === selectedArea);
+      const selectedAreaName = selectedAreaObj
+        ? (selectedAreaObj.name_ar || selectedAreaObj.name)
+        : (selectedArea.startsWith('fallback:') ? selectedArea.replace('fallback:', '') : '');
+
+      const composedAddress = [selectedAreaName, detailedAddress.trim()].filter(Boolean).join(' - ');
+
       const result = await apiService.submitComplaintWithAttachments({
         full_name: fullName,
         phone,
         complaint_type: complaintType,
         description,
-        location_text: locationText,
+        area_id: selectedAreaObj ? Number(selectedAreaObj.id) : undefined,
+        location_text: composedAddress || undefined,
       }, imageFiles);
 
       if (result?.queued) {
@@ -209,12 +237,30 @@ export default function ComplaintSubmitPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="locationText">العنوان التفصيلي</Label>
+                <Label htmlFor="area">المنطقة / الحي</Label>
+                <Select value={selectedArea} onValueChange={setSelectedArea}>
+                  <SelectTrigger id="area">
+                    <SelectValue placeholder="اختر المنطقة / الحي" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {areas.length > 0
+                      ? areas.map((a: any) => (
+                        <SelectItem key={a.id} value={String(a.id)}>{a.name_ar || a.name}</SelectItem>
+                      ))
+                      : FALLBACK_AREAS.map((name) => (
+                        <SelectItem key={name} value={`fallback:${name}`}>{name}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="detailedAddress">العنوان التفصيلي</Label>
                 <Input
-                  id="locationText"
-                  value={locationText}
-                  onChange={(e) => setLocationText(e.target.value)}
-                  placeholder="مثال: جزيرة أ، البرج 1، الطابق 3، الشقة 12"
+                  id="detailedAddress"
+                  value={detailedAddress}
+                  onChange={(e) => setDetailedAddress(e.target.value)}
+                  placeholder="الجزيرة 10، البرج 3، الطابق 3، الشقة 23"
                 />
                 <p className="text-xs text-muted-foreground">
                   حاول كتابة عنوان تفصيلي واضح (الجزيرة/البرج/الشارع/الطابق) ليصل الفريق بسرعة.
