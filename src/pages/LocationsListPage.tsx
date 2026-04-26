@@ -188,7 +188,7 @@ export default function LocationsListPage() {
       <div className="space-y-6">
         <GeoSubNav active="locations" />
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">المواقع والجغرافيا التشغيلية</h1>
+          <h1 className="text-2xl font-bold">المواقع المرجعية</h1>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setShowCreateDialog(true)}>
               <Plus size={16} className="ml-1" />

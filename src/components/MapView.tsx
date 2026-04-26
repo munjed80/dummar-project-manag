@@ -37,6 +37,21 @@ const taskStatusColors: Record<string, string> = {
   cancelled: '#6B7280',
 };
 
+const projectStatusColors: Record<string, string> = {
+  planned: '#F59E0B',
+  active: '#10B981',
+  on_hold: '#8B5CF6',
+  completed: '#3B82F6',
+  cancelled: '#6B7280',
+};
+
+const locationStatusColors: Record<string, string> = {
+  active: '#0EA5E9',
+  inactive: '#9CA3AF',
+  under_construction: '#F59E0B',
+  demolished: '#6B7280',
+};
+
 // Entity-type shape markers
 function createComplaintIcon(color: string) {
   return L.divIcon({
@@ -71,10 +86,52 @@ function createTaskIcon(color: string) {
   });
 }
 
+function createProjectIcon(color: string) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-bottom: 22px solid ${color};
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+    "></div>`,
+    iconSize: [24, 22],
+    iconAnchor: [12, 18],
+    popupAnchor: [0, -16],
+  });
+}
+
+function createLocationIcon(color: string) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      width: 20px; height: 20px;
+      background: ${color};
+      border: 2px solid white;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    "></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 18],
+    popupAnchor: [0, -16],
+  });
+}
+
 function getMarkerIcon(marker: MapMarker) {
   if (marker.entity_type === 'task') {
     const color = taskStatusColors[marker.status || ''] || '#3B82F6';
     return createTaskIcon(color);
+  }
+  if (marker.entity_type === 'project') {
+    const color = projectStatusColors[marker.status || ''] || '#10B981';
+    return createProjectIcon(color);
+  }
+  if (marker.entity_type === 'location') {
+    const color = locationStatusColors[marker.status || ''] || '#0EA5E9';
+    return createLocationIcon(color);
   }
   // Default: complaint (circle)
   const color = complaintStatusColors[marker.status || ''] || '#3B82F6';
@@ -93,7 +150,7 @@ export interface MapMarker {
   description?: string;
   status?: string;
   tracking_number?: string;
-  entity_type?: string; // 'complaint' | 'task'
+  entity_type?: string; // 'complaint' | 'task' | 'project' | 'location'
   reference?: string;
   priority?: string;
 }
@@ -134,11 +191,21 @@ const statusLabels: Record<string, string> = {
   pending: 'معلقة',
   completed: 'مكتملة',
   cancelled: 'ملغاة',
+  // Projects
+  planned: 'مخطط',
+  active: 'نشط',
+  on_hold: 'متوقف مؤقتاً',
+  // Locations
+  inactive: 'غير نشط',
+  under_construction: 'قيد الإنشاء',
+  demolished: 'مزال',
 };
 
 const entityTypeLabels: Record<string, string> = {
   complaint: 'شكوى',
   task: 'مهمة',
+  project: 'مشروع',
+  location: 'موقع مرجعي',
 };
 
 // ---------------------------------------------------------------------------
@@ -226,7 +293,11 @@ export function MapView({
                       background:
                         marker.entity_type === 'task'
                           ? taskStatusColors[marker.status] || '#6B7280'
-                          : complaintStatusColors[marker.status] || '#6B7280',
+                          : marker.entity_type === 'project'
+                            ? projectStatusColors[marker.status] || '#6B7280'
+                            : marker.entity_type === 'location'
+                              ? locationStatusColors[marker.status] || '#6B7280'
+                              : complaintStatusColors[marker.status] || '#6B7280',
                     }}
                   >
                     {statusLabels[marker.status] || marker.status}

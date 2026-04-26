@@ -1066,7 +1066,7 @@ class ApiService {
   }
 
   // ── GIS / Operations Map ──
-  async getOperationsMapMarkers(params?: { entity_type?: string; status_filter?: string; area_id?: number }): Promise<any[]> {
+  async getOperationsMapMarkers(params?: { entity_type?: string; status_filter?: string; area_id?: number }): Promise<{ markers: any[]; items_without_coordinates: any[] }> {
     const qp = new URLSearchParams();
     if (params?.entity_type) qp.append('entity_type', params.entity_type);
     if (params?.status_filter) qp.append('status_filter', params.status_filter);

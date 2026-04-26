@@ -431,7 +431,9 @@ class TestGISEndpoints:
         resp = client.get("/gis/operations-map", headers=_auth_headers(director_token))
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
+        assert isinstance(data, dict)
+        assert "markers" in data
+        assert "items_without_coordinates" in data
 
     def test_operations_map_filter_by_entity_type(self, client, director_token):
         resp = client.get(
@@ -439,7 +441,7 @@ class TestGISEndpoints:
             headers=_auth_headers(director_token),
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["markers"]
         assert isinstance(data, list)
         # All returned items should be complaints
         for item in data:
@@ -451,7 +453,7 @@ class TestGISEndpoints:
             headers=_auth_headers(director_token),
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["markers"]
         assert isinstance(data, list)
         for item in data:
             assert item["entity_type"] == "task"
@@ -487,12 +489,62 @@ class TestGISEndpoints:
 
         resp = client.get("/gis/operations-map", headers=_auth_headers(director_token))
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["markers"]
         assert len(data) >= 1
         found = [m for m in data if m["reference"] == "CMP99990001"]
         assert len(found) == 1
         assert found[0]["entity_type"] == "complaint"
         assert found[0]["latitude"] == 33.537
+
+    def test_operations_map_includes_project_from_linked_location(self, client, db, director_token):
+        from app.models.location import Location, LocationType, LocationStatus
+        from app.models.project import Project, ProjectStatus
+
+        loc = Location(
+            name="موقع مشروع GIS",
+            code="LOC-GIS-PRJ-1",
+            location_type=LocationType.OTHER,
+            status=LocationStatus.ACTIVE,
+            latitude=33.54,
+            longitude=36.23,
+            is_active=1,
+        )
+        db.add(loc)
+        db.commit()
+        db.refresh(loc)
+
+        project = Project(
+            title="مشروع GIS",
+            code="PRJ-GIS-1",
+            status=ProjectStatus.ACTIVE,
+            location_id=loc.id,
+        )
+        db.add(project)
+        db.commit()
+
+        resp = client.get("/gis/operations-map?entity_type=project", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        payload = resp.json()
+        markers = payload["markers"]
+        assert any(m["reference"] == "PRJ-GIS-1" for m in markers)
+
+    def test_operations_map_lists_items_without_coordinates(self, client, db, director_token):
+        from app.models.project import Project, ProjectStatus
+
+        project = Project(
+            title="مشروع بدون إحداثيات",
+            code="PRJ-NO-COORD",
+            status=ProjectStatus.PLANNED,
+            location_id=None,
+        )
+        db.add(project)
+        db.commit()
+
+        resp = client.get("/gis/operations-map?entity_type=project", headers=_auth_headers(director_token))
+        assert resp.status_code == 200
+        payload = resp.json()
+        unlocated = payload["items_without_coordinates"]
+        assert any(i["reference"] == "PRJ-NO-COORD" and i["entity_type"] == "project" for i in unlocated)
 
 
 # ---------------------------------------------------------------------------

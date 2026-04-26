@@ -109,7 +109,7 @@ export default function GeoDashboardPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <TreeStructure size={28} className="text-primary" />
-            لوحة البيانات الجغرافية
+            التحليلات الجغرافية
           </h1>
           <div className="flex gap-2">
             <Link to="/locations">
