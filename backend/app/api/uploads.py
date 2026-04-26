@@ -14,7 +14,7 @@ router = APIRouter(prefix="/uploads", tags=["uploads"])
 limiter = Limiter(key_func=get_remote_address)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
-ALLOWED_CATEGORIES = {"general", "contracts", "complaints", "tasks", "profiles", "contract_intelligence"}
+ALLOWED_CATEGORIES = {"general", "contracts", "complaints", "tasks", "profiles", "contract_intelligence", "investment_contracts"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Extensions allowed for public (anonymous) complaint attachments
@@ -24,7 +24,7 @@ _PUBLIC_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf"}
 PUBLIC_CATEGORIES = {"complaints", "profiles", "general", "tasks"}
 
 # Categories that contain sensitive operational data.
-SENSITIVE_CATEGORIES = {"contracts", "contract_intelligence"}
+SENSITIVE_CATEGORIES = {"contracts", "contract_intelligence", "investment_contracts"}
 
 # Strict allowlist regex for stored filenames. We only ever write filenames
 # of the form `<uuid4().hex><ext>` so this is sufficient and cannot match
@@ -151,6 +151,21 @@ def get_contract_intelligence_file(
 ):
     """Return a contract-intelligence document. Requires internal staff auth."""
     return _serve_file("contract_intelligence", filename)
+
+
+@router.get("/investment_contracts/{filename}")
+def get_investment_contract_file(
+    filename: str,
+    current_user: User = Depends(get_current_internal_user),
+):
+    """Return an investment-contract attachment. Requires internal staff auth.
+
+    Fine-grained per-document authorization (e.g. limiting property_manager
+    to view-only) is enforced at the contract record level by the
+    /investment-contracts endpoints; this serve handler only gates raw bytes
+    behind any authenticated internal user.
+    """
+    return _serve_file("investment_contracts", filename)
 
 
 def _serve_file(category: str, filename: str) -> FileResponse:

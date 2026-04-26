@@ -29,7 +29,7 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   available: 'متاح',
-  invested: 'مستثمر / مؤجر',
+  invested: 'مستثمر',
   maintenance: 'قيد الصيانة',
   suspended: 'متوقف',
   unfit: 'غير صالح',
@@ -56,7 +56,7 @@ export default function InvestmentPropertyDetailsPage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const canManage = role && ['project_director', 'contracts_manager', 'property_manager'].includes(role);
+  const canManage = role && ['project_director', 'property_manager'].includes(role);
 
   const [form, setForm] = useState({
     property_type: 'building',
@@ -182,7 +182,7 @@ export default function InvestmentPropertyDetailsPage() {
       <div className="space-y-4">
         <Button variant="ghost" onClick={() => navigate('/investment-properties')}>
           <ArrowLeft size={20} className="ml-1" />
-          العودة إلى الأملاك الاستثمارية
+          العودة إلى الأملاك
         </Button>
 
         <Card>

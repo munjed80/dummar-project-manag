@@ -41,6 +41,8 @@ const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const PublicLandingPage = lazy(() => import('@/pages/PublicLandingPage'));
 const InvestmentPropertiesPage = lazy(() => import('@/pages/InvestmentPropertiesPage'));
 const InvestmentPropertyDetailsPage = lazy(() => import('@/pages/InvestmentPropertyDetailsPage'));
+const InvestmentContractsPage = lazy(() => import('@/pages/InvestmentContractsPage'));
+const InvestmentContractDetailsPage = lazy(() => import('@/pages/InvestmentContractDetailsPage'));
 
 function PageLoader() {
   return (
@@ -108,11 +110,18 @@ const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
   'project_director', 'contracts_manager',
 ];
 
-// Roles that can access investment properties
+// Roles that can access investment properties (per spec: director, property
+// manager, investment manager view, contracts manager view).
 const INVESTMENT_PROPERTIES_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor',
+  'project_director', 'contracts_manager',
   'property_manager', 'investment_manager',
+];
+
+// Roles that can access investment contracts (per spec: director,
+// contracts_manager, investment_manager full access; property_manager view).
+const INVESTMENT_CONTRACTS_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager',
+  'investment_manager', 'property_manager',
 ];
 
 function RootRoute() {
@@ -176,6 +185,8 @@ function App() {
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/investment-properties" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertiesPage /></RoleProtectedRoute>} />
           <Route path="/investment-properties/:id" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertyDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/investment-contracts" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractsPage /></RoleProtectedRoute>} />
+          <Route path="/investment-contracts/:id" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractDetailsPage /></RoleProtectedRoute>}/>
         </Routes>
       </Suspense>
     </BrowserRouter>

@@ -2,11 +2,10 @@
 Tests for Investment Properties CRUD and permission enforcement.
 
 Covers:
-- project_director creates, lists, filters, searches, updates, deletes properties
-- contracts_manager can create/update/delete
-- field_team cannot create/update/delete (403)
-- contractor_user cannot create (403)
-- citizen cannot access management endpoints (403)
+- project_director and property_manager create, list, filter, search,
+  update, delete properties
+- contracts_manager and investment_manager are read-only (view-only)
+- field_team, contractor_user, citizen cannot access at all (403)
 - validation: invalid property_type or status returns 422
 """
 import pytest
@@ -219,9 +218,13 @@ class TestDirectorCRUD:
 # ---------------------------------------------------------------------------
 
 class TestContractsManagerPermissions:
-    def test_contracts_manager_can_create(self, client, db):
+    """Per the property module spec, contracts_manager has READ-ONLY access
+    to investment properties (write access is now reserved to project_director
+    and property_manager). Contracts_manager retains full CRUD on contracts."""
+
+    def test_contracts_manager_cannot_create(self, client, db):
         from tests.conftest import _create_user, _login
-        mgr = _create_user(db, "test_cm", UserRole.CONTRACTS_MANAGER)
+        _create_user(db, "test_cm", UserRole.CONTRACTS_MANAGER)
         token = _login(client, "test_cm")
 
         resp = client.post(
@@ -229,9 +232,9 @@ class TestContractsManagerPermissions:
             json=_make_property_payload(),
             headers=_auth(token),
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 403
 
-    def test_contracts_manager_can_update(self, client, db):
+    def test_contracts_manager_cannot_update(self, client, db):
         from tests.conftest import _create_user, _login
         _create_user(db, "test_cm2", UserRole.CONTRACTS_MANAGER)
         token = _login(client, "test_cm2")
@@ -250,10 +253,9 @@ class TestContractsManagerPermissions:
             json={"status": "maintenance"},
             headers=_auth(token),
         )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "maintenance"
+        assert resp.status_code == 403
 
-    def test_contracts_manager_can_delete(self, client, db):
+    def test_contracts_manager_cannot_delete(self, client, db):
         from tests.conftest import _create_user, _login
         _create_user(db, "test_cm3", UserRole.CONTRACTS_MANAGER)
         token = _login(client, "test_cm3")
@@ -268,7 +270,22 @@ class TestContractsManagerPermissions:
         db.refresh(prop)
 
         resp = client.delete(f"/investment-properties/{prop.id}", headers=_auth(token))
+        assert resp.status_code == 403
+
+    def test_contracts_manager_can_list(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_cm_list", UserRole.CONTRACTS_MANAGER)
+        token = _login(client, "test_cm_list")
+
+        db.add(InvestmentProperty(
+            property_type=PropertyType.BUILDING, address="بناء",
+            status=PropertyStatus.AVAILABLE,
+        ))
+        db.commit()
+
+        resp = client.get("/investment-properties/", headers=_auth(token))
         assert resp.status_code == 200
+        assert resp.json()["total_count"] == 1
 
 
 # ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   available: 'متاح',
-  invested: 'مستثمر / مؤجر',
+  invested: 'مستثمر',
   maintenance: 'قيد الصيانة',
   suspended: 'متوقف',
   unfit: 'غير صالح',
@@ -289,7 +289,7 @@ export default function InvestmentPropertiesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<any>(null);
 
-  const canManage = role && ['project_director', 'contracts_manager', 'property_manager'].includes(role);
+  const canManage = role && ['project_director', 'property_manager'].includes(role);
 
   const fetchProperties = useCallback(() => {
     setLoading(true);
@@ -303,7 +303,7 @@ export default function InvestmentPropertiesPage() {
         setProperties(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(err => setError(describeLoadError(err, 'الأملاك الاستثمارية').message))
+      .catch(err => setError(describeLoadError(err, 'الأملاك').message))
       .finally(() => setLoading(false));
   }, [page, typeFilter, statusFilter, search]);
 
@@ -341,7 +341,7 @@ export default function InvestmentPropertiesPage() {
           <div className="flex justify-between items-center flex-wrap gap-2">
             <CardTitle className="text-2xl flex items-center gap-2">
               <Buildings size={28} />
-              الأملاك الاستثمارية
+              الأملاك
             </CardTitle>
             {canManage && (
               <Button onClick={handleCreate}>

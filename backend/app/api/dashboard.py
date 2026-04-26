@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintStatus
 from app.models.task import Task, TaskStatus
 from app.models.contract import Contract, ContractStatus
+from app.models.investment_contract import InvestmentContract, InvestmentContractStatus
 from app.models.user import User
 from app.schemas.dashboard import DashboardStats, RecentActivity
 from app.api.deps import get_current_user, get_current_internal_user
@@ -55,7 +56,54 @@ def get_dashboard_stats(
         Contract.end_date <= threshold_date,
         Contract.end_date >= date.today()
     ).scalar()
-    
+
+    # Investment contracts: count expiry buckets used by the contracts page.
+    today = date.today()
+    inv_active = db.query(InvestmentContract).filter(
+        InvestmentContract.is_active == True,
+        InvestmentContract.status != InvestmentContractStatus.CANCELLED,
+    )
+    inv_total = inv_active.count()
+    inv_expired = (
+        db.query(func.count(InvestmentContract.id))
+        .filter(
+            InvestmentContract.is_active == True,
+            InvestmentContract.status != InvestmentContractStatus.CANCELLED,
+            InvestmentContract.end_date < today,
+        )
+        .scalar()
+    )
+    inv_within_30 = (
+        db.query(func.count(InvestmentContract.id))
+        .filter(
+            InvestmentContract.is_active == True,
+            InvestmentContract.status != InvestmentContractStatus.CANCELLED,
+            InvestmentContract.end_date >= today,
+            InvestmentContract.end_date <= today + timedelta(days=30),
+        )
+        .scalar()
+    )
+    inv_within_60 = (
+        db.query(func.count(InvestmentContract.id))
+        .filter(
+            InvestmentContract.is_active == True,
+            InvestmentContract.status != InvestmentContractStatus.CANCELLED,
+            InvestmentContract.end_date >= today,
+            InvestmentContract.end_date <= today + timedelta(days=60),
+        )
+        .scalar()
+    )
+    inv_within_90 = (
+        db.query(func.count(InvestmentContract.id))
+        .filter(
+            InvestmentContract.is_active == True,
+            InvestmentContract.status != InvestmentContractStatus.CANCELLED,
+            InvestmentContract.end_date >= today,
+            InvestmentContract.end_date <= today + timedelta(days=90),
+        )
+        .scalar()
+    )
+
     return DashboardStats(
         total_complaints=total_complaints,
         complaints_by_status=complaints_by_status,
@@ -64,6 +112,11 @@ def get_dashboard_stats(
         total_contracts=total_contracts,
         active_contracts=active_contracts,
         contracts_nearing_expiry=contracts_nearing_expiry,
+        total_investment_contracts=inv_total,
+        investment_contracts_expired=inv_expired,
+        investment_contracts_within_30=inv_within_30,
+        investment_contracts_within_60=inv_within_60,
+        investment_contracts_within_90=inv_within_90,
     )
 
 

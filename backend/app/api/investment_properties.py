@@ -18,8 +18,17 @@ router = APIRouter(prefix="/investment-properties", tags=["investment-properties
 
 _property_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
-    UserRole.CONTRACTS_MANAGER,
     UserRole.PROPERTY_MANAGER,
+)
+
+# Roles that may view investment properties (read-only access for
+# investment_manager and contracts_manager; full management for the
+# property_managers role group above).
+_property_viewers = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.PROPERTY_MANAGER,
+    UserRole.INVESTMENT_MANAGER,
+    UserRole.CONTRACTS_MANAGER,
 )
 
 
@@ -58,7 +67,7 @@ def list_investment_properties(
     type: Optional[PropertyType] = None,
     status: Optional[PropertyStatus] = None,
     q: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_property_viewers),
     db: Session = Depends(get_db),
 ):
     query = db.query(InvestmentProperty).filter(InvestmentProperty.is_active == True)
@@ -88,7 +97,7 @@ def list_investment_properties(
 @router.get("/{property_id}", response_model=InvestmentPropertyResponse)
 def get_investment_property(
     property_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_property_viewers),
     db: Session = Depends(get_db),
 ):
     prop = db.query(InvestmentProperty).filter(InvestmentProperty.id == property_id).first()

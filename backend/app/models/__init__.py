@@ -29,6 +29,11 @@ from app.models.execution_log import (
     ACTION_TYPE_TASK,
 )
 from app.models.investment_property import InvestmentProperty, PropertyType, PropertyStatus
+from app.models.investment_contract import (
+    InvestmentContract,
+    InvestmentType,
+    InvestmentContractStatus,
+)
 
 __all__ = [
     "Base",
@@ -83,4 +88,7 @@ __all__ = [
     "InvestmentProperty",
     "PropertyType",
     "PropertyStatus",
+    "InvestmentContract",
+    "InvestmentType",
+    "InvestmentContractStatus",
 ]

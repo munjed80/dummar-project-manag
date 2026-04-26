@@ -72,7 +72,8 @@ export function Layout({ children }: LayoutProps) {
     // Dashboard pages are still routable directly, and surfaced as internal
     // tabs from inside the Complaints Map page.
     { path: '/complaints-map', icon: MapTrifold, label: 'خريطة الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/investment-properties', icon: Buildings, label: 'الأملاك الاستثمارية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'property_manager', 'investment_manager'] },
+    { path: '/investment-properties', icon: Buildings, label: 'الأملاك', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
+    { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
     { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },

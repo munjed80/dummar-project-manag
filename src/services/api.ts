@@ -1371,6 +1371,88 @@ class ApiService {
     return response.json();
   }
 
+  // ── Investment Contracts ──
+  async listInvestmentContracts(params?: {
+    property_id?: number;
+    investor?: string;
+    status_filter?: string;
+    end_date_before?: string;
+    q?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<any>> {
+    const qp = new URLSearchParams();
+    if (params?.property_id !== undefined) qp.append('property_id', String(params.property_id));
+    if (params?.investor) qp.append('investor', params.investor);
+    if (params?.status_filter) qp.append('status_filter', params.status_filter);
+    if (params?.end_date_before) qp.append('end_date_before', params.end_date_before);
+    if (params?.q) qp.append('q', params.q);
+    if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
+    if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-contracts/?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch investment contracts');
+    return response.json();
+  }
+
+  async listExpiringInvestmentContracts(params?: {
+    within_days?: number;
+    include_expired?: boolean;
+  }): Promise<any[]> {
+    const qp = new URLSearchParams();
+    if (params?.within_days !== undefined) qp.append('within_days', String(params.within_days));
+    if (params?.include_expired !== undefined) qp.append('include_expired', String(params.include_expired));
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-contracts/expiring?${qp}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch expiring contracts');
+    return response.json();
+  }
+
+  async getInvestmentContract(id: number): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-contracts/${id}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch investment contract');
+    return response.json();
+  }
+
+  async createInvestmentContract(data: any): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-contracts/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to create investment contract');
+    return response.json();
+  }
+
+  async updateInvestmentContract(id: number, data: any): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-contracts/${id}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to update investment contract');
+    return response.json();
+  }
+
+  async deleteInvestmentContract(id: number): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/investment-contracts/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to delete investment contract');
+    return response.json();
+  }
+
+  async uploadInvestmentContractFile(file: File): Promise<{ filename: string; path: string }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/uploads/?category=investment_contracts`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` },
+      body: fd,
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to upload file');
+    return response.json();
+  }
+
   logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('cached_user');
