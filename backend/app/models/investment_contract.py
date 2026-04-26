@@ -17,6 +17,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+from app.models.enum_utils import enum_values
 import enum
 
 
@@ -56,7 +57,12 @@ class InvestmentContract(Base):
     investor_contact = Column(String(200), nullable=True)
 
     investment_type = Column(
-        SQLEnum(InvestmentType, name="investmenttype"),
+        SQLEnum(
+            InvestmentType,
+            name="investmenttype",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
         nullable=False,
         default=InvestmentType.LEASE,
     )
@@ -66,7 +72,12 @@ class InvestmentContract(Base):
     contract_value = Column(Numeric(15, 2), nullable=False)
 
     status = Column(
-        SQLEnum(InvestmentContractStatus, name="investmentcontractstatus"),
+        SQLEnum(
+            InvestmentContractStatus,
+            name="investmentcontractstatus",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
         nullable=False,
         default=InvestmentContractStatus.ACTIVE,
     )

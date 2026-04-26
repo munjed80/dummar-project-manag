@@ -31,6 +31,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
+from app.models.enum_utils import enum_values
 import enum
 
 
@@ -49,7 +50,16 @@ class Automation(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
-    trigger = Column(SQLEnum(AutomationTrigger), nullable=False, index=True)
+    trigger = Column(
+        SQLEnum(
+            AutomationTrigger,
+            name="automationtrigger",
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+        index=True,
+    )
 
     # JSON-encoded list of {field, operator, value} predicates.
     # Stored as Text to keep the migration portable across SQLite/PG.
