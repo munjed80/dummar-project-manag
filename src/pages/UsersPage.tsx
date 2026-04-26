@@ -23,6 +23,8 @@ import {
 import { MagnifyingGlass, Spinner, UserPlus, PencilSimple, UserMinus, Key } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { describeLoadError } from '@/lib/loadError';
+import { ApiError } from '@/services/api';
 
 const roleLabels: Record<string, string> = {
   project_director: 'مدير المشروع',
@@ -68,6 +70,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
 
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
+  const [activateTarget, setActivateTarget] = useState<User | null>(null);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [resetForceChange, setResetForceChange] = useState(true);
@@ -83,12 +86,22 @@ export default function UsersPage() {
       const result = await apiService.getUsers(params);
       setUsers(result.items);
       setTotalCount(result.total_count);
-    } catch {
-      setError('فشل تحميل المستخدمين');
+    } catch (err) {
+      setError(describeLoadError(err, 'المستخدمين').message);
     } finally {
       setLoading(false);
     }
   }, [page, search, roleFilter]);
+
+  const toArabicActionError = (err: unknown, fallback: string): string => {
+    if (err instanceof ApiError) {
+      if (err.status === 401) return 'انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.';
+      if (err.status === 403) return 'ليس لديك صلاحية لتنفيذ هذا الإجراء.';
+      if (err.status === 400 && err.detail) return `تعذّر تنفيذ الطلب: ${err.detail}`;
+      if (err.detail) return `تعذّر تنفيذ الطلب: ${err.detail}`;
+    }
+    return fallback;
+  };
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -143,9 +156,9 @@ export default function UsersPage() {
         toast.success('تم إنشاء المستخدم بنجاح');
       }
       setDialogOpen(false);
-      fetchUsers();
+      await fetchUsers();
     } catch (err: any) {
-      toast.error(err.message || 'فشل حفظ المستخدم');
+      toast.error(toArabicActionError(err, 'فشل حفظ المستخدم'));
     } finally {
       setSaving(false);
     }
@@ -167,9 +180,9 @@ export default function UsersPage() {
       setResetTarget(null);
       setResetPassword('');
       setResetForceChange(true);
-      fetchUsers();
-    } catch (err: any) {
-      toast.error(err.message || 'فشل تغيير كلمة المرور');
+      await fetchUsers();
+    } catch (err) {
+      toast.error(toArabicActionError(err, 'فشل تغيير كلمة المرور'));
     } finally {
       setResetting(false);
     }
@@ -181,9 +194,21 @@ export default function UsersPage() {
       await apiService.deactivateUser(deactivateTarget.id);
       toast.success('تم إلغاء تفعيل المستخدم');
       setDeactivateTarget(null);
-      fetchUsers();
-    } catch {
-      toast.error('فشل إلغاء تفعيل المستخدم');
+      await fetchUsers();
+    } catch (err) {
+      toast.error(toArabicActionError(err, 'فشل إلغاء تفعيل المستخدم'));
+    }
+  };
+
+  const handleActivate = async () => {
+    if (!activateTarget) return;
+    try {
+      await apiService.updateUser(activateTarget.id, { is_active: 1 });
+      toast.success('تم تفعيل المستخدم');
+      setActivateTarget(null);
+      await fetchUsers();
+    } catch (err) {
+      toast.error(toArabicActionError(err, 'فشل تفعيل المستخدم'));
     }
   };
 
@@ -202,7 +227,7 @@ export default function UsersPage() {
             <div className="relative flex-1 min-w-[200px]">
               <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <Input
-                placeholder="بحث بالاسم أو البريد..."
+                placeholder="بحث بالاسم أو اسم المستخدم..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 className="pr-10"
@@ -280,7 +305,11 @@ export default function UsersPage() {
                               <Button variant="ghost" size="sm" onClick={() => setDeactivateTarget(u)} className="text-destructive" title="إلغاء التفعيل">
                                 <UserMinus size={16} />
                               </Button>
-                            ) : null}
+                            ) : (
+                              <Button variant="ghost" size="sm" onClick={() => setActivateTarget(u)} title="تفعيل المستخدم">
+                                تفعيل
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -407,6 +436,24 @@ export default function UsersPage() {
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeactivate} className="bg-destructive text-destructive-foreground">
               إلغاء التفعيل
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Activate Confirmation */}
+      <AlertDialog open={!!activateTarget} onOpenChange={(open) => { if (!open) setActivateTarget(null); }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد تفعيل المستخدم</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل تريد تفعيل المستخدم "{activateTarget?.full_name}" ليتمكن من تسجيل الدخول؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction onClick={handleActivate}>
+              تفعيل
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
