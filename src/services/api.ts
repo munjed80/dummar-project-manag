@@ -1,4 +1,5 @@
 import { config } from '@/config';
+import { generateIdempotencyKey, offlineSyncManager, shouldQueueForOffline } from '@/services/offlineSync';
 
 const API_BASE_URL = config.API_BASE_URL;
 
@@ -294,13 +295,63 @@ class ApiService {
   }
 
   async createComplaint(data: any): Promise<any> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/complaints/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sanitizeJsonPayload(data)),
-    });
-    if (!response.ok) await throwApiError(response, 'Failed to create complaint');
-    return response.json();
+    const idempotencyKey = generateIdempotencyKey('complaint');
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/complaints/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(sanitizeJsonPayload(data)),
+      });
+      if (!response.ok) await throwApiError(response, 'Failed to create complaint');
+      return response.json();
+    } catch (error) {
+      if (!shouldQueueForOffline(error)) throw error;
+      await offlineSyncManager.queueOperation({
+        operation_type: 'complaint_submit',
+        endpoint: '/complaints/',
+        method: 'POST',
+        payload: sanitizeJsonPayload(data),
+        idempotency_key: idempotencyKey,
+      });
+      return { queued: true };
+    }
+  }
+
+  async submitComplaintWithAttachments(data: any, attachments: File[] = []): Promise<any> {
+    const idempotencyKey = generateIdempotencyKey('complaint');
+    if (!navigator.onLine) {
+      await offlineSyncManager.queueOperation({
+        operation_type: 'complaint_submit',
+        endpoint: '/complaints/',
+        method: 'POST',
+        payload: sanitizeJsonPayload(data),
+        attachments,
+        idempotency_key: idempotencyKey,
+      });
+      return { queued: true };
+    }
+    try {
+      const imagePaths: string[] = [];
+      for (const file of attachments) {
+        const upload = await this.uploadFilePublic(file);
+        imagePaths.push(upload.path);
+      }
+      return this.createComplaint({
+        ...data,
+        ...(imagePaths.length > 0 ? { images: imagePaths } : {}),
+      });
+    } catch (error) {
+      if (!shouldQueueForOffline(error)) throw error;
+      await offlineSyncManager.queueOperation({
+        operation_type: 'complaint_submit',
+        endpoint: '/complaints/',
+        method: 'POST',
+        payload: sanitizeJsonPayload(data),
+        attachments,
+        idempotency_key: idempotencyKey,
+      });
+      return { queued: true };
+    }
   }
 
   async trackComplaint(tracking_number: string, phone: string): Promise<any> {
@@ -365,14 +416,29 @@ class ApiService {
     return response.json();
   }
 
-  async updateTask(id: number, data: any): Promise<any> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(sanitizeJsonPayload(data)),
-    });
-    if (!response.ok) await throwApiError(response, 'Failed to update task');
-    return response.json();
+  async updateTask(id: number, data: any, options?: { afterRepairPhotos?: File[] }): Promise<any> {
+    const sanitizedData = sanitizeJsonPayload(data);
+    const idempotencyKey = generateIdempotencyKey(`task-${id}`);
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, {
+        method: 'PUT',
+        headers: { ...this.getAuthHeaders(), 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(sanitizedData),
+      });
+      if (!response.ok) await throwApiError(response, 'Failed to update task');
+      return response.json();
+    } catch (error) {
+      if (!shouldQueueForOffline(error)) throw error;
+      await offlineSyncManager.queueOperation({
+        operation_type: 'task_update',
+        endpoint: `/tasks/${id}`,
+        method: 'PUT',
+        payload: sanitizedData,
+        attachments: options?.afterRepairPhotos || [],
+        idempotency_key: idempotencyKey,
+      });
+      return { queued: true };
+    }
   }
 
   async getTaskActivities(id: number): Promise<any[]> {
@@ -1343,23 +1409,51 @@ class ApiService {
   }
 
   async createInvestmentProperty(data: any): Promise<any> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(sanitizeJsonPayload(data)),
-    });
-    if (!response.ok) await throwApiError(response, 'Failed to create investment property');
-    return response.json();
+    const sanitizedData = sanitizeJsonPayload(data);
+    const idempotencyKey = generateIdempotencyKey('investment-property-create');
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/`, {
+        method: 'POST',
+        headers: { ...this.getAuthHeaders(), 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(sanitizedData),
+      });
+      if (!response.ok) await throwApiError(response, 'Failed to create investment property');
+      return response.json();
+    } catch (error) {
+      if (!shouldQueueForOffline(error)) throw error;
+      await offlineSyncManager.queueOperation({
+        operation_type: 'property_create_draft',
+        endpoint: '/investment-properties/',
+        method: 'POST',
+        payload: sanitizedData,
+        idempotency_key: idempotencyKey,
+      });
+      return { queued: true };
+    }
   }
 
   async updateInvestmentProperty(id: number, data: any): Promise<any> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/${id}`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(sanitizeJsonPayload(data)),
-    });
-    if (!response.ok) await throwApiError(response, 'Failed to update investment property');
-    return response.json();
+    const sanitizedData = sanitizeJsonPayload(data);
+    const idempotencyKey = generateIdempotencyKey(`investment-property-${id}`);
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/investment-properties/${id}`, {
+        method: 'PUT',
+        headers: { ...this.getAuthHeaders(), 'X-Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(sanitizedData),
+      });
+      if (!response.ok) await throwApiError(response, 'Failed to update investment property');
+      return response.json();
+    } catch (error) {
+      if (!shouldQueueForOffline(error)) throw error;
+      await offlineSyncManager.queueOperation({
+        operation_type: 'property_update_draft',
+        endpoint: `/investment-properties/${id}`,
+        method: 'PUT',
+        payload: sanitizedData,
+        idempotency_key: idempotencyKey,
+      });
+      return { queued: true };
+    }
   }
 
   async deleteInvestmentProperty(id: number): Promise<any> {
