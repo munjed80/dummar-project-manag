@@ -129,7 +129,7 @@ function ComplaintsMapPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <MapPin size={28} className="text-primary" weight="fill" />
-            <h1 className="text-xl md:text-2xl font-bold">خريطة العمليات — مشروع دمّر</h1>
+            <h1 className="text-xl md:text-2xl font-bold">خريطة العمليات — إدارة التجمع - مشروع دمر</h1>
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>{complaintCount} شكوى</span>

@@ -44,7 +44,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 to-accent/10 p-4" dir="rtl">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">منصة إدارة مشروع دمر</CardTitle>
+          <CardTitle className="text-3xl font-bold">إدارة التجمع - مشروع دمر</CardTitle>
           <CardDescription>تسجيل الدخول إلى لوحة التحكم</CardDescription>
         </CardHeader>
         <CardContent>

@@ -46,7 +46,7 @@ const sourceLabels: Record<string, string> = {
 
 export default function TaskDetailsPage() {
   const { id } = useParams<{ id: string }>();
-  const { canManageTasks } = useAuth();
+  const { canManageTasks, user, role } = useAuth();
   const [task, setTask] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
@@ -180,6 +180,20 @@ export default function TaskDetailsPage() {
   const areaObj = areas.find((a: any) => a.id === task.area_id);
   const assignedUser = users.find((u: any) => u.id === task.assigned_to_id);
 
+  // Field-team / contractor users get a restricted update card on tasks
+  // assigned to them: status (in_progress/completed only), notes, and the
+  // before/after photo uploads. They cannot reassign or re-scope the task.
+  const isFieldRole = role === 'field_team' || role === 'contractor_user';
+  const isAssignedToMe = !!user && task.assigned_to_id === user.id;
+  const showFullUpdateCard = canManageTasks;
+  const showFieldUpdateCard = !canManageTasks && isFieldRole && isAssignedToMe;
+  const canUploadPhotos = canManageTasks || (isFieldRole && isAssignedToMe);
+
+  const fieldStatusOptions: Array<[string, string]> = [
+    ['in_progress', statusLabels['in_progress']],
+    ['completed', statusLabels['completed']],
+  ];
+
   const detail = (label: string, value: React.ReactNode) => (
     <div className="flex flex-col gap-1">
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -300,7 +314,8 @@ export default function TaskDetailsPage() {
                 category="tasks"
                 accept="images"
                 existingFiles={task.before_photos || []}
-                onUploadComplete={handleBeforePhotos}
+                onUploadComplete={canUploadPhotos ? handleBeforePhotos : undefined}
+                disabled={!canUploadPhotos}
               />
             </CardContent>
           </Card>
@@ -316,14 +331,54 @@ export default function TaskDetailsPage() {
                 category="tasks"
                 accept="images"
                 existingFiles={task.after_photos || []}
-                onUploadComplete={handleAfterPhotos}
+                onUploadComplete={canUploadPhotos ? handleAfterPhotos : undefined}
+                disabled={!canUploadPhotos}
               />
             </CardContent>
           </Card>
         </div>
 
+        {/* Restricted update card for field team / contractor on assigned tasks */}
+        {showFieldUpdateCard && (
+        <Card>
+          <CardHeader>
+            <CardTitle>تحديث حالة المهمة</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              يمكنك تحديث حالة المهمة إلى "قيد التنفيذ" أو "مكتملة" وإضافة ملاحظات الإصلاح ورفع صور بعد التنفيذ.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">الحالة الجديدة</label>
+                <Select value={newStatus} onValueChange={setNewStatus}>
+                  <SelectTrigger><SelectValue placeholder="اختر الحالة" /></SelectTrigger>
+                  <SelectContent>
+                    {fieldStatusOptions.map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Textarea
+              placeholder="ملاحظات الإصلاح..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <Button
+              onClick={handleUpdate}
+              disabled={(!newStatus && !notes) || updating}
+            >
+              {updating ? <Spinner className="animate-spin ml-2" size={16} /> : null}
+              حفظ التحديث
+            </Button>
+          </CardContent>
+        </Card>
+        )}
+
         {/* Update Status – only for authorized roles */}
-        {canManageTasks && (
+        {showFullUpdateCard && (
         <Card>
           <CardHeader>
             <CardTitle>تحديث المهمة</CardTitle>

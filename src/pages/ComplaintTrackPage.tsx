@@ -28,16 +28,17 @@ const statusColors: Record<string, string> = {
 
 const typeLabels: Record<string, string> = {
   infrastructure: 'البنية التحتية', cleaning: 'النظافة', electricity: 'الكهرباء',
-  water: 'المياه', roads: 'الطرق', lighting: 'الإنارة', other: 'أخرى',
+  water: 'المياه', roads: 'الطرق', lighting: 'الإنارة',
+  heating_network: 'طلب صيانة شبكة التدفئة', other: 'أخرى',
 };
 
 const statusGuidance: Record<string, string> = {
-  new: 'تم استلام شكواك وهي بانتظار المراجعة من قِبَل فريق الاستقبال.',
-  under_review: 'يقوم فريق الاستقبال بمراجعة شكواك حالياً.',
-  assigned: 'تم تحويل شكواك إلى مهمة تنفيذية وأُسندت إلى الفريق المختص.',
-  in_progress: 'الفريق المختص يعمل على معالجة شكواك حالياً.',
-  resolved: 'تمت معالجة شكواك وإغلاقها. شكراً لإبلاغنا.',
-  rejected: 'تم إغلاق شكواك دون تنفيذ. يمكنك التواصل مع الإدارة لمزيد من التفاصيل.',
+  new: 'تم استلام طلبك وهو بانتظار المراجعة من قِبَل فريق الاستقبال.',
+  under_review: 'يقوم فريق الاستقبال بمراجعة طلبك حالياً.',
+  assigned: 'تم تحويل طلبك إلى مهمة تنفيذية وأُسندت إلى الفريق المختص.',
+  in_progress: 'الفريق المختص يعمل على معالجة طلبك حالياً.',
+  resolved: 'تمت معالجة طلبك وإغلاقه. شكراً لإبلاغنا.',
+  rejected: 'تم إغلاق طلبك دون تنفيذ. يمكنك التواصل مع الإدارة لمزيد من التفاصيل.',
 };
 
 export default function ComplaintTrackPage() {
@@ -57,7 +58,7 @@ export default function ComplaintTrackPage() {
     } catch (error) {
       setComplaint(null);
       setNotFound(true);
-      toast.error('لم يتم العثور على الشكوى. تحقق من رقم المتابعة ورقم الهاتف.');
+      toast.error('لم يتم العثور على الطلب. تحقق من رقم المتابعة ورقم الهاتف.');
     } finally {
       setSearching(false);
     }
@@ -94,7 +95,7 @@ export default function ComplaintTrackPage() {
             </div>
             {complaint.location_text && (
               <div>
-                <p className="text-xs text-muted-foreground">الموقع</p>
+                <p className="text-xs text-muted-foreground">العنوان التفصيلي</p>
                 <p className="font-medium flex items-center gap-1">
                   <MapPin size={14} /> {complaint.location_text}
                 </p>
@@ -130,9 +131,49 @@ export default function ComplaintTrackPage() {
               </div>
             </>
           )}
+          {complaint.repair_result && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <p className="text-sm font-bold flex items-center gap-2 text-green-700">
+                  <CheckCircle size={16} className="text-green-600" />
+                  نتيجة الإصلاح
+                </p>
+                {complaint.repair_result.notes && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">ملاحظات الفريق المنفّذ</p>
+                    <p className="text-sm whitespace-pre-wrap">{complaint.repair_result.notes}</p>
+                  </div>
+                )}
+                {Array.isArray(complaint.repair_result.after_photos) && complaint.repair_result.after_photos.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">صور بعد الإصلاح</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {complaint.repair_result.after_photos.map((path: string, i: number) => (
+                        <a
+                          key={i}
+                          href={`/uploads/${path}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded overflow-hidden border hover:opacity-90"
+                        >
+                          <img
+                            src={`/uploads/${path}`}
+                            alt={`صورة بعد الإصلاح ${i + 1}`}
+                            className="w-full h-24 object-cover"
+                            loading="lazy"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
           <Separator />
           <p className="text-xs text-muted-foreground">
-            هذه الصفحة تعرض حالة الشكوى الحالية فقط. للاستفسار عن تفاصيل التنفيذ، تواصل مع إدارة المشروع.
+            هذه الصفحة تعرض حالة الطلب الحالية فقط. للاستفسار عن تفاصيل التنفيذ، تواصل مع إدارة المشروع.
           </p>
         </CardContent>
       </Card>
@@ -146,12 +187,12 @@ export default function ComplaintTrackPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-2xl">
               <MagnifyingGlass size={22} />
-              تتبع الشكوى
+              تتبع الطلب / الشكوى
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              أدخل رقم المتابعة الذي حصلت عليه عند تقديم الشكوى ورقم الهاتف نفسه لمعرفة الحالة.{' '}
+              أدخل رقم المتابعة الذي حصلت عليه عند تقديم الطلب ورقم الهاتف نفسه لمعرفة الحالة.{' '}
               <Link to="/complaints/new" className="text-primary hover:underline">
-                لم تقدّم شكوى بعد؟ ابدأ من هنا
+                لم تقدّم طلباً بعد؟ ابدأ من هنا
               </Link>
             </p>
           </CardHeader>
@@ -185,7 +226,7 @@ export default function ComplaintTrackPage() {
 
             {notFound && !complaint && (
               <div className="mt-6 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                <p className="font-medium text-destructive">لم يتم العثور على الشكوى</p>
+                <p className="font-medium text-destructive">لم يتم العثور على الطلب</p>
                 <p className="text-muted-foreground mt-1">
                   تأكد من أن رقم المتابعة ورقم الهاتف يطابقان البيانات التي أدخلتها عند التقديم.
                 </p>

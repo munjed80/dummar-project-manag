@@ -16,6 +16,8 @@ from app.schemas.complaint import (
     ComplaintUpdate,
     ComplaintResponse,
     ComplaintTrackRequest,
+    ComplaintTrackResponse,
+    ComplaintRepairResult,
     ComplaintActivityResponse,
 )
 from app.services.location_service import infer_location_id
@@ -122,7 +124,7 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
     return db_complaint
 
 
-@router.post("/track", response_model=ComplaintResponse)
+@router.post("/track", response_model=ComplaintTrackResponse)
 @limiter.limit("10/minute")
 def track_complaint(track_data: ComplaintTrackRequest, request: Request, db: Session = Depends(get_db)):
     complaint = db.query(Complaint).filter(
@@ -135,8 +137,36 @@ def track_complaint(track_data: ComplaintTrackRequest, request: Request, db: Ses
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Complaint not found or phone number does not match",
         )
-    
-    return complaint
+
+    # Surface a public-safe repair summary when the complaint is resolved
+    # and a linked task captured after-repair evidence. We intentionally do
+    # not expose internal fields (assignee, team, project, before photos).
+    repair_result = None
+    if complaint.status == ComplaintStatus.RESOLVED:
+        from app.models.task import Task as _Task
+        from app.schemas.file_utils import parse_file_list
+
+        latest_task = (
+            db.query(_Task)
+            .filter(_Task.complaint_id == complaint.id)
+            .order_by(_Task.id.desc())
+            .first()
+        )
+        if latest_task is not None and (
+            latest_task.after_photos or latest_task.notes
+        ):
+            repair_result = ComplaintRepairResult(
+                task_status=(
+                    latest_task.status.value if latest_task.status else None
+                ),
+                notes=latest_task.notes,
+                after_photos=parse_file_list(latest_task.after_photos),
+                completed_at=latest_task.completed_at,
+            )
+
+    response = ComplaintTrackResponse.model_validate(complaint)
+    response.repair_result = repair_result
+    return response
 
 
 @router.get("/", response_model=PaginatedComplaints)

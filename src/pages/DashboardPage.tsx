@@ -69,7 +69,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold mb-1">لوحة التحكم</h1>
-            <p className="text-muted-foreground text-sm">نظرة عامة على نشاطات مشروع دمر</p>
+            <p className="text-muted-foreground text-sm">نظرة عامة على نشاطات إدارة التجمع - مشروع دمر</p>
           </div>
           <div className="flex gap-2">
             <Button asChild size="sm" variant="outline">
