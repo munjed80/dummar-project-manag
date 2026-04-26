@@ -771,7 +771,8 @@ class ApiService {
     if (params?.is_active !== undefined) qp.append('is_active', params.is_active.toString());
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
-    const response = await fetchWithRetry(`${API_BASE_URL}/users?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — backend route is `@router.get("/")`.
+    const response = await fetchWithRetry(`${API_BASE_URL}/users/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch users');
     return response.json();
   }
@@ -1000,7 +1001,8 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     if (params?.unread_only) qp.append('unread_only', 'true');
-    const response = await fetchWithRetry(`${API_BASE_URL}/notifications?${qp}`, { headers: this.getAuthHeaders() });
+    // Trailing slash required — backend route is `@router.get("/")`.
+    const response = await fetchWithRetry(`${API_BASE_URL}/notifications/?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) throw new Error('Failed to fetch notifications');
     return response.json();
   }

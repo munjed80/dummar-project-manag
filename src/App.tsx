@@ -146,8 +146,10 @@ function App() {
           <Route path="/contracts" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
           <Route path="/contracts/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
+          <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
+          <Route path="/teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
