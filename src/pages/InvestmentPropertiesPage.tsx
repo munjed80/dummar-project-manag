@@ -289,7 +289,7 @@ export default function InvestmentPropertiesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<any>(null);
 
-  const canManage = role && ['project_director', 'contracts_manager'].includes(role);
+  const canManage = role && ['project_director', 'contracts_manager', 'property_manager'].includes(role);
 
   const fetchProperties = useCallback(() => {
     setLoading(true);

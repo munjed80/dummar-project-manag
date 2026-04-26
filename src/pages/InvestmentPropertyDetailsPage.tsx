@@ -56,7 +56,7 @@ export default function InvestmentPropertyDetailsPage() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const canManage = role && ['project_director', 'contracts_manager'].includes(role);
+  const canManage = role && ['project_director', 'contracts_manager', 'property_manager'].includes(role);
 
   const [form, setForm] = useState({
     property_type: 'building',

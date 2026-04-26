@@ -272,6 +272,202 @@ class TestContractsManagerPermissions:
 
 
 # ---------------------------------------------------------------------------
+# Property Manager (full CRUD on properties)
+# ---------------------------------------------------------------------------
+
+class TestPropertyManagerPermissions:
+    def test_property_manager_can_create(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_pm", UserRole.PROPERTY_MANAGER)
+        token = _login(client, "test_pm")
+
+        resp = client.post(
+            "/investment-properties/",
+            json=_make_property_payload(),
+            headers=_auth(token),
+        )
+        assert resp.status_code == 201
+
+    def test_property_manager_can_list_and_filter(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_pm_list", UserRole.PROPERTY_MANAGER)
+        token = _login(client, "test_pm_list")
+
+        db.add(InvestmentProperty(
+            property_type=PropertyType.BUILDING, address="بناء 1",
+            status=PropertyStatus.AVAILABLE,
+        ))
+        db.add(InvestmentProperty(
+            property_type=PropertyType.LAND, address="أرض 1",
+            status=PropertyStatus.INVESTED,
+        ))
+        db.commit()
+
+        resp = client.get("/investment-properties/?type=building", headers=_auth(token))
+        assert resp.status_code == 200
+        assert resp.json()["total_count"] == 1
+
+    def test_property_manager_can_update(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_pm_upd", UserRole.PROPERTY_MANAGER)
+        token = _login(client, "test_pm_upd")
+
+        prop = InvestmentProperty(
+            property_type=PropertyType.SHOP, address="محل قديم",
+            status=PropertyStatus.AVAILABLE,
+        )
+        db.add(prop)
+        db.commit()
+        db.refresh(prop)
+
+        resp = client.put(
+            f"/investment-properties/{prop.id}",
+            json={"status": "maintenance"},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "maintenance"
+
+    def test_property_manager_can_delete(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_pm_del", UserRole.PROPERTY_MANAGER)
+        token = _login(client, "test_pm_del")
+
+        prop = InvestmentProperty(
+            property_type=PropertyType.LAND, address="أرض للحذف",
+            status=PropertyStatus.AVAILABLE,
+        )
+        db.add(prop)
+        db.commit()
+        db.refresh(prop)
+
+        resp = client.delete(f"/investment-properties/{prop.id}", headers=_auth(token))
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Investment Manager (read-only on properties; will manage contracts later)
+# ---------------------------------------------------------------------------
+
+class TestInvestmentManagerPermissions:
+    def test_investment_manager_can_list(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_im_list", UserRole.INVESTMENT_MANAGER)
+        token = _login(client, "test_im_list")
+
+        db.add(InvestmentProperty(
+            property_type=PropertyType.RESTAURANT, address="مطعم",
+            status=PropertyStatus.AVAILABLE,
+        ))
+        db.commit()
+
+        resp = client.get("/investment-properties/", headers=_auth(token))
+        assert resp.status_code == 200
+        assert resp.json()["total_count"] == 1
+
+    def test_investment_manager_can_get_by_id(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_im_get", UserRole.INVESTMENT_MANAGER)
+        token = _login(client, "test_im_get")
+
+        prop = InvestmentProperty(
+            property_type=PropertyType.KIOSK, address="كشك",
+            status=PropertyStatus.AVAILABLE,
+        )
+        db.add(prop)
+        db.commit()
+        db.refresh(prop)
+
+        resp = client.get(f"/investment-properties/{prop.id}", headers=_auth(token))
+        assert resp.status_code == 200
+
+    def test_investment_manager_cannot_create(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_im_create", UserRole.INVESTMENT_MANAGER)
+        token = _login(client, "test_im_create")
+
+        resp = client.post(
+            "/investment-properties/",
+            json=_make_property_payload(),
+            headers=_auth(token),
+        )
+        assert resp.status_code == 403
+
+    def test_investment_manager_cannot_update(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_im_upd", UserRole.INVESTMENT_MANAGER)
+        token = _login(client, "test_im_upd")
+
+        prop = InvestmentProperty(
+            property_type=PropertyType.BUILDING, address="عقار",
+            status=PropertyStatus.AVAILABLE,
+        )
+        db.add(prop)
+        db.commit()
+        db.refresh(prop)
+
+        resp = client.put(
+            f"/investment-properties/{prop.id}",
+            json={"status": "invested"},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 403
+
+    def test_investment_manager_cannot_delete(self, client, db):
+        from tests.conftest import _create_user, _login
+        _create_user(db, "test_im_del", UserRole.INVESTMENT_MANAGER)
+        token = _login(client, "test_im_del")
+
+        prop = InvestmentProperty(
+            property_type=PropertyType.LAND, address="أرض",
+            status=PropertyStatus.AVAILABLE,
+        )
+        db.add(prop)
+        db.commit()
+        db.refresh(prop)
+
+        resp = client.delete(
+            f"/investment-properties/{prop.id}",
+            headers=_auth(token),
+        )
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# New roles can be created via /users/ (admin path)
+# ---------------------------------------------------------------------------
+
+class TestNewRolesAdminCreation:
+    def test_director_creates_property_manager_user(self, client, director_token):
+        resp = client.post(
+            "/users/",
+            json={
+                "username": "new_pm",
+                "full_name": "مسؤول الأملاك",
+                "password": "testpass123",
+                "role": "property_manager",
+            },
+            headers=_auth(director_token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["role"] == "property_manager"
+
+    def test_director_creates_investment_manager_user(self, client, director_token):
+        resp = client.post(
+            "/users/",
+            json={
+                "username": "new_im",
+                "full_name": "مسؤول الاستثمار",
+                "password": "testpass123",
+                "role": "investment_manager",
+            },
+            headers=_auth(director_token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["role"] == "investment_manager"
+
+
+# ---------------------------------------------------------------------------
 # Field Team (forbidden from write operations)
 # ---------------------------------------------------------------------------
 

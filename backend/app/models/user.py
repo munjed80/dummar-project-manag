@@ -14,6 +14,8 @@ class UserRole(str, enum.Enum):
     FIELD_TEAM = "field_team"
     CONTRACTOR_USER = "contractor_user"
     CITIZEN = "citizen"
+    PROPERTY_MANAGER = "property_manager"
+    INVESTMENT_MANAGER = "investment_manager"
 
 
 class User(Base):

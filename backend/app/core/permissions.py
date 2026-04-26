@@ -128,6 +128,16 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.COMPLAINT, Action.CREATE),
         (ResourceType.COMPLAINT, Action.READ),  # ownership enforced (own only)
     },
+    # Property manager: full CRUD on investment properties + internal read.
+    UserRole.PROPERTY_MANAGER: _ALL_INTERNAL_READ
+    | {
+        (ResourceType.INVESTMENT_PROPERTY, Action.CREATE),
+        (ResourceType.INVESTMENT_PROPERTY, Action.UPDATE),
+        (ResourceType.INVESTMENT_PROPERTY, Action.DELETE),
+    },
+    # Investment manager: view-only on investment properties for now;
+    # contract-management privileges will be granted in a later phase.
+    UserRole.INVESTMENT_MANAGER: _ALL_INTERNAL_READ,
 }
 
 

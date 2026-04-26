@@ -35,6 +35,8 @@ const roleLabels: Record<string, string> = {
   field_team: 'فريق ميداني',
   contractor_user: 'مستخدم مقاول',
   citizen: 'مواطن',
+  property_manager: 'مسؤول الأملاك',
+  investment_manager: 'مسؤول الاستثمار',
 };
 
 const roleColors: Record<string, string> = {
@@ -46,11 +48,14 @@ const roleColors: Record<string, string> = {
   field_team: 'bg-yellow-100 text-yellow-800',
   contractor_user: 'bg-red-100 text-red-800',
   citizen: 'bg-gray-100 text-gray-800',
+  property_manager: 'bg-indigo-100 text-indigo-800',
+  investment_manager: 'bg-pink-100 text-pink-800',
 };
 
 const ROLES = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'citizen',
+  'complaints_officer', 'area_supervisor', 'property_manager', 'investment_manager',
+  'field_team', 'contractor_user', 'citizen',
 ];
 
 const PAGE_SIZE = 15;

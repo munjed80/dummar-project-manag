@@ -91,6 +91,8 @@ _internal_staff = require_role(
     UserRole.AREA_SUPERVISOR,
     UserRole.FIELD_TEAM,
     UserRole.CONTRACTOR_USER,
+    UserRole.PROPERTY_MANAGER,
+    UserRole.INVESTMENT_MANAGER,
 )
 
 

@@ -112,6 +112,7 @@ const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
 const INVESTMENT_PROPERTIES_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
   'complaints_officer', 'area_supervisor',
+  'property_manager', 'investment_manager',
 ];
 
 function RootRoute() {

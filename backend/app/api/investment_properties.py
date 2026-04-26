@@ -19,6 +19,7 @@ router = APIRouter(prefix="/investment-properties", tags=["investment-properties
 _property_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
     UserRole.CONTRACTS_MANAGER,
+    UserRole.PROPERTY_MANAGER,
 )
 
 
