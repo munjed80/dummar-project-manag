@@ -33,3 +33,8 @@ pids
 
 .spark-workbench-id
 __pycache__/
+
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
