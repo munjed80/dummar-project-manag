@@ -5,8 +5,8 @@ import { MapTrifold, MapPin, Globe } from '@phosphor-icons/react';
 /**
  * Sub-navigation strip for the consolidated geographic section.
  *
- * The main top-level nav exposes a single entry — "خريطة الشكاوى" — and the
- * previously-separate "المواقع" (Locations) and "لوحة جغرافية" (Geo
+ * The main top-level nav exposes a single entry — "خريطة العمليات" — and the
+ * previously-separate "المواقع المرجعية" (Locations) and "التحليلات الجغرافية" (Geo
  * Dashboard) menu items now live as tabs inside that section. The pages
  * themselves are still individually routable so old bookmarks keep working.
  *
@@ -43,21 +43,21 @@ export function GeoSubNav({ active }: { active: GeoSubNavTab }) {
     {
       key: 'map',
       to: '/complaints-map',
-      label: 'خريطة الشكاوى',
+      label: 'الخريطة',
       icon: MapTrifold,
       visible: !!role && INTERNAL_ROLES.has(role),
     },
     {
       key: 'locations',
       to: '/locations',
-      label: 'المواقع',
+      label: 'المواقع المرجعية',
       icon: MapPin,
       visible: !!role && INTERNAL_ROLES.has(role),
     },
     {
       key: 'geo',
       to: '/locations/geo-dashboard',
-      label: 'لوحة جغرافية',
+      label: 'التحليلات الجغرافية',
       icon: Globe,
       visible: !!role && REPORT_ROLES.has(role),
     },

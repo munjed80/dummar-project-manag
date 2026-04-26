@@ -493,6 +493,17 @@ def create_task_from_complaint(
     if task_priority is None:
         task_priority = TaskPriority.MEDIUM
 
+    inferred_location_id = complaint.location_id
+    if inferred_location_id is None:
+        inferred_location_id = infer_location_id(
+            db,
+            explicit_location_id=None,
+            area_id=complaint.area_id,
+            latitude=complaint.latitude,
+            longitude=complaint.longitude,
+            location_text=complaint.location_text or complaint.description,
+        )
+
     # Create task with data from complaint
     new_task = Task(
         title=task_data.get("title", f"Task from complaint {complaint.tracking_number}"),
@@ -500,7 +511,7 @@ def create_task_from_complaint(
         source_type=TaskSourceType.COMPLAINT,
         complaint_id=complaint.id,
         area_id=complaint.area_id,
-        location_id=complaint.location_id,
+        location_id=inferred_location_id,
         location_text=complaint.location_text,
         latitude=complaint.latitude,
         longitude=complaint.longitude,

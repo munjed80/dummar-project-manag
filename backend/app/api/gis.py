@@ -2,22 +2,24 @@
 GIS / Operations Map API — provides unified map data for the operations dashboard.
 
 Endpoints:
-  GET  /gis/operations-map   — combined markers (complaints + tasks) with type distinction
+  GET  /gis/operations-map   — combined markers (complaints + tasks + projects + locations)
   GET  /gis/area-boundaries  — area polygon boundaries for overlay display
   PUT  /gis/area-boundaries/{area_id}  — update area boundary (admin)
 """
 import json
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintStatus
 from app.models.task import Task, TaskStatus
-from app.models.location import Area
+from app.models.project import Project, ProjectStatus
+from app.models.location import Area, Location, LocationStatus
 from app.models.user import User, UserRole
 from app.api.deps import get_current_internal_user
+from app.services.location_service import infer_location_from_address
 
 router = APIRouter(prefix="/gis", tags=["gis"])
 
@@ -28,17 +30,39 @@ router = APIRouter(prefix="/gis", tags=["gis"])
 
 class OperationsMapMarker(BaseModel):
     id: int
-    entity_type: str  # "complaint" or "task"
+    entity_type: str  # "complaint" | "task" | "project" | "location"
     latitude: float
     longitude: float
     title: str
-    status: str
+    status: Optional[str] = None
     area_id: Optional[int] = None
     reference: Optional[str] = None  # tracking_number or task id
     priority: Optional[str] = None
+    location_id: Optional[int] = None
+    location_accuracy: Optional[str] = None  # exact | estimated
+    confidence: Optional[str] = None
+    match_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class OperationsMapUnlocatedItem(BaseModel):
+    id: int
+    entity_type: str
+    title: str
+    status: Optional[str] = None
+    reference: Optional[str] = None
+    location_id: Optional[int] = None
+    location_text: Optional[str] = None
+    confidence: Optional[str] = None
+    needs_location: bool = True
+    match_reason: Optional[str] = None
+
+
+class OperationsMapResponse(BaseModel):
+    markers: List[OperationsMapMarker]
+    items_without_coordinates: List[OperationsMapUnlocatedItem]
 
 
 class AreaBoundary(BaseModel):
@@ -65,69 +89,300 @@ class AreaBoundaryUpdate(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/operations-map", response_model=List[OperationsMapMarker])
+@router.get("/operations-map", response_model=OperationsMapResponse)
 def get_operations_map(
-    entity_type: Optional[str] = Query(None, description="Filter: 'complaint' or 'task'"),
+    entity_type: Optional[str] = Query(None, description="Filter: complaint | task | project | location"),
     status_filter: Optional[str] = None,
     area_id: Optional[int] = None,
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db),
 ):
     """
-    Return combined markers for complaints and tasks that have coordinates.
+    Return combined markers for complaints, tasks, projects, and reference
+    locations. Items without coordinates are returned in a separate list.
     Used by the unified operations map view.
     """
     markers: List[OperationsMapMarker] = []
+    unlocated: List[OperationsMapUnlocatedItem] = []
+
+    def _as_status(value: Optional[object], fallback: str) -> str:
+        if value is None:
+            return fallback
+        return value.value if hasattr(value, "value") else str(value)
 
     # ── Complaints ──
     if entity_type is None or entity_type == "complaint":
-        q = db.query(Complaint).filter(
-            Complaint.latitude.isnot(None),
-            Complaint.longitude.isnot(None),
-        )
+        q = db.query(Complaint).options(joinedload(Complaint.location))
         if status_filter:
             q = q.filter(Complaint.status == status_filter)
         if area_id:
             q = q.filter(Complaint.area_id == area_id)
 
         for c in q.order_by(Complaint.created_at.desc()).limit(500).all():
-            markers.append(OperationsMapMarker(
+            status = _as_status(c.status, "new")
+            if status_filter and status != status_filter:
+                continue
+            item = OperationsMapUnlocatedItem(
                 id=c.id,
                 entity_type="complaint",
-                latitude=c.latitude,
-                longitude=c.longitude,
                 title=c.description[:80] if c.description else "شكوى",
-                status=c.status.value if c.status else "new",
-                area_id=c.area_id,
+                status=status,
                 reference=c.tracking_number,
-                priority=c.priority.value if c.priority else None,
-            ))
+                location_id=c.location_id,
+                location_text=c.location_text,
+            )
+            if c.latitude is not None and c.longitude is not None:
+                markers.append(OperationsMapMarker(
+                    id=c.id,
+                    entity_type="complaint",
+                    latitude=c.latitude,
+                    longitude=c.longitude,
+                    title=item.title,
+                    status=item.status,
+                    area_id=c.area_id,
+                    reference=item.reference,
+                    priority=c.priority.value if c.priority else None,
+                    location_id=c.location_id,
+                    location_accuracy="exact",
+                    confidence="high",
+                    match_reason="exact_coordinates",
+                ))
+            elif c.location and c.location.latitude is not None and c.location.longitude is not None:
+                markers.append(OperationsMapMarker(
+                    id=c.id,
+                    entity_type="complaint",
+                    latitude=c.location.latitude,
+                    longitude=c.location.longitude,
+                    title=item.title,
+                    status=item.status,
+                    area_id=c.area_id,
+                    reference=item.reference,
+                    priority=c.priority.value if c.priority else None,
+                    location_id=c.location_id,
+                    location_accuracy="estimated",
+                    confidence="medium",
+                    match_reason="linked_reference_location",
+                ))
+            else:
+                inferred = infer_location_from_address(db, location_text=c.location_text, detailed_address=c.description)
+                if (
+                    inferred.location
+                    and inferred.location.latitude is not None
+                    and inferred.location.longitude is not None
+                    and inferred.confidence in ("high", "medium")
+                ):
+                    markers.append(OperationsMapMarker(
+                        id=c.id,
+                        entity_type="complaint",
+                        latitude=inferred.location.latitude,
+                        longitude=inferred.location.longitude,
+                        title=item.title,
+                        status=item.status,
+                        area_id=c.area_id,
+                        reference=item.reference,
+                        priority=c.priority.value if c.priority else None,
+                        location_id=inferred.location.id,
+                        location_accuracy="exact" if inferred.confidence == "high" else "estimated",
+                        confidence=inferred.confidence,
+                        match_reason=inferred.reason,
+                    ))
+                else:
+                    item.confidence = inferred.confidence if inferred.confidence != "none" else "low"
+                    item.needs_location = item.confidence == "low"
+                    item.match_reason = inferred.reason
+                    if inferred.location and inferred.location.name:
+                        item.location_text = inferred.location.name
+                        item.location_id = inferred.location.id
+                    unlocated.append(item)
 
     # ── Tasks ──
     if entity_type is None or entity_type == "task":
-        q = db.query(Task).filter(
-            Task.latitude.isnot(None),
-            Task.longitude.isnot(None),
-        )
-        if status_filter:
-            q = q.filter(Task.status == status_filter)
+        q = db.query(Task).options(joinedload(Task.location))
         if area_id:
             q = q.filter(Task.area_id == area_id)
 
         for t in q.order_by(Task.created_at.desc()).limit(500).all():
-            markers.append(OperationsMapMarker(
+            status = _as_status(t.status, "pending")
+            if status_filter and status != status_filter:
+                continue
+            item = OperationsMapUnlocatedItem(
                 id=t.id,
                 entity_type="task",
-                latitude=t.latitude,
-                longitude=t.longitude,
                 title=t.title[:80] if t.title else "مهمة",
-                status=t.status.value if t.status else "pending",
-                area_id=t.area_id,
+                status=status,
                 reference=f"TSK-{t.id}",
-                priority=t.priority.value if t.priority else None,
-            ))
+                location_id=t.location_id,
+                location_text=t.location_text,
+            )
+            if t.latitude is not None and t.longitude is not None:
+                markers.append(OperationsMapMarker(
+                    id=t.id,
+                    entity_type="task",
+                    latitude=t.latitude,
+                    longitude=t.longitude,
+                    title=item.title,
+                    status=item.status,
+                    area_id=t.area_id,
+                    reference=item.reference,
+                    priority=t.priority.value if t.priority else None,
+                    location_id=t.location_id,
+                    location_accuracy="exact",
+                    confidence="high",
+                    match_reason="exact_coordinates",
+                ))
+            elif t.location and t.location.latitude is not None and t.location.longitude is not None:
+                markers.append(OperationsMapMarker(
+                    id=t.id,
+                    entity_type="task",
+                    latitude=t.location.latitude,
+                    longitude=t.location.longitude,
+                    title=item.title,
+                    status=item.status,
+                    area_id=t.area_id,
+                    reference=item.reference,
+                    priority=t.priority.value if t.priority else None,
+                    location_id=t.location_id,
+                    location_accuracy="estimated",
+                    confidence="medium",
+                    match_reason="linked_reference_location",
+                ))
+            else:
+                inferred = infer_location_from_address(db, location_text=t.location_text, detailed_address=t.description)
+                if (
+                    inferred.location
+                    and inferred.location.latitude is not None
+                    and inferred.location.longitude is not None
+                    and inferred.confidence in ("high", "medium")
+                ):
+                    markers.append(OperationsMapMarker(
+                        id=t.id,
+                        entity_type="task",
+                        latitude=inferred.location.latitude,
+                        longitude=inferred.location.longitude,
+                        title=item.title,
+                        status=item.status,
+                        area_id=t.area_id,
+                        reference=item.reference,
+                        priority=t.priority.value if t.priority else None,
+                        location_id=inferred.location.id,
+                        location_accuracy="exact" if inferred.confidence == "high" else "estimated",
+                        confidence=inferred.confidence,
+                        match_reason=inferred.reason,
+                    ))
+                else:
+                    item.confidence = inferred.confidence if inferred.confidence != "none" else "low"
+                    item.needs_location = item.confidence == "low"
+                    item.match_reason = inferred.reason
+                    if inferred.location and inferred.location.name:
+                        item.location_text = inferred.location.name
+                        item.location_id = inferred.location.id
+                    unlocated.append(item)
 
-    return markers
+    # ── Projects ──
+    if entity_type is None or entity_type == "project":
+        q = db.query(Project).options(joinedload(Project.location))
+        if status_filter:
+            q = q.filter(Project.status == status_filter)
+
+        for p in q.order_by(Project.created_at.desc()).limit(500).all():
+            title = p.title[:80] if p.title else "مشروع"
+            ref = p.code or f"PRJ-{p.id}"
+            status = p.status.value if p.status else ProjectStatus.ACTIVE.value
+            loc_lat = p.location.latitude if p.location else None
+            loc_lng = p.location.longitude if p.location else None
+            loc_text = p.location.name if p.location else "لا يوجد موقع مرجعي مرتبط"
+            item = OperationsMapUnlocatedItem(
+                id=p.id,
+                entity_type="project",
+                title=title,
+                status=status,
+                reference=ref,
+                location_id=p.location_id,
+                location_text=loc_text,
+            )
+            if loc_lat is not None and loc_lng is not None:
+                markers.append(OperationsMapMarker(
+                    id=p.id,
+                    entity_type="project",
+                    latitude=loc_lat,
+                    longitude=loc_lng,
+                    title=title,
+                    status=status,
+                    reference=ref,
+                    location_id=p.location_id,
+                    location_accuracy="exact",
+                    confidence="high",
+                    match_reason="linked_reference_location",
+                ))
+            else:
+                inferred = infer_location_from_address(db, location_text=loc_text, detailed_address=p.description)
+                if (
+                    inferred.location
+                    and inferred.location.latitude is not None
+                    and inferred.location.longitude is not None
+                    and inferred.confidence in ("high", "medium")
+                ):
+                    markers.append(OperationsMapMarker(
+                        id=p.id,
+                        entity_type="project",
+                        latitude=inferred.location.latitude,
+                        longitude=inferred.location.longitude,
+                        title=title,
+                        status=status,
+                        reference=ref,
+                        location_id=inferred.location.id,
+                        location_accuracy="exact" if inferred.confidence == "high" else "estimated",
+                        confidence=inferred.confidence,
+                        match_reason=inferred.reason,
+                    ))
+                else:
+                    item.confidence = inferred.confidence if inferred.confidence != "none" else "low"
+                    item.needs_location = item.confidence == "low"
+                    item.match_reason = inferred.reason
+                    if inferred.location and inferred.location.name:
+                        item.location_text = inferred.location.name
+                        item.location_id = inferred.location.id
+                    unlocated.append(item)
+
+    # ── Reference Locations ──
+    if entity_type is None or entity_type == "location":
+        q = db.query(Location).filter(Location.is_active == 1)
+        if status_filter:
+            q = q.filter(Location.status == status_filter)
+
+        for loc in q.order_by(Location.name.asc()).limit(800).all():
+            title = loc.name[:80] if loc.name else "موقع مرجعي"
+            status = loc.status.value if loc.status else LocationStatus.ACTIVE.value
+            item = OperationsMapUnlocatedItem(
+                id=loc.id,
+                entity_type="location",
+                title=title,
+                status=status,
+                reference=loc.code,
+                location_id=loc.id,
+                location_text=loc.name,
+            )
+            if loc.latitude is not None and loc.longitude is not None:
+                markers.append(OperationsMapMarker(
+                    id=loc.id,
+                    entity_type="location",
+                    latitude=loc.latitude,
+                    longitude=loc.longitude,
+                    title=title,
+                    status=status,
+                    reference=loc.code,
+                    location_id=loc.id,
+                    location_accuracy="exact",
+                    confidence="high",
+                    match_reason="reference_coordinates",
+                ))
+            else:
+                unlocated.append(item)
+
+    return OperationsMapResponse(
+        markers=markers,
+        items_without_coordinates=unlocated,
+    )
 
 
 @router.get("/area-boundaries", response_model=List[AreaBoundary])

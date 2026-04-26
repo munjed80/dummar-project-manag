@@ -86,7 +86,7 @@ export default function ContractsListPage() {
         setContracts(data.items);
         setTotalCount(data.total_count);
       })
-      .catch((err) => setError(describeLoadError(err, 'العقود').message))
+      .catch((err) => setError(describeLoadError(err, 'العقود التشغيلية').message))
       .finally(() => setLoading(false));
   }, [statusFilter, typeFilter, projectFilter, search, page]);
 
@@ -98,14 +98,14 @@ export default function ContractsListPage() {
     <Layout>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">العقود</CardTitle>
+          <CardTitle className="text-2xl">العقود التشغيلية</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
               <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <Input
-                placeholder="بحث برقم العقد أو العنوان أو المقاول..."
+                placeholder="بحث في العقود التشغيلية برقم العقد أو العنوان أو المقاول..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 className="pr-10"
@@ -174,7 +174,7 @@ export default function ContractsListPage() {
                     {contracts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                          لا توجد عقود
+                          لا توجد عقود تشغيلية
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -206,7 +206,7 @@ export default function ContractsListPage() {
               {/* Mobile card view */}
               <div className="responsive-cards-mobile space-y-3">
                 {contracts.length === 0 ? (
-                  <p className="text-center py-8 text-muted-foreground">لا توجد عقود</p>
+                  <p className="text-center py-8 text-muted-foreground">لا توجد عقود تشغيلية</p>
                 ) : (
                   contracts.map((c) => (
                     <div

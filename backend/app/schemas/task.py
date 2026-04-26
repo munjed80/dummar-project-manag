@@ -31,6 +31,10 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    location_text: Optional[str] = None
+    location_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     assigned_to_id: Optional[int] = None
     team_id: Optional[int] = None
     project_id: Optional[int] = None
