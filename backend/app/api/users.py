@@ -121,6 +121,19 @@ def update_user(
 
     update_data = user_update.model_dump(exclude_unset=True)
 
+    if "username" in update_data:
+        new_username = (update_data.get("username") or "").strip()
+        if not new_username:
+            raise HTTPException(status_code=400, detail="Username cannot be empty")
+        existing = (
+            db.query(User)
+            .filter(User.username == new_username, User.id != user.id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already exists")
+        update_data["username"] = new_username
+
     # Defensive: a director must not be able to lock themselves out by
     # demoting their own role or marking themselves inactive in one call.
     if user.id == current_user.id:
@@ -242,4 +255,3 @@ def delete_user(
     )
 
     return {"message": "User deactivated successfully"}
-

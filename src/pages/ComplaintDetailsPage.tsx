@@ -49,6 +49,14 @@ const typeLabels: Record<string, string> = {
   heating_network: 'طلب صيانة شبكة التدفئة', other: 'أخرى',
 };
 
+const responsibleAuthorityOptions = [
+  { value: 'project_director', label: 'مدير المشروع', userRole: 'project_director', allowsTeam: false },
+  { value: 'engineer_supervisor', label: 'مشرف هندسي', userRole: 'engineer_supervisor', allowsTeam: false },
+  { value: 'area_supervisor', label: 'مشرف المنطقة', userRole: 'area_supervisor', allowsTeam: false },
+  { value: 'field_team', label: 'فريق ميداني', userRole: 'field_team', allowsTeam: true },
+  { value: 'contractor_user', label: 'مستخدم مقاول', userRole: 'contractor_user', allowsTeam: true },
+] as const;
+
 export default function ComplaintDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -64,6 +72,8 @@ export default function ComplaintDetailsPage() {
   const [error, setError] = useState('');
   const [newStatus, setNewStatus] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [responsibleAuthority, setResponsibleAuthority] = useState('');
+  const [responsibleTeam, setResponsibleTeam] = useState('');
   const [projectId, setProjectId] = useState('');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
@@ -75,6 +85,7 @@ export default function ComplaintDetailsPage() {
   const [convertDescription, setConvertDescription] = useState('');
   const [convertDueDate, setConvertDueDate] = useState('');
   const [convertAssignee, setConvertAssignee] = useState('');
+  const [convertAuthority, setConvertAuthority] = useState('');
   const [convertTeam, setConvertTeam] = useState('');
   const [convertPriority, setConvertPriority] = useState('');
   const [converting, setConverting] = useState(false);
@@ -102,6 +113,10 @@ export default function ComplaintDetailsPage() {
         setProjects((projectsData as any).items || []);
         setLinkedTasks((linkedTasksData as any).items || []);
         setProjectId(complaintData?.project_id ? String(complaintData.project_id) : '');
+        const matchedAuthority = responsibleAuthorityOptions.find((opt) => opt.userRole === complaintData?.assigned_to?.role);
+        if (matchedAuthority) {
+          setResponsibleAuthority(matchedAuthority.value);
+        }
       })
       .catch(() => setError('فشل تحميل بيانات الشكوى'))
       .finally(() => setLoading(false));
@@ -127,6 +142,7 @@ export default function ComplaintDetailsPage() {
       setNewStatus('');
       setNotes('');
       setAssignee('');
+      setResponsibleTeam('');
       setConfirmAction(null);
       fetchData();
     } catch {
@@ -152,6 +168,7 @@ export default function ComplaintDetailsPage() {
     setConvertTitle(`معالجة شكوى ${complaint.tracking_number || ''}`.trim());
     setConvertDescription(complaint.description || '');
     setConvertDueDate('');
+    setConvertAuthority('');
     setConvertAssignee('');
     setConvertTeam('');
     setConvertPriority(complaint.priority || '');
@@ -234,6 +251,14 @@ export default function ComplaintDetailsPage() {
 
   const areaObj = areas.find((a: any) => a.id === complaint.area_id);
   const assignedUser = users.find((u: any) => u.id === complaint.assigned_to_id);
+  const selectedAuthority = responsibleAuthorityOptions.find((opt) => opt.value === responsibleAuthority);
+  const selectedConvertAuthority = responsibleAuthorityOptions.find((opt) => opt.value === convertAuthority);
+  const filteredUsers = users.filter((u: any) => (
+    u.is_active && (!selectedAuthority?.userRole || u.role === selectedAuthority.userRole)
+  ));
+  const filteredConvertUsers = users.filter((u: any) => (
+    u.is_active && (!selectedConvertAuthority?.userRole || u.role === selectedConvertAuthority.userRole)
+  ));
   const destructiveStatuses = ['rejected'];
 
   const detail = (label: string, value: React.ReactNode) => (
@@ -355,18 +380,49 @@ export default function ComplaintDetailsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">تعيين إلى</label>
-                <Select value={assignee} onValueChange={setAssignee}>
-                  <SelectTrigger><SelectValue placeholder="اختر المسؤول" /></SelectTrigger>
+                <label className="text-sm font-medium">الجهة المسؤولة</label>
+                <Select value={responsibleAuthority} onValueChange={(value) => {
+                  setResponsibleAuthority(value);
+                  setAssignee('');
+                  setResponsibleTeam('');
+                }}>
+                  <SelectTrigger><SelectValue placeholder="اختر الجهة المسؤولة" /></SelectTrigger>
                   <SelectContent>
-                    {users.filter((u: any) => u.is_active).map((u: any) => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.full_name}</SelectItem>
+                    {responsibleAuthorityOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">المشروع المرتبط</label>
+                <label className="text-sm font-medium">المستخدم المسؤول</label>
+                <Select value={assignee} onValueChange={setAssignee}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedAuthority ? 'اختر المستخدم المسؤول' : 'اختر الجهة المسؤولة أولاً'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredUsers.map((u: any) => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedAuthority?.allowsTeam && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">الفريق المسؤول (عند توفره)</label>
+                  <Select value={responsibleTeam || '__none__'} onValueChange={(v) => setResponsibleTeam(v === '__none__' ? '' : v)}>
+                    <SelectTrigger><SelectValue placeholder="اختر الفريق (اختياري)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— بدون فريق —</SelectItem>
+                      {teams.map((t: any) => (
+                        <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">المشروع المرتبط (اختياري)</label>
                 <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
                   <SelectTrigger><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
                   <SelectContent>
@@ -379,10 +435,13 @@ export default function ComplaintDetailsPage() {
               </div>
             </div>
             <Textarea
-              placeholder="ملاحظات..."
+              placeholder="ملاحظات (اختياري)..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              التسلسل المعتمد: الطلب/الشكوى ← الجهة المسؤولة ← المستخدم/الفريق المسؤول ← التنفيذ.
+            </p>
             <Button
               onClick={() => {
                 if (newStatus && destructiveStatuses.includes(newStatus)) {
@@ -527,27 +586,47 @@ export default function ComplaintDetailsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">تعيين إلى مستخدم</label>
-                <Select value={convertAssignee} onValueChange={setConvertAssignee}>
-                  <SelectTrigger><SelectValue placeholder="اختر المستخدم" /></SelectTrigger>
+                <label className="text-sm font-medium">الجهة المسؤولة</label>
+                <Select value={convertAuthority} onValueChange={(value) => {
+                  setConvertAuthority(value);
+                  setConvertAssignee('');
+                  setConvertTeam('');
+                }}>
+                  <SelectTrigger><SelectValue placeholder="اختر الجهة المسؤولة" /></SelectTrigger>
                   <SelectContent>
-                    {users.filter((u: any) => u.is_active).map((u: any) => (
-                      <SelectItem key={u.id} value={String(u.id)}>{u.full_name}</SelectItem>
+                    {responsibleAuthorityOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">تعيين إلى فريق تنفيذي</label>
-                <Select value={convertTeam} onValueChange={setConvertTeam}>
-                  <SelectTrigger><SelectValue placeholder="اختر الفريق" /></SelectTrigger>
+                <label className="text-sm font-medium">المستخدم المسؤول</label>
+                <Select value={convertAssignee} onValueChange={setConvertAssignee}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedConvertAuthority ? 'اختر المستخدم المسؤول' : 'اختر الجهة المسؤولة أولاً'} />
+                  </SelectTrigger>
                   <SelectContent>
+                    {filteredConvertUsers.map((u: any) => (
+                      <SelectItem key={u.id} value={String(u.id)}>{u.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedConvertAuthority?.allowsTeam && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">الفريق المسؤول (عند توفره)</label>
+                <Select value={convertTeam || '__none__'} onValueChange={(v) => setConvertTeam(v === '__none__' ? '' : v)}>
+                  <SelectTrigger><SelectValue placeholder="اختر الفريق (اختياري)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— بدون فريق —</SelectItem>
                     {teams.map((t: any) => (
                       <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              )}
             </div>
             {convertTeam && !convertAssignee && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">

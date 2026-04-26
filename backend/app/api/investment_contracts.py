@@ -142,6 +142,12 @@ def create_investment_contract(
     data["additional_attachments"] = serialize_file_list(
         data.get("additional_attachments")
     )
+    data["handover_property_images"] = serialize_file_list(
+        data.get("handover_property_images")
+    )
+    data["financial_documents"] = serialize_file_list(
+        data.get("financial_documents")
+    )
 
     contract = InvestmentContract(
         **data,
@@ -305,6 +311,14 @@ def update_investment_contract(
     if "additional_attachments" in update_data:
         update_data["additional_attachments"] = serialize_file_list(
             update_data["additional_attachments"]
+        )
+    if "handover_property_images" in update_data:
+        update_data["handover_property_images"] = serialize_file_list(
+            update_data["handover_property_images"]
+        )
+    if "financial_documents" in update_data:
+        update_data["financial_documents"] = serialize_file_list(
+            update_data["financial_documents"]
         )
 
     for field, value in update_data.items():

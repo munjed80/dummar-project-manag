@@ -28,6 +28,8 @@ class InvestmentContractBase(BaseModel):
     owner_id_copy: Optional[str] = None
     ownership_proof: Optional[str] = None
     handover_report: Optional[str] = None
+    handover_property_images: Optional[List[str]] = None
+    financial_documents: Optional[List[str]] = None
     additional_attachments: Optional[List[str]] = None
 
 
@@ -54,6 +56,8 @@ class InvestmentContractUpdate(BaseModel):
     owner_id_copy: Optional[str] = None
     ownership_proof: Optional[str] = None
     handover_report: Optional[str] = None
+    handover_property_images: Optional[List[str]] = None
+    financial_documents: Optional[List[str]] = None
     additional_attachments: Optional[List[str]] = None
 
 
@@ -75,6 +79,8 @@ class InvestmentContractResponse(BaseModel):
     owner_id_copy: Optional[str] = None
     ownership_proof: Optional[str] = None
     handover_report: Optional[str] = None
+    handover_property_images: Optional[List[str]] = None
+    financial_documents: Optional[List[str]] = None
     additional_attachments: Optional[List[str]] = None
     is_active: bool
     created_by_id: Optional[int] = None
@@ -88,6 +94,16 @@ class InvestmentContractResponse(BaseModel):
     @field_validator("additional_attachments", mode="before")
     @classmethod
     def _parse_additional(cls, v: object) -> Optional[List[str]]:
+        return parse_file_list(v)
+
+    @field_validator("handover_property_images", mode="before")
+    @classmethod
+    def _parse_handover_images(cls, v: object) -> Optional[List[str]]:
+        return parse_file_list(v)
+
+    @field_validator("financial_documents", mode="before")
+    @classmethod
+    def _parse_financial_docs(cls, v: object) -> Optional[List[str]]:
         return parse_file_list(v)
 
     class Config:

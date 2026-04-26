@@ -91,6 +91,8 @@ class InvestmentContract(Base):
     owner_id_copy = Column(String(255), nullable=True)        # صورة هوية المالك
     ownership_proof = Column(String(255), nullable=True)      # إثبات الملكية
     handover_report = Column(String(255), nullable=True)      # محضر التسليم
+    handover_property_images = Column(Text, nullable=True)    # صور العقار عند التسليم
+    financial_documents = Column(Text, nullable=True)         # مستندات مالية إن وجدت
     # JSON-serialised list of additional attachment paths (مرفقات إضافية)
     additional_attachments = Column(Text, nullable=True)
 

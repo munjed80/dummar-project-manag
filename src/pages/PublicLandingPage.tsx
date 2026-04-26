@@ -26,20 +26,20 @@ export default function PublicLandingPage() {
         </div>
 
         {/* Two main CTAs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-          <Card className="border-2 border-primary/30 hover:border-primary transition-colors">
-            <CardContent className="pt-8 pb-8 px-6 text-center space-y-4">
-              <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <Plus size={32} className="text-primary" weight="bold" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-stretch">
+          <Card className="border-2 border-primary/50 shadow-md hover:shadow-lg hover:border-primary transition-all md:col-span-2">
+            <CardContent className="pt-9 pb-9 px-6 text-center space-y-5">
+              <div className="mx-auto w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                <Plus size={38} className="text-primary" weight="bold" />
               </div>
               <div>
-                <h3 className="text-xl font-bold mb-1">تقديم طلب / شكوى جديدة</h3>
+                <h3 className="text-2xl md:text-3xl font-extrabold mb-2">تقديم طلب / شكوى جديدة</h3>
                 <p className="text-sm text-muted-foreground">
                   املأ نموذجاً قصيراً يصف الطلب أو المشكلة والعنوان التفصيلي، وستحصل على رقم متابعة فوري.
                 </p>
               </div>
               <Link to="/complaints/new" className="block">
-                <Button size="lg" className="w-full gap-2">
+                <Button size="lg" className="w-full gap-2 h-12 text-base font-bold">
                   ابدأ بتقديم الطلب / الشكوى
                   <ArrowLeft size={18} />
                 </Button>
@@ -47,19 +47,19 @@ export default function PublicLandingPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-2 border-accent/30 hover:border-accent transition-colors">
-            <CardContent className="pt-8 pb-8 px-6 text-center space-y-4">
-              <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-                <MagnifyingGlass size={32} className="text-accent" weight="bold" />
+          <Card className="border border-muted hover:border-accent/50 transition-colors md:col-span-2">
+            <CardContent className="pt-6 pb-6 px-6 text-center space-y-3">
+              <div className="mx-auto w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                <MagnifyingGlass size={24} className="text-accent" weight="bold" />
               </div>
               <div>
-                <h3 className="text-xl font-bold mb-1">تتبع طلب / شكوى سابقة</h3>
+                <h3 className="text-lg font-bold mb-1">تتبع طلب / شكوى سابقة</h3>
                 <p className="text-sm text-muted-foreground">
                   أدخل رقم المتابعة ورقم الهاتف لمعرفة حالة طلبك ومراحل تنفيذه.
                 </p>
               </div>
               <Link to="/complaints/track" className="block">
-                <Button size="lg" variant="secondary" className="w-full gap-2">
+                <Button size="default" variant="secondary" className="w-full gap-2">
                   تتبع الطلب / الشكوى الآن
                   <ArrowLeft size={18} />
                 </Button>

@@ -21,6 +21,7 @@ import { MagnifyingGlass, Spinner, Warning, Plus, FileText, PencilSimple, Trash 
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import { FileUpload } from '@/components/FileUpload';
 
 // ── Lookups ───────────────────────────────────────────────────────────────
 
@@ -62,8 +63,8 @@ const ATTACHMENT_SLOTS: { field: string; label: string }[] = [
   { field: 'terms_booklet', label: 'نسخة دفتر الشروط' },
   { field: 'investor_id_copy', label: 'صورة هوية المستثمر' },
   { field: 'owner_id_copy', label: 'صورة هوية المالك' },
-  { field: 'ownership_proof', label: 'إثبات الملكية' },
-  { field: 'handover_report', label: 'محضر التسليم' },
+  { field: 'ownership_proof', label: 'وثيقة / سند ملكية العقار' },
+  { field: 'handover_report', label: 'محضر تسليم العقار' },
 ];
 
 // ── Empty form ─────────────────────────────────────────────────────────────
@@ -77,6 +78,15 @@ const emptyForm = {
   start_date: '',
   end_date: '',
   contract_value: '',
+  contract_copy: '',
+  terms_booklet: '',
+  investor_id_copy: '',
+  owner_id_copy: '',
+  ownership_proof: '',
+  handover_report: '',
+  handover_property_images: [] as string[],
+  financial_documents: [] as string[],
+  additional_attachments: [] as string[],
   notes: '',
 };
 
@@ -110,6 +120,15 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
           contract_value: editData.contract_value !== undefined && editData.contract_value !== null
             ? String(editData.contract_value)
             : '',
+          contract_copy: editData.contract_copy || '',
+          terms_booklet: editData.terms_booklet || '',
+          investor_id_copy: editData.investor_id_copy || '',
+          owner_id_copy: editData.owner_id_copy || '',
+          ownership_proof: editData.ownership_proof || '',
+          handover_report: editData.handover_report || '',
+          handover_property_images: Array.isArray(editData.handover_property_images) ? editData.handover_property_images : [],
+          financial_documents: Array.isArray(editData.financial_documents) ? editData.financial_documents : [],
+          additional_attachments: Array.isArray(editData.additional_attachments) ? editData.additional_attachments : [],
           notes: editData.notes || '',
         });
       } else {
@@ -129,8 +148,8 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
     if (form.start_date && form.end_date && form.end_date < form.start_date) {
       e.end_date = 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية';
     }
-    if (!form.contract_value || isNaN(Number(form.contract_value))) {
-      e.contract_value = 'قيمة العقد مطلوبة ويجب أن تكون رقماً';
+    if (form.contract_value && isNaN(Number(form.contract_value))) {
+      e.contract_value = 'قيمة العقد يجب أن تكون رقماً';
     }
     return e;
   };
@@ -151,7 +170,16 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
         investment_type: form.investment_type,
         start_date: form.start_date,
         end_date: form.end_date,
-        contract_value: Number(form.contract_value),
+        contract_value: form.contract_value ? Number(form.contract_value) : 0,
+        contract_copy: form.contract_copy || null,
+        terms_booklet: form.terms_booklet || null,
+        investor_id_copy: form.investor_id_copy || null,
+        owner_id_copy: form.owner_id_copy || null,
+        ownership_proof: form.ownership_proof || null,
+        handover_report: form.handover_report || null,
+        handover_property_images: form.handover_property_images.length > 0 ? form.handover_property_images : null,
+        financial_documents: form.financial_documents.length > 0 ? form.financial_documents : null,
+        additional_attachments: form.additional_attachments.length > 0 ? form.additional_attachments : null,
         notes: form.notes.trim() || null,
       };
       if (isEdit) {
@@ -173,7 +201,7 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
     }
   };
 
-  const set = (field: string, value: string) => {
+  const set = (field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
     setErrors(prev => ({ ...prev, [field]: '' }));
   };
@@ -247,7 +275,7 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>قيمة العقد *</Label>
+              <Label>قيمة العقد</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -289,6 +317,22 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
               onChange={e => set('notes', e.target.value)}
               rows={3}
             />
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div>
+              <Label className="text-base">المستندات والمرفقات</Label>
+              <p className="text-xs text-muted-foreground mt-1">جميع المرفقات اختيارية.</p>
+            </div>
+            <FileUpload category="investment_contracts" accept="documents" multiple={false} existingFiles={form.contract_copy ? [form.contract_copy] : []} onUploadComplete={(files) => set('contract_copy', files[0] || '')} label="نسخة العقد" />
+            <FileUpload category="investment_contracts" accept="documents" multiple={false} existingFiles={form.terms_booklet ? [form.terms_booklet] : []} onUploadComplete={(files) => set('terms_booklet', files[0] || '')} label="نسخة دفتر الشروط" />
+            <FileUpload category="investment_contracts" accept="images" multiple={false} existingFiles={form.investor_id_copy ? [form.investor_id_copy] : []} onUploadComplete={(files) => set('investor_id_copy', files[0] || '')} label="صورة هوية المستثمر" />
+            <FileUpload category="investment_contracts" accept="images" multiple={false} existingFiles={form.owner_id_copy ? [form.owner_id_copy] : []} onUploadComplete={(files) => set('owner_id_copy', files[0] || '')} label="صورة هوية المالك" />
+            <FileUpload category="investment_contracts" accept="documents" multiple={false} existingFiles={form.ownership_proof ? [form.ownership_proof] : []} onUploadComplete={(files) => set('ownership_proof', files[0] || '')} label="وثيقة / سند ملكية العقار" />
+            <FileUpload category="investment_contracts" accept="documents" multiple={false} existingFiles={form.handover_report ? [form.handover_report] : []} onUploadComplete={(files) => set('handover_report', files[0] || '')} label="محضر تسليم العقار" />
+            <FileUpload category="investment_contracts" accept="images" existingFiles={form.handover_property_images} onUploadComplete={(files) => set('handover_property_images', files)} label="صور العقار عند التسليم" />
+            <FileUpload category="investment_contracts" accept="documents" existingFiles={form.financial_documents} onUploadComplete={(files) => set('financial_documents', files)} label="مستندات مالية إن وجدت" />
+            <FileUpload category="investment_contracts" accept="all" existingFiles={form.additional_attachments} onUploadComplete={(files) => set('additional_attachments', files)} label="مرفقات إضافية" />
           </div>
         </div>
 

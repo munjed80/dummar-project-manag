@@ -198,6 +198,35 @@ export default function InvestmentContractDetailsPage() {
     }
   };
 
+  const handleListAttachmentUpload = async (field: 'handover_property_images' | 'financial_documents', file: File) => {
+    try {
+      const result = await apiService.uploadInvestmentContractFile(file);
+      const current: string[] = Array.isArray(contract[field]) ? contract[field] : [];
+      await apiService.updateInvestmentContract(Number(id), {
+        [field]: [...current, result.path],
+      });
+      toast.success('تم رفع المرفق');
+      load();
+    } catch (err) {
+      const msg = err instanceof ApiError && err.detail ? err.detail : 'فشل رفع الملف';
+      toast.error(msg);
+    }
+  };
+
+  const handleListAttachmentRemove = async (field: 'handover_property_images' | 'financial_documents', path: string) => {
+    if (!window.confirm('هل تريد حذف هذا المرفق؟')) return;
+    try {
+      const current: string[] = Array.isArray(contract[field]) ? contract[field] : [];
+      await apiService.updateInvestmentContract(Number(id), {
+        [field]: current.filter(p => p !== path),
+      });
+      toast.success('تم حذف المرفق');
+      load();
+    } catch {
+      toast.error('فشل حذف المرفق');
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -411,6 +440,54 @@ export default function InvestmentContractDetailsPage() {
                 onRemove={() => handleAttachmentRemove(slot.field)}
               />
             ))}
+
+            <div className="border-t pt-3">
+              <h3 className="font-medium mb-2">صور العقار عند التسليم</h3>
+              <ul className="space-y-2">
+                {Array.isArray(contract.handover_property_images) && contract.handover_property_images.length > 0
+                  ? contract.handover_property_images.map((p: string, i: number) => (
+                      <li key={i} className="flex items-center justify-between bg-muted/40 rounded px-3 py-2">
+                        <a href={p} target="_blank" rel="noopener noreferrer" className="text-primary underline truncate">
+                          <DownloadSimple size={16} className="inline ml-1" />
+                          صورة تسليم {i + 1}
+                        </a>
+                        {canManage && (
+                          <Button variant="ghost" size="sm" onClick={() => handleListAttachmentRemove('handover_property_images', p)}>
+                            <Trash size={14} />
+                          </Button>
+                        )}
+                      </li>
+                    ))
+                  : <li className="text-sm text-muted-foreground">لا توجد صور تسليم مضافة</li>}
+              </ul>
+              {canManage && (
+                <FileUploadButton onSelect={(file) => handleListAttachmentUpload('handover_property_images', file)} label="إضافة صورة تسليم" />
+              )}
+            </div>
+
+            <div className="border-t pt-3">
+              <h3 className="font-medium mb-2">مستندات مالية إن وجدت</h3>
+              <ul className="space-y-2">
+                {Array.isArray(contract.financial_documents) && contract.financial_documents.length > 0
+                  ? contract.financial_documents.map((p: string, i: number) => (
+                      <li key={i} className="flex items-center justify-between bg-muted/40 rounded px-3 py-2">
+                        <a href={p} target="_blank" rel="noopener noreferrer" className="text-primary underline truncate">
+                          <DownloadSimple size={16} className="inline ml-1" />
+                          مستند مالي {i + 1}
+                        </a>
+                        {canManage && (
+                          <Button variant="ghost" size="sm" onClick={() => handleListAttachmentRemove('financial_documents', p)}>
+                            <Trash size={14} />
+                          </Button>
+                        )}
+                      </li>
+                    ))
+                  : <li className="text-sm text-muted-foreground">لا توجد مستندات مالية</li>}
+              </ul>
+              {canManage && (
+                <FileUploadButton onSelect={(file) => handleListAttachmentUpload('financial_documents', file)} label="إضافة مستند مالي" />
+              )}
+            </div>
 
             <div className="border-t pt-3">
               <h3 className="font-medium mb-2">مرفقات إضافية</h3>

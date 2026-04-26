@@ -13,6 +13,7 @@ from app.schemas.investment_property import (
 )
 from app.api.deps import get_current_internal_user, require_role
 from app.services.audit import write_audit_log
+from app.schemas.file_utils import serialize_file_list
 
 router = APIRouter(prefix="/investment-properties", tags=["investment-properties"])
 
@@ -39,10 +40,12 @@ def create_investment_property(
     current_user: User = Depends(_property_managers),
     db: Session = Depends(get_db),
 ):
-    db_prop = InvestmentProperty(
-        **prop.model_dump(),
-        created_by_id=current_user.id,
-    )
+    data = prop.model_dump()
+    data["property_images"] = serialize_file_list(data.get("property_images"))
+    data["property_documents"] = serialize_file_list(data.get("property_documents"))
+    data["additional_attachments"] = serialize_file_list(data.get("additional_attachments"))
+
+    db_prop = InvestmentProperty(**data, created_by_id=current_user.id)
     db.add(db_prop)
     db.commit()
     db.refresh(db_prop)
@@ -119,6 +122,12 @@ def update_investment_property(
         raise HTTPException(status_code=404, detail="Investment property not found")
 
     update_data = prop_update.model_dump(exclude_unset=True)
+    if "property_images" in update_data:
+        update_data["property_images"] = serialize_file_list(update_data.get("property_images"))
+    if "property_documents" in update_data:
+        update_data["property_documents"] = serialize_file_list(update_data.get("property_documents"))
+    if "additional_attachments" in update_data:
+        update_data["additional_attachments"] = serialize_file_list(update_data.get("additional_attachments"))
     for field, value in update_data.items():
         setattr(prop, field, value)
 

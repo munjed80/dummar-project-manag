@@ -21,6 +21,7 @@ import { MagnifyingGlass, Spinner, Warning, Plus, Buildings, PencilSimple, Trash
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import { FileUpload } from '@/components/FileUpload';
 
 // ── Lookup maps ────────────────────────────────────────────────────────────
 
@@ -61,6 +62,10 @@ const emptyForm = {
   description: '',
   owner_name: '',
   owner_info: '',
+  property_images: [] as string[],
+  property_documents: [] as string[],
+  owner_id_image: '',
+  additional_attachments: [] as string[],
   notes: '',
 };
 
@@ -90,6 +95,10 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
           description: editData.description || '',
           owner_name: editData.owner_name || '',
           owner_info: editData.owner_info || '',
+          property_images: Array.isArray(editData.property_images) ? editData.property_images : [],
+          property_documents: Array.isArray(editData.property_documents) ? editData.property_documents : [],
+          owner_id_image: editData.owner_id_image || '',
+          additional_attachments: Array.isArray(editData.additional_attachments) ? editData.additional_attachments : [],
           notes: editData.notes || '',
         });
       } else {
@@ -122,6 +131,10 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
         description: form.description.trim() || null,
         owner_name: form.owner_name.trim() || null,
         owner_info: form.owner_info.trim() || null,
+        property_images: form.property_images.length > 0 ? form.property_images : null,
+        property_documents: form.property_documents.length > 0 ? form.property_documents : null,
+        owner_id_image: form.owner_id_image || null,
+        additional_attachments: form.additional_attachments.length > 0 ? form.additional_attachments : null,
         notes: form.notes.trim() || null,
       };
       if (form.area.trim()) payload.area = Number(form.area);
@@ -145,7 +158,7 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
     }
   };
 
-  const set = (field: string, value: string) => {
+  const set = (field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
     setErrors(prev => ({ ...prev, [field]: '' }));
   };
@@ -253,6 +266,42 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
               rows={2}
+            />
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div>
+              <Label className="text-base">الصور والمرفقات</Label>
+              <p className="text-xs text-muted-foreground mt-1">اختياري بالكامل — يمكن إضافة الملفات لاحقًا.</p>
+            </div>
+            <FileUpload
+              category="investment_contracts"
+              accept="images"
+              existingFiles={form.property_images}
+              onUploadComplete={(files) => set('property_images', files)}
+              label="صور العقار"
+            />
+            <FileUpload
+              category="investment_contracts"
+              accept="documents"
+              existingFiles={form.property_documents}
+              onUploadComplete={(files) => set('property_documents', files)}
+              label="وثائق العقار"
+            />
+            <FileUpload
+              category="investment_contracts"
+              accept="images"
+              multiple={false}
+              existingFiles={form.owner_id_image ? [form.owner_id_image] : []}
+              onUploadComplete={(files) => set('owner_id_image', files[0] || '')}
+              label="صورة هوية المالك"
+            />
+            <FileUpload
+              category="investment_contracts"
+              accept="all"
+              existingFiles={form.additional_attachments}
+              onUploadComplete={(files) => set('additional_attachments', files)}
+              label="مرفقات إضافية"
             />
           </div>
         </div>

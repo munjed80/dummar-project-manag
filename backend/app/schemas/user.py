@@ -25,6 +25,7 @@ class UserUpdate(BaseModel):
     Setting ``password`` here will hash it and force a password change on next
     login (see ``app.api.users.update_user``).
     """
+    username: Optional[str] = None
     full_name: Optional[str] = None
     phone: Optional[str] = None
     role: Optional[UserRole] = None
@@ -70,5 +71,4 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
-
 

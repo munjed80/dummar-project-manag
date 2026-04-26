@@ -55,6 +55,25 @@ class TestDirectorCRUD:
         assert data["owner_name"] == "أحمد محمد"
         assert data["is_active"] is True
 
+    def test_director_creates_property_with_attachments(self, client, director_token):
+        payload = _make_property_payload(
+            property_images=["/uploads/investment_contracts/a.jpg"],
+            property_documents=["/uploads/investment_contracts/b.pdf"],
+            owner_id_image="/uploads/investment_contracts/c.jpg",
+            additional_attachments=["/uploads/investment_contracts/d.docx"],
+        )
+        resp = client.post(
+            "/investment-properties/",
+            json=payload,
+            headers=_auth(director_token),
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["property_images"] == payload["property_images"]
+        assert data["property_documents"] == payload["property_documents"]
+        assert data["owner_id_image"] == payload["owner_id_image"]
+        assert data["additional_attachments"] == payload["additional_attachments"]
+
     def test_director_lists_properties(self, client, director_token, db):
         db.add(InvestmentProperty(
             property_type=PropertyType.BUILDING,
@@ -168,6 +187,34 @@ class TestDirectorCRUD:
         data = resp.json()
         assert data["address"] == "العنوان الجديد"
         assert data["status"] == "invested"
+
+    def test_director_updates_property_attachments(self, client, director_token, db):
+        prop = InvestmentProperty(
+            property_type=PropertyType.BUILDING,
+            address="العنوان القديم",
+            status=PropertyStatus.AVAILABLE,
+        )
+        db.add(prop)
+        db.commit()
+        db.refresh(prop)
+
+        payload = {
+            "property_images": ["/uploads/investment_contracts/new-image.jpg"],
+            "property_documents": ["/uploads/investment_contracts/new-doc.pdf"],
+            "owner_id_image": "/uploads/investment_contracts/owner.jpg",
+            "additional_attachments": ["/uploads/investment_contracts/extra.docx"],
+        }
+        resp = client.put(
+            f"/investment-properties/{prop.id}",
+            json=payload,
+            headers=_auth(director_token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["property_images"] == payload["property_images"]
+        assert data["property_documents"] == payload["property_documents"]
+        assert data["owner_id_image"] == payload["owner_id_image"]
+        assert data["additional_attachments"] == payload["additional_attachments"]
 
     def test_director_deletes_property(self, client, director_token, db):
         prop = InvestmentProperty(
