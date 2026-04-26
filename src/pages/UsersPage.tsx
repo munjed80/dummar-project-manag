@@ -71,7 +71,14 @@ export default function UsersPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState({ username: '', full_name: '', password: '', role: 'field_team', phone: '' });
+  const [formData, setFormData] = useState({
+    username: '',
+    full_name: '',
+    password: '',
+    role: 'field_team',
+    phone: '',
+    must_change_password: false,
+  });
   const [saving, setSaving] = useState(false);
 
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
@@ -114,13 +121,27 @@ export default function UsersPage() {
 
   const openCreateDialog = () => {
     setEditingUser(null);
-    setFormData({ username: '', full_name: '', password: '', role: 'field_team', phone: '' });
+    setFormData({
+      username: '',
+      full_name: '',
+      password: '',
+      role: 'field_team',
+      phone: '',
+      must_change_password: true,
+    });
     setDialogOpen(true);
   };
 
   const openEditDialog = (user: User) => {
     setEditingUser(user);
-    setFormData({ username: user.username, full_name: user.full_name, password: '', role: user.role, phone: user.phone || '' });
+    setFormData({
+      username: user.username,
+      full_name: user.full_name,
+      password: '',
+      role: user.role,
+      phone: user.phone || '',
+      must_change_password: !!user.must_change_password,
+    });
     setDialogOpen(true);
   };
 
@@ -131,10 +152,12 @@ export default function UsersPage() {
         // Admin edit: full_name, phone, role, active status.
         // Password is NOT changed here — use the dedicated reset action.
         const updateData: any = {
+          username: formData.username,
           full_name: formData.full_name,
           phone: formData.phone || undefined,
           role: formData.role,
           is_active: editingUser.is_active,
+          must_change_password: formData.must_change_password,
         };
         await apiService.updateUser(editingUser.id, updateData);
         toast.success('تم تحديث المستخدم بنجاح');
@@ -155,7 +178,7 @@ export default function UsersPage() {
           password: formData.password,
           role: formData.role,
           phone: formData.phone || undefined,
-          must_change_password: true,
+          must_change_password: formData.must_change_password,
         };
         await apiService.createUser(createPayload);
         toast.success('تم إنشاء المستخدم بنجاح');
@@ -344,12 +367,10 @@ export default function UsersPage() {
             <DialogTitle>{editingUser ? 'تعديل المستخدم' : 'إضافة مستخدم جديد'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {!editingUser && (
-              <div className="space-y-2">
-                <Label>اسم المستخدم *</Label>
-                <Input value={formData.username} onChange={(e) => setFormData(f => ({ ...f, username: e.target.value }))} />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>اسم المستخدم *</Label>
+              <Input value={formData.username} onChange={(e) => setFormData(f => ({ ...f, username: e.target.value }))} />
+            </div>
             <div className="space-y-2">
               <Label>الاسم الكامل *</Label>
               <Input value={formData.full_name} onChange={(e) => setFormData(f => ({ ...f, full_name: e.target.value }))} />
@@ -375,6 +396,15 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={formData.must_change_password}
+                onChange={(e) => setFormData(f => ({ ...f, must_change_password: e.target.checked }))}
+                className="h-4 w-4"
+              />
+              مطالبة المستخدم بتغيير كلمة المرور عند تسجيل الدخول التالي
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>

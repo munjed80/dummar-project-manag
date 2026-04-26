@@ -195,6 +195,93 @@ def test_admin_can_change_role_and_phone_and_full_name(client, director_token, d
     assert body["phone"] == "+963900000002"
 
 
+def test_director_full_user_management_flow(client, director_token):
+    # 1) create user
+    create = client.post(
+        "/users/",
+        json={
+            "username": "manage_me",
+            "full_name": "Manage Me",
+            "role": "field_team",
+            "phone": "+963911111111",
+            "password": "InitPass123!",
+            "must_change_password": False,
+        },
+        headers=_auth_headers(director_token),
+    )
+    assert create.status_code == 200, create.text
+    user_id = create.json()["id"]
+
+    # 2) edit username + full name + role + must_change_password
+    update = client.put(
+        f"/users/{user_id}",
+        json={
+            "username": "managed_user",
+            "full_name": "Managed User Updated",
+            "role": "area_supervisor",
+            "must_change_password": True,
+        },
+        headers=_auth_headers(director_token),
+    )
+    assert update.status_code == 200, update.text
+    body = update.json()
+    assert body["username"] == "managed_user"
+    assert body["full_name"] == "Managed User Updated"
+    assert body["role"] == "area_supervisor"
+    assert body["must_change_password"] is True
+
+    # 3) reset password
+    reset = client.post(
+        f"/users/{user_id}/reset-password",
+        json={"new_password": "ResetPass456!", "require_change_on_next_login": False},
+        headers=_auth_headers(director_token),
+    )
+    assert reset.status_code == 200, reset.text
+
+    # 4) deactivate
+    deactivate = client.delete(f"/users/{user_id}", headers=_auth_headers(director_token))
+    assert deactivate.status_code == 200
+
+    denied_login = client.post(
+        "/auth/login",
+        json={"username": "managed_user", "password": "ResetPass456!"},
+    )
+    assert denied_login.status_code == 403
+
+    # 5) reactivate
+    reactivate = client.put(
+        f"/users/{user_id}",
+        json={"is_active": 1},
+        headers=_auth_headers(director_token),
+    )
+    assert reactivate.status_code == 200
+    assert reactivate.json()["is_active"] == 1
+
+    # 6) modified user can login with the reset password
+    login = client.post(
+        "/auth/login",
+        json={"username": "managed_user", "password": "ResetPass456!"},
+    )
+    assert login.status_code == 200, login.text
+
+
+def test_non_admin_cannot_manage_users(client, field_token):
+    create = client.post(
+        "/users/",
+        json={
+            "username": "forbidden_create",
+            "full_name": "Forbidden Create",
+            "role": "field_team",
+            "password": "SomePass123!",
+        },
+        headers=_auth_headers(field_token),
+    )
+    assert create.status_code == 403
+
+    list_resp = client.get("/users/", headers=_auth_headers(field_token))
+    assert list_resp.status_code == 403
+
+
 def test_admin_can_deactivate_user_via_update(client, director_token, db):
     db.add(User(
         username="op3", full_name="Op Three",
