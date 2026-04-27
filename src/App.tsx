@@ -98,6 +98,7 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
 const INTERNAL_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
   'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
+  'property_manager', 'investment_manager',
 ];
 
 // Roles that can view reports
@@ -127,7 +128,12 @@ const INVESTMENT_CONTRACTS_ROLES: UserRole[] = [
 
 const MANUAL_CONTRACTS_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'investment_manager', 'property_manager',
-  'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
+  'engineer_supervisor', 'complaints_officer', 'area_supervisor',
+];
+
+const OPERATIONAL_CONTRACT_ROLES: UserRole[] = [
+  'project_director', 'contracts_manager', 'engineer_supervisor',
+  'complaints_officer', 'area_supervisor', 'property_manager', 'investment_manager',
 ];
 
 function RootRoute() {
@@ -167,8 +173,8 @@ function App() {
           <Route path="/complaints-map" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
           <Route path="/tasks" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TasksListPage /></RoleProtectedRoute>} />
           <Route path="/tasks/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/contracts" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
-          <Route path="/contracts/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/contracts" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
+          <Route path="/contracts/:id" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
           <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />

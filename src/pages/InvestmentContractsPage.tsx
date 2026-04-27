@@ -240,7 +240,7 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
             </Select>
             {errors.property_id && <p className="text-xs text-destructive">{errors.property_id}</p>}
             {properties.length === 0 && (
-              <p className="text-xs text-muted-foreground">لا توجد أملاك متاحة. أضف عقاراً أولاً.</p>
+              <p className="text-xs text-muted-foreground">لا توجد أصول متاحة. أضف عقاراً أولاً.</p>
             )}
           </div>
 
@@ -470,7 +470,7 @@ export default function InvestmentContractsPage() {
               <Select value={propertyFilter} onValueChange={v => { setPropertyFilter(v); setPage(0); }}>
                 <SelectTrigger className="w-[200px]"><SelectValue placeholder="العقار" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">جميع الأملاك</SelectItem>
+                  <SelectItem value="all">جميع الأصول</SelectItem>
                   {properties.map(p => (
                     <SelectItem key={p.id} value={String(p.id)}>{p.address}</SelectItem>
                   ))}

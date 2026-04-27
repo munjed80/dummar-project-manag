@@ -168,7 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (credentials: { username: string; password: string }) => {
-    if (refreshing.current) return;
+    // Login must always attempt authentication for submitted credentials.
     setLoading(true);
     setError(null);
     await apiService.login(credentials);

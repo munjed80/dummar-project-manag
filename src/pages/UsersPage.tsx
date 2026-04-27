@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { describeLoadError } from '@/lib/loadError';
 import { ApiError } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 
 const roleLabels: Record<string, string> = {
   project_director: 'مدير المشروع',
@@ -35,7 +36,7 @@ const roleLabels: Record<string, string> = {
   field_team: 'فريق ميداني',
   contractor_user: 'مستخدم مقاول',
   citizen: 'مواطن',
-  property_manager: 'مسؤول الأملاك',
+  property_manager: 'مسؤول الأصول',
   investment_manager: 'مسؤول الاستثمار',
 };
 
@@ -61,6 +62,7 @@ const ROLES = [
 const PAGE_SIZE = 15;
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -330,7 +332,14 @@ export default function UsersPage() {
                               <Key size={16} />
                             </Button>
                             {u.is_active ? (
-                              <Button variant="ghost" size="sm" onClick={() => setDeactivateTarget(u)} className="text-destructive" title="إلغاء التفعيل">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDeactivateTarget(u)}
+                                className="text-destructive"
+                                title="إلغاء التفعيل"
+                                disabled={currentUser?.id === u.id}
+                              >
                                 <UserMinus size={16} />
                               </Button>
                             ) : (
@@ -387,7 +396,11 @@ export default function UsersPage() {
             </div>
             <div className="space-y-2">
               <Label>الدور</Label>
-              <Select value={formData.role} onValueChange={(v) => setFormData(f => ({ ...f, role: v }))}>
+              <Select
+                value={formData.role}
+                onValueChange={(v) => setFormData(f => ({ ...f, role: v }))}
+                disabled={!!editingUser && currentUser?.id === editingUser.id}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ROLES.map((r) => (

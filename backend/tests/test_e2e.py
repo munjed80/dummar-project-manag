@@ -517,10 +517,11 @@ class TestRoleBasedAccessControl:
         resp = client.get("/tasks/", headers=_auth_headers(field_token))
         assert resp.status_code == 200
 
-    def test_contractor_can_view_contracts(self, client, contractor_token):
-        """Contractor is internal staff and CAN view contract list."""
+    def test_contractor_cannot_view_contracts(self, client, contractor_token):
+        """Contractor users should not browse operational contracts unless owned."""
         resp = client.get("/contracts/", headers=_auth_headers(contractor_token))
         assert resp.status_code == 200
+        assert resp.json().get("items") == []
 
 
 # ===========================================================================

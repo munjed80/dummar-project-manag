@@ -19,7 +19,7 @@ const roleLabels: Record<string, string> = {
   field_team: 'فريق ميداني',
   contractor_user: 'مستخدم مقاول',
   citizen: 'مواطن',
-  property_manager: 'مسؤول الأملاك',
+  property_manager: 'مسؤول الأصول',
   investment_manager: 'مسؤول الاستثمار',
 };
 
