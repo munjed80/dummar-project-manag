@@ -24,7 +24,7 @@ export function PublicHeader() {
         <Link to="/" className="flex flex-col items-center gap-2 min-w-0 text-center">
           <span className="inline-flex items-center justify-center rounded-2xl border border-primary-foreground/35 bg-primary-foreground/10 shadow-sm p-2 md:p-2.5 backdrop-blur-sm">
             <img
-              src="/syrian-emblem.svg"
+              src="/syrian-emblem.png"
               alt="شعار الجمهورية العربية السورية"
               className="h-14 w-14 md:h-20 md:w-20 lg:h-24 lg:w-24 object-contain"
               loading="eager"
