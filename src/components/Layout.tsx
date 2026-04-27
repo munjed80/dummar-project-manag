@@ -85,16 +85,16 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <header className="sticky top-0 z-50 border-b border-border/70 bg-card shadow-[0_2px_12px_rgba(15,23,42,0.08)]">
+      <header className="sticky top-0 z-50 border-b border-primary/70 bg-primary text-primary-foreground shadow-[0_2px_12px_rgba(15,23,42,0.18)]">
         <div className="container mx-auto px-3 md:px-4 py-2 md:py-2.5 flex items-center justify-between gap-2">
-          <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-foreground/90 truncate">إدارة التجمع - مشروع دمر</h1>
+          <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
             {effectiveRole && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(effectiveRole) && (
               <a
                 href="/complaints/new"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-xl text-xs md:text-sm border border-border/80 bg-card/70 hover:bg-accent transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-xl text-xs md:text-sm border border-primary-foreground/30 bg-primary-foreground/10 hover:bg-primary-foreground/20 transition-colors"
                 title="فتح نموذج تقديم شكوى للمواطنين في تبويب جديد"
               >
                 <Plus size={15} />
@@ -103,14 +103,14 @@ export function Layout({ children }: LayoutProps) {
               </a>
             )}
             <NotificationBell />
-            <Button variant="ghost" onClick={handleLogout} className="text-foreground hover:bg-accent/80 px-2 md:px-3 rounded-xl">
+            <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary-foreground/20 px-2 md:px-3 rounded-xl">
               <SignOut size={18} />
               <span className="hidden sm:inline mr-1 text-sm">تسجيل الخروج</span>
             </Button>
           </div>
         </div>
 
-        <nav className="border-t border-border/70 bg-slate-100/90 lg:hidden">
+        <nav className="border-t border-primary-foreground/25 bg-primary/95 lg:hidden">
           <div className="container mx-auto px-2 md:px-4">
             <ul
               className="flex items-center gap-2 py-2 overflow-x-auto overflow-y-hidden whitespace-nowrap scroll-smooth touch-pan-x overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -122,8 +122,8 @@ export function Layout({ children }: LayoutProps) {
                     to={path}
                     className={`group inline-flex items-center gap-1.5 md:gap-2 rounded-xl px-3 md:px-3.5 py-1.5 md:py-2 text-xs md:text-sm font-medium transition-all duration-200 border ${
                       isActive(path)
-                        ? 'bg-primary/10 text-primary border-primary/30 shadow-[0_1px_6px_rgba(0,0,0,0.06)]'
-                        : 'bg-background/60 text-muted-foreground border-transparent hover:border-border/70 hover:bg-background hover:text-foreground'
+                        ? 'bg-primary-foreground/20 text-primary-foreground border-primary-foreground/35 shadow-[0_1px_6px_rgba(0,0,0,0.14)]'
+                        : 'bg-transparent text-primary-foreground/85 border-transparent hover:border-primary-foreground/25 hover:bg-primary-foreground/10 hover:text-primary-foreground'
                     }`}
                   >
                     <Icon size={15} weight={isActive(path) ? 'fill' : 'regular'} className={isActive(path) ? 'opacity-100' : 'opacity-80'} />

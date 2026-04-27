@@ -165,12 +165,12 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'تعديل العقار' : 'إضافة عقار جديد'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 overflow-y-auto px-1">
           {/* نوع العقار */}
           <div className="space-y-1">
             <Label>نوع العقار *</Label>
@@ -306,7 +306,7 @@ function PropertyFormDialog({ open, onOpenChange, editData, onSuccess }: Propert
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 border-t pt-3 mt-1 bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             إلغاء
           </Button>
