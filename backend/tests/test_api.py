@@ -183,6 +183,37 @@ class TestRBACEnforcement:
         )
         assert resp.status_code == 403
 
+    def test_field_team_cannot_list_operational_contracts(self, client, field_token):
+        resp = client.get("/contracts/", headers=_auth_headers(field_token))
+        assert resp.status_code == 403
+
+    def test_contractor_user_cannot_list_operational_contracts(self, client, contractor_token):
+        resp = client.get("/contracts/", headers=_auth_headers(contractor_token))
+        assert resp.status_code == 403
+
+    def test_property_manager_cannot_manage_operational_contracts(self, client, db):
+        property_user = _create_user(db, "pm_contracts_blocked", UserRole.PROPERTY_MANAGER)
+        property_token = _login(client, property_user.username)
+
+        list_resp = client.get("/contracts/", headers=_auth_headers(property_token))
+        assert list_resp.status_code == 403
+
+        create_resp = client.post(
+            "/contracts/",
+            json={
+                "contract_number": "PM-BLOCK-001",
+                "title": "Should Be Blocked",
+                "contractor_name": "Blocked Co",
+                "contract_type": "construction",
+                "contract_value": 1000,
+                "start_date": "2026-01-01",
+                "end_date": "2026-12-31",
+                "scope_description": "Blocked by RBAC",
+            },
+            headers=_auth_headers(property_token),
+        )
+        assert create_resp.status_code == 403
+
 
 # ---------------------------------------------------------------------------
 # 4. Director can create users

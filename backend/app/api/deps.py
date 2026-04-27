@@ -73,6 +73,17 @@ def get_current_contracts_manager(
     return current_user
 
 
+def get_current_operational_contract_reader(
+    current_user: User = Depends(require_role(
+        UserRole.PROJECT_DIRECTOR,
+        UserRole.CONTRACTS_MANAGER,
+        UserRole.ENGINEER_SUPERVISOR,
+    ))
+) -> User:
+    """Roles allowed to list operational contracts."""
+    return current_user
+
+
 def get_current_complaints_officer(
     current_user: User = Depends(require_role(
         UserRole.PROJECT_DIRECTOR,

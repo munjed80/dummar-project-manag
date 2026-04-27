@@ -533,6 +533,72 @@ class TestLocationRBAC:
         }, headers=_auth_headers(field_token))
         assert resp.status_code == 403
 
+    def test_field_team_cannot_update_or_delete_locations(self, client, db, field_token, sample_location):
+        update = client.put(
+            f"/locations/{sample_location.id}",
+            json={"description": "blocked"},
+            headers=_auth_headers(field_token),
+        )
+        assert update.status_code == 403
+
+        delete = client.delete(
+            f"/locations/{sample_location.id}",
+            headers=_auth_headers(field_token),
+        )
+        assert delete.status_code == 403
+
+    def test_citizen_cannot_create_legacy_reference_geography(self, client, db, citizen_token, sample_area):
+        area_resp = client.post(
+            "/locations/areas",
+            json={"name": "Citizen Area", "name_ar": "حي مواطن", "code": "CIT-A-001"},
+            headers=_auth_headers(citizen_token),
+        )
+        assert area_resp.status_code == 403
+
+        building_resp = client.post(
+            "/locations/buildings",
+            json={"area_id": sample_area.id, "name": "Citizen Building", "name_ar": "مبنى مواطن"},
+            headers=_auth_headers(citizen_token),
+        )
+        assert building_resp.status_code == 403
+
+        street_resp = client.post(
+            "/locations/streets",
+            json={"name": "Citizen Street", "name_ar": "شارع مواطن"},
+            headers=_auth_headers(citizen_token),
+        )
+        assert street_resp.status_code == 403
+
+    def test_location_managers_can_manage_legacy_reference_geography(self, client, db, director_token):
+        area = client.post(
+            "/locations/areas",
+            json={"name": "Manager Area", "name_ar": "حي مدير", "code": "MGR-A-001"},
+            headers=_auth_headers(director_token),
+        )
+        assert area.status_code == 200, area.text
+        area_id = area.json()["id"]
+
+        update = client.put(
+            f"/locations/areas/{area_id}",
+            json={"description": "updated by manager"},
+            headers=_auth_headers(director_token),
+        )
+        assert update.status_code == 200
+
+        building = client.post(
+            "/locations/buildings",
+            json={"area_id": area_id, "name": "Manager Building", "name_ar": "مبنى مدير"},
+            headers=_auth_headers(director_token),
+        )
+        assert building.status_code == 200
+
+        street = client.post(
+            "/locations/streets",
+            json={"name": "Manager Street", "name_ar": "شارع مدير"},
+            headers=_auth_headers(director_token),
+        )
+        assert street.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # Audit Logging
