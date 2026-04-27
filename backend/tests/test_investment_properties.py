@@ -507,7 +507,7 @@ class TestNewRolesAdminCreation:
             "/users/",
             json={
                 "username": "new_pm",
-                "full_name": "مسؤول الأملاك",
+                "full_name": "مسؤول الأصول",
                 "password": "testpass123",
                 "role": "property_manager",
             },

@@ -6,7 +6,7 @@ Create Date: 2026-04-26
 
 The system gained two new internal roles for the investment properties
 module:
-  - PROPERTY_MANAGER (مسؤول الأملاك): full CRUD on investment properties.
+  - PROPERTY_MANAGER (مسؤول الأصول): full CRUD on investment properties.
   - INVESTMENT_MANAGER (مسؤول الاستثمار): view-only on properties for now;
     will manage investment contracts in a later phase.
 

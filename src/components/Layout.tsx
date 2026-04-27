@@ -45,6 +45,7 @@ export function Layout({ children }: LayoutProps) {
   const effectiveRole: UserRole | null = role ?? readCachedRole();
 
   const allNavItems: NavItem[] = useMemo(() => [
+    // Primary workflow-first order (keep contract experiences grouped).
     { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
     { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
     { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
@@ -84,16 +85,16 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <header className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="container mx-auto px-3 md:px-4 py-2.5 md:py-3 flex items-center justify-between gap-2">
-          <h1 className="text-sm sm:text-base md:text-xl font-semibold tracking-tight text-foreground truncate">إدارة التجمع - مشروع دمر</h1>
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_2px_16px_rgba(0,0,0,0.04)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="container mx-auto px-3 md:px-4 py-2 md:py-2.5 flex items-center justify-between gap-2">
+          <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-foreground/90 truncate">إدارة التجمع - مشروع دمر</h1>
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
             {effectiveRole && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(effectiveRole) && (
               <a
                 href="/complaints/new"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1 px-2.5 md:px-3 py-1.5 rounded-lg text-xs md:text-sm border border-border bg-card hover:bg-accent transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-xl text-xs md:text-sm border border-border/80 bg-card/70 hover:bg-accent transition-colors"
                 title="فتح نموذج تقديم شكوى للمواطنين في تبويب جديد"
               >
                 <Plus size={15} />
@@ -102,30 +103,30 @@ export function Layout({ children }: LayoutProps) {
               </a>
             )}
             <NotificationBell />
-            <Button variant="ghost" onClick={handleLogout} className="text-foreground hover:bg-accent px-2 md:px-3">
+            <Button variant="ghost" onClick={handleLogout} className="text-foreground hover:bg-accent/80 px-2 md:px-3 rounded-xl">
               <SignOut size={18} />
               <span className="hidden sm:inline mr-1 text-sm">تسجيل الخروج</span>
             </Button>
           </div>
         </div>
 
-        <nav className="border-t border-border/60">
+        <nav className="border-t border-border/60 bg-muted/20">
           <div className="container mx-auto px-2 md:px-4">
             <ul
-              className="flex items-center gap-1.5 py-2 overflow-x-auto whitespace-nowrap scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              className="flex items-center gap-2 py-2 overflow-x-auto overflow-y-hidden whitespace-nowrap scroll-smooth touch-pan-x overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               onWheel={handleHorizontalWheel}
             >
               {navItems.map(({ path, icon: Icon, label }) => (
                 <li key={path} className="shrink-0">
                   <Link
                     to={path}
-                    className={`group inline-flex items-center gap-1.5 md:gap-2 rounded-full px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium transition-all duration-200 border ${
+                    className={`group inline-flex items-center gap-1.5 md:gap-2 rounded-xl px-3 md:px-3.5 py-1.5 md:py-2 text-xs md:text-sm font-medium transition-all duration-200 border ${
                       isActive(path)
-                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                        : 'bg-transparent text-muted-foreground border-transparent hover:border-border hover:bg-accent hover:text-foreground'
+                        ? 'bg-primary/10 text-primary border-primary/30 shadow-[0_1px_6px_rgba(0,0,0,0.06)]'
+                        : 'bg-background/60 text-muted-foreground border-transparent hover:border-border/70 hover:bg-background hover:text-foreground'
                     }`}
                   >
-                    <Icon size={16} weight={isActive(path) ? 'fill' : 'regular'} />
+                    <Icon size={15} weight={isActive(path) ? 'fill' : 'regular'} className={isActive(path) ? 'opacity-100' : 'opacity-80'} />
                     <span>{label}</span>
                   </Link>
                 </li>
