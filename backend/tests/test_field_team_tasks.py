@@ -14,6 +14,7 @@ Covers:
 """
 from app.models.task import Task, TaskPriority, TaskStatus
 from app.models.complaint import Complaint, ComplaintPriority, ComplaintStatus, ComplaintType
+from app.models.team import Team, TeamType
 from tests.test_e2e import _auth_headers, _create_user, _login
 
 
@@ -418,9 +419,14 @@ class TestComplaintToMaintenanceWorkflow:
         assert repair["after_photos"] == ["tasks/after_heat_1.jpg"]
         assert repair["task_status"] == "completed"
 
-    def test_create_task_requires_assigned_user_when_team_selected(
+    def test_create_task_allows_team_assignment_without_user(
         self, client, db, director_token
     ):
+        team = Team(name="Field Crew A", team_type=TeamType.FIELD_CREW)
+        db.add(team)
+        db.commit()
+        db.refresh(team)
+
         complaint = Complaint(
             tracking_number="CMPTEAMWARN1",
             full_name="Resident",
@@ -435,11 +441,35 @@ class TestComplaintToMaintenanceWorkflow:
 
         resp = client.post(
             f"/complaints/{complaint.id}/create-task",
-            json={"title": "Repair", "description": "d", "team_id": 10},
+            json={"title": "Repair", "description": "d", "team_id": team.id},
+            headers=_auth_headers(director_token),
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["team_id"] == team.id
+        assert resp.json()["assigned_to_id"] is None
+
+    def test_create_task_requires_assignee_or_team(
+        self, client, db, director_token
+    ):
+        complaint = Complaint(
+            tracking_number="CMPTEAMWARN2",
+            full_name="Resident",
+            phone="0991212122",
+            complaint_type=ComplaintType.HEATING_NETWORK,
+            description="desc",
+            status=ComplaintStatus.NEW,
+        )
+        db.add(complaint)
+        db.commit()
+        db.refresh(complaint)
+
+        resp = client.post(
+            f"/complaints/{complaint.id}/create-task",
+            json={"title": "Repair", "description": "d"},
             headers=_auth_headers(director_token),
         )
         assert resp.status_code == 422
-        assert "assigned_to_id" in (resp.json().get("detail") or "")
+        assert "assigned_to_id or team_id" in (resp.json().get("detail") or "")
 
     def test_create_task_priority_is_safely_mapped(
         self, client, db, director_token, field_user

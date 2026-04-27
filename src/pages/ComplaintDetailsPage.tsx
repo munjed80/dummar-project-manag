@@ -49,20 +49,12 @@ const typeLabels: Record<string, string> = {
 };
 
 const responsibleAuthorityOptions = [
-  { value: 'project_director', label: 'مدير المشروع', userRole: 'project_director', allowsTeam: false },
-  { value: 'engineer_supervisor', label: 'مشرف هندسي', userRole: 'engineer_supervisor', allowsTeam: false },
-  { value: 'area_supervisor', label: 'مشرف المنطقة', userRole: 'area_supervisor', allowsTeam: false },
-  { value: 'field_team', label: 'فريق ميداني', userRole: 'field_team', allowsTeam: true },
-  { value: 'contractor_user', label: 'مستخدم مقاول', userRole: 'contractor_user', allowsTeam: true },
+  { value: 'project_director', label: 'مدير المشروع', userRoles: ['project_director', 'contracts_manager'], allowsTeam: false },
+  { value: 'engineer_supervisor', label: 'مشرف هندسي', userRoles: ['engineer_supervisor'], allowsTeam: false },
+  { value: 'area_supervisor', label: 'مشرف المنطقة', userRoles: ['area_supervisor'], allowsTeam: false },
+  { value: 'field_team', label: 'فريق ميداني', userRoles: ['field_team'], allowsTeam: true },
+  { value: 'contractor_user', label: 'مستخدم مقاول', userRoles: ['contractor_user'], allowsTeam: false },
 ] as const;
-
-const roleByAuthority: Record<string, string> = {
-  project_director: 'project_director',
-  engineer_supervisor: 'engineer_supervisor',
-  area_supervisor: 'area_supervisor',
-  field_team: 'field_team',
-  contractor_user: 'contractor_user',
-};
 
 const filterTeamsByAuthority = (authority: string, allTeams: any[]) => {
   if (!authority) return [];
@@ -72,9 +64,6 @@ const filterTeamsByAuthority = (authority: string, allTeams: any[]) => {
       const name = String(team?.name || '').toLowerCase();
       return type === 'field_crew' || name.includes('صيانة') || name.includes('maintenance');
     });
-  }
-  if (authority === 'contractor_user') {
-    return allTeams.filter((team: any) => String(team?.team_type || '').toLowerCase() === 'contractor');
   }
   return [];
 };
@@ -134,7 +123,7 @@ export default function ComplaintDetailsPage() {
         setProjects((projectsData as any).items || []);
         setLinkedTasks((linkedTasksData as any).items || []);
         setProjectId(complaintData?.project_id ? String(complaintData.project_id) : '');
-        const matchedAuthority = responsibleAuthorityOptions.find((opt) => opt.userRole === complaintData?.assigned_to?.role);
+        const matchedAuthority = responsibleAuthorityOptions.find((opt) => opt.userRoles.includes(complaintData?.assigned_to?.role));
         if (matchedAuthority) {
           setResponsibleAuthority(matchedAuthority.value);
         }
@@ -221,8 +210,7 @@ export default function ComplaintDetailsPage() {
       return;
     }
 
-    const selectedRole = roleByAuthority[convertAuthority];
-    const hasActiveRoleUser = users.some((u: any) => u.is_active && u.role === selectedRole);
+    const hasProjectOwnerUser = users.some((u: any) => u.is_active && ['project_director', 'contracts_manager'].includes(u.role));
     const selectedAssignee = users.find((u: any) => String(u.id) === convertAssignee);
 
     if (!convertAuthority) {
@@ -267,12 +255,12 @@ export default function ComplaintDetailsPage() {
         return;
       }
     } else if (convertAuthority === 'project_director') {
-      if (hasActiveRoleUser && !convertAssignee) {
-        toast.error('يرجى اختيار مدير مشروع مسؤول.');
+      if (hasProjectOwnerUser && !convertAssignee) {
+        toast.error('يرجى اختيار مدير مشروع/مدير عقود مسؤول.');
         return;
       }
-      if (convertAssignee && selectedAssignee?.role !== 'project_director') {
-        toast.error('المستخدم المسؤول يجب أن يكون مدير مشروع.');
+      if (convertAssignee && !['project_director', 'contracts_manager'].includes(selectedAssignee?.role)) {
+        toast.error('المستخدم المسؤول يجب أن يكون مدير مشروع أو مدير عقود.');
         return;
       }
     }
@@ -351,10 +339,10 @@ export default function ComplaintDetailsPage() {
   const selectedAuthority = responsibleAuthorityOptions.find((opt) => opt.value === responsibleAuthority);
   const selectedConvertAuthority = responsibleAuthorityOptions.find((opt) => opt.value === convertAuthority);
   const filteredUsers = users.filter((u: any) => (
-    u.is_active && (!selectedAuthority?.userRole || u.role === selectedAuthority.userRole)
+    u.is_active && (!selectedAuthority?.userRoles || selectedAuthority.userRoles.includes(u.role))
   ));
   const filteredConvertUsers = users.filter((u: any) => (
-    u.is_active && (!!selectedConvertAuthority?.userRole && u.role === selectedConvertAuthority.userRole)
+    u.is_active && (!!selectedConvertAuthority?.userRoles && selectedConvertAuthority.userRoles.includes(u.role))
   ));
   const filteredTeams = filterTeamsByAuthority(responsibleAuthority, teams);
   const filteredConvertTeams = filterTeamsByAuthority(convertAuthority, teams);
