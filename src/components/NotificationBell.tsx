@@ -78,7 +78,11 @@ export function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={handleToggle}
-        className="relative p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors border border-transparent hover:border-primary/20"
+        className={`relative p-2 rounded-lg transition-colors border ${
+          open
+            ? 'bg-primary-foreground/20 text-primary-foreground border-primary-foreground/35'
+            : 'text-primary-foreground hover:bg-primary-foreground/10 border-transparent hover:border-primary-foreground/25'
+        }`}
         aria-label="الإشعارات"
       >
         <Bell size={22} weight={unreadCount > 0 ? 'fill' : 'regular'} />

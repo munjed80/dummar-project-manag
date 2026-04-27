@@ -72,6 +72,7 @@ export function Layout({ children }: LayoutProps) {
   );
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isDashboardRoute = location.pathname === '/dashboard';
 
   const handleHorizontalWheel = (event: React.WheelEvent<HTMLUListElement>) => {
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
@@ -140,20 +141,21 @@ export function Layout({ children }: LayoutProps) {
 
       <div className="container mx-auto px-3 md:px-4 py-4 md:py-6">
         <div className="flex items-start gap-4 md:gap-6">
-          <aside className="hidden lg:block w-64 shrink-0">
+          <aside className={`hidden lg:block shrink-0 transition-all duration-200 ${isDashboardRoute ? 'w-64' : 'w-20'}`}>
             <nav className="sticky top-24 rounded-2xl border border-border/80 bg-slate-100 shadow-sm p-2">
               <ul className="space-y-1">
                 {navItems.map(({ path, icon: Icon, label }) => (
                   <li key={`sidebar-${path}`}>
                     <Link
                       to={path}
-                      className={`group flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 border ${
+                      title={label}
+                      className={`group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 border ${isDashboardRoute ? 'justify-between' : 'justify-center'} ${
                         isActive(path)
                           ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                           : 'bg-white/80 text-slate-700 border-transparent hover:bg-white hover:text-slate-900 hover:border-slate-300'
                       }`}
                     >
-                      <span>{label}</span>
+                      <span className={isDashboardRoute ? 'inline' : 'sr-only'}>{label}</span>
                       <Icon size={18} weight={isActive(path) ? 'fill' : 'regular'} />
                     </Link>
                   </li>
