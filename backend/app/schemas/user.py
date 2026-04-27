@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 from app.models.user import UserRole
@@ -33,6 +33,16 @@ class UserUpdate(BaseModel):
     org_unit_id: Optional[int] = None
     password: Optional[str] = Field(default=None, min_length=8)
     must_change_password: Optional[bool] = None
+
+    @field_validator("username")
+    @classmethod
+    def validate_username_not_blank(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Username cannot be empty")
+        return cleaned
 
 
 class AdminPasswordReset(BaseModel):
@@ -71,4 +81,3 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
-
