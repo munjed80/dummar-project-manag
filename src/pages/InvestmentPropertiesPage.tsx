@@ -352,7 +352,7 @@ export default function InvestmentPropertiesPage() {
         setProperties(data.items);
         setTotalCount(data.total_count);
       })
-      .catch(err => setError(describeLoadError(err, 'الأملاك').message))
+      .catch(err => setError(describeLoadError(err, 'الأصول').message))
       .finally(() => setLoading(false));
   }, [page, typeFilter, statusFilter, search]);
 
@@ -390,7 +390,7 @@ export default function InvestmentPropertiesPage() {
           <div className="flex justify-between items-center flex-wrap gap-2">
             <CardTitle className="text-2xl flex items-center gap-2">
               <Buildings size={28} />
-              الأملاك
+              الأصول
             </CardTitle>
             {canManage && (
               <Button onClick={handleCreate}>
@@ -460,7 +460,7 @@ export default function InvestmentPropertiesPage() {
           {!loading && !error && properties.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <Buildings size={48} className="mx-auto mb-4 opacity-30" />
-              <p className="text-lg mb-2">لا توجد أملاك استثمارية بعد</p>
+              <p className="text-lg mb-2">لا توجد أصول استثمارية بعد</p>
               {canManage && (
                 <Button onClick={handleCreate} className="mt-4">
                   إضافة أول عقار

@@ -237,6 +237,7 @@ def test_create_task_from_complaint(client, director_token, db, sample_area):
             "title": "Fix pothole",
             "description": "Repair pothole from complaint",
             "priority": "high",
+            "assigned_to_id": 1,
         },
         headers=headers,
     )

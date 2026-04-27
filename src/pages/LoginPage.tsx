@@ -31,7 +31,9 @@ export default function LoginPage() {
         navigate('/change-password');
       } else {
         toast.success('تم تسجيل الدخول بنجاح');
-        navigate('/dashboard');
+        const cachedUserRaw = localStorage.getItem('cached_user');
+        const cachedRole = cachedUserRaw ? JSON.parse(cachedUserRaw)?.role : null;
+        navigate(cachedRole === 'citizen' ? '/citizen' : '/dashboard');
       }
     } catch (error) {
       toast.error('فشل تسجيل الدخول. تحقق من اسم المستخدم وكلمة المرور.');

@@ -19,7 +19,6 @@ import {
 import { Spinner, ClockCounterClockwise, MapPin, Image, Warning, ListChecks } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
@@ -57,9 +56,31 @@ const responsibleAuthorityOptions = [
   { value: 'contractor_user', label: 'مستخدم مقاول', userRole: 'contractor_user', allowsTeam: true },
 ] as const;
 
+const roleByAuthority: Record<string, string> = {
+  project_director: 'project_director',
+  engineer_supervisor: 'engineer_supervisor',
+  area_supervisor: 'area_supervisor',
+  field_team: 'field_team',
+  contractor_user: 'contractor_user',
+};
+
+const filterTeamsByAuthority = (authority: string, allTeams: any[]) => {
+  if (!authority) return [];
+  if (authority === 'field_team') {
+    return allTeams.filter((team: any) => {
+      const type = String(team?.team_type || '').toLowerCase();
+      const name = String(team?.name || '').toLowerCase();
+      return type === 'field_crew' || name.includes('صيانة') || name.includes('maintenance');
+    });
+  }
+  if (authority === 'contractor_user') {
+    return allTeams.filter((team: any) => String(team?.team_type || '').toLowerCase() === 'contractor');
+  }
+  return [];
+};
+
 export default function ComplaintDetailsPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { canManageComplaints } = useAuth();
   const [complaint, setComplaint] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
@@ -122,6 +143,17 @@ export default function ComplaintDetailsPage() {
       .finally(() => setLoading(false));
   };
 
+
+  const refreshLinkedTasks = async () => {
+    if (!id) return;
+    try {
+      const linkedTasksData = await apiService.getTasks({ complaint_id: Number(id), limit: 50 });
+      setLinkedTasks((linkedTasksData as any).items || []);
+    } catch {
+      // keep previous list if refresh fails
+    }
+  };
+
   useEffect(() => { fetchData(); }, [id]);
 
   const handleStatusUpdate = async () => {
@@ -176,36 +208,101 @@ export default function ComplaintDetailsPage() {
   };
 
   const handleConvertSubmit = async (force: boolean = false) => {
-    if (!id || !convertTitle.trim() || !convertDescription.trim()) {
+    if (!id || !complaint || !convertTitle.trim() || !convertDescription.trim()) {
       toast.error('العنوان والوصف مطلوبان');
       return;
     }
-    if (convertTeam && !convertAssignee) {
-      toast.error('اختيار فريق تنفيذي فقط غير كافٍ حالياً. يرجى تعيين مستخدم مسؤول عن المهمة.');
+    if (!convertDueDate) {
+      toast.error('يرجى تحديد تاريخ الاستحقاق.');
       return;
     }
+    if (!convertPriority) {
+      toast.error('يرجى اختيار أولوية المهمة.');
+      return;
+    }
+
+    const selectedRole = roleByAuthority[convertAuthority];
+    const hasActiveRoleUser = users.some((u: any) => u.is_active && u.role === selectedRole);
+    const selectedAssignee = users.find((u: any) => String(u.id) === convertAssignee);
+
+    if (!convertAuthority) {
+      toast.error('يرجى اختيار الجهة المسؤولة.');
+      return;
+    }
+
+    if (convertAuthority === 'field_team') {
+      if (!convertAssignee && !convertTeam) {
+        toast.error('لفريق ميداني يجب اختيار مستخدم ميداني أو فريق مسؤول على الأقل.');
+        return;
+      }
+      if (convertAssignee && selectedAssignee?.role !== 'field_team') {
+        toast.error('المستخدم المسؤول يجب أن يكون من الفريق الميداني.');
+        return;
+      }
+    } else if (convertAuthority === 'contractor_user') {
+      if (!convertAssignee) {
+        toast.error('يرجى اختيار مستخدم مقاول مسؤول.');
+        return;
+      }
+      if (selectedAssignee?.role !== 'contractor_user') {
+        toast.error('المستخدم المسؤول يجب أن يكون مستخدم مقاول.');
+        return;
+      }
+    } else if (convertAuthority === 'engineer_supervisor') {
+      if (!convertAssignee) {
+        toast.error('يرجى اختيار مشرف هندسي مسؤول.');
+        return;
+      }
+      if (selectedAssignee?.role !== 'engineer_supervisor') {
+        toast.error('المستخدم المسؤول يجب أن يكون مشرفاً هندسياً.');
+        return;
+      }
+    } else if (convertAuthority === 'area_supervisor') {
+      if (!convertAssignee) {
+        toast.error('يرجى اختيار مشرف منطقة مسؤول.');
+        return;
+      }
+      if (selectedAssignee?.role !== 'area_supervisor') {
+        toast.error('المستخدم المسؤول يجب أن يكون مشرف منطقة.');
+        return;
+      }
+    } else if (convertAuthority === 'project_director') {
+      if (hasActiveRoleUser && !convertAssignee) {
+        toast.error('يرجى اختيار مدير مشروع مسؤول.');
+        return;
+      }
+      if (convertAssignee && selectedAssignee?.role !== 'project_director') {
+        toast.error('المستخدم المسؤول يجب أن يكون مدير مشروع.');
+        return;
+      }
+    }
+
+    // Global guard: authority alone is not enough.
+    if (convertAuthority && !convertAssignee && !convertTeam) {
+      toast.error('لا يمكن إنشاء مهمة بجهة مسؤولة فقط دون تعيين مسؤول فعلي.');
+      return;
+    }
+
     setConverting(true);
     try {
       const payload: any = {
+        complaint_id: Number(id),
         title: convertTitle.trim(),
         description: convertDescription.trim(),
+        location_text: complaint.location_text || '',
+        before_photos: Array.isArray(complaint.images) && complaint.images.length > 0 ? complaint.images : undefined,
+        due_date: convertDueDate,
+        priority: convertPriority,
       };
-      if (convertDueDate) payload.due_date = convertDueDate;
       if (convertAssignee) payload.assigned_to_id = Number(convertAssignee);
       if (convertTeam) payload.team_id = Number(convertTeam);
-      if (convertPriority) payload.priority = convertPriority;
       if (force) payload.force = true;
-      const newTask = await apiService.createTaskFromComplaint(Number(id), payload);
-      toast.success('تم إنشاء المهمة وتم ربطها بالشكوى');
+      await apiService.createTaskFromComplaint(Number(id), payload);
+      toast.success('تم إنشاء المهمة وربطها بالشكوى وإسنادها بنجاح');
       setConvertOpen(false);
-      if (newTask?.id) {
-        navigate(`/tasks/${newTask.id}`);
-      } else {
-        fetchData();
-      }
+      await refreshLinkedTasks();
+      fetchData();
     } catch (err) {
-      // Backend returns 409 if a task already exists for this complaint.
-      // Offer the operator a chance to confirm creating an additional task.
       if (err instanceof ApiError && err.status === 409) {
         const proceed = window.confirm(
           (err.detail || 'توجد مهمة مرتبطة بهذه الشكوى مسبقاً.') +
@@ -257,8 +354,10 @@ export default function ComplaintDetailsPage() {
     u.is_active && (!selectedAuthority?.userRole || u.role === selectedAuthority.userRole)
   ));
   const filteredConvertUsers = users.filter((u: any) => (
-    u.is_active && (!selectedConvertAuthority?.userRole || u.role === selectedConvertAuthority.userRole)
+    u.is_active && (!!selectedConvertAuthority?.userRole && u.role === selectedConvertAuthority.userRole)
   ));
+  const filteredTeams = filterTeamsByAuthority(responsibleAuthority, teams);
+  const filteredConvertTeams = filterTeamsByAuthority(convertAuthority, teams);
   const destructiveStatuses = ['rejected'];
 
   const detail = (label: string, value: React.ReactNode) => (
@@ -305,17 +404,17 @@ export default function ComplaintDetailsPage() {
                   {priorityLabels[complaint.priority] || complaint.priority}
                 </Badge>
               ))}
-              {detail('المنطقة', areaObj ? (
+              {detail('المنطقة / الحي', areaObj ? (
                 <span className="flex items-center gap-1"><MapPin size={14} /> {areaObj.name_ar || areaObj.name}</span>
               ) : '-')}
-              {detail('الموقع', complaint.location_text)}
+              {detail('العنوان التفصيلي', complaint.location_text)}
               {complaint.latitude && complaint.longitude && detail('الإحداثيات', `${complaint.latitude}, ${complaint.longitude}`)}
               {detail('المسؤول المعين', assignedUser ? assignedUser.full_name : '-')}
-              {detail('المشروع', complaint.project_id ? (
+              {detail('المشروع المرتبط', complaint.project_id ? (
                 <Link to={`/projects/${complaint.project_id}`} className="text-primary hover:underline">
                   {projects.find((p: any) => p.id === complaint.project_id)?.title || `#${complaint.project_id}`}
                 </Link>
-              ) : '-')}
+              ) : 'غير مرتبط بمشروع')}
               {detail('تاريخ الإنشاء', complaint.created_at ? format(new Date(complaint.created_at), 'yyyy/MM/dd HH:mm') : '-')}
               {detail('تاريخ التحديث', complaint.updated_at ? format(new Date(complaint.updated_at), 'yyyy/MM/dd HH:mm') : '-')}
               {complaint.resolved_at && detail('تاريخ الحل', format(new Date(complaint.resolved_at), 'yyyy/MM/dd HH:mm'))}
@@ -396,7 +495,7 @@ export default function ComplaintDetailsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">المستخدم المسؤول</label>
-                <Select value={assignee} onValueChange={setAssignee}>
+                <Select value={assignee} onValueChange={setAssignee} disabled={!selectedAuthority}>
                   <SelectTrigger>
                     <SelectValue placeholder={selectedAuthority ? 'اختر المستخدم المسؤول' : 'اختر الجهة المسؤولة أولاً'} />
                   </SelectTrigger>
@@ -414,7 +513,7 @@ export default function ComplaintDetailsPage() {
                     <SelectTrigger><SelectValue placeholder="اختر الفريق (اختياري)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">— بدون فريق —</SelectItem>
-                      {teams.map((t: any) => (
+                      {filteredTeams.map((t: any) => (
                         <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -602,7 +701,7 @@ export default function ComplaintDetailsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">المستخدم المسؤول</label>
-                <Select value={convertAssignee} onValueChange={setConvertAssignee}>
+                <Select value={convertAssignee} onValueChange={setConvertAssignee} disabled={!selectedConvertAuthority}>
                   <SelectTrigger>
                     <SelectValue placeholder={selectedConvertAuthority ? 'اختر المستخدم المسؤول' : 'اختر الجهة المسؤولة أولاً'} />
                   </SelectTrigger>
@@ -620,7 +719,7 @@ export default function ComplaintDetailsPage() {
                   <SelectTrigger><SelectValue placeholder="اختر الفريق (اختياري)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— بدون فريق —</SelectItem>
-                    {teams.map((t: any) => (
+                    {filteredConvertTeams.map((t: any) => (
                       <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -628,11 +727,6 @@ export default function ComplaintDetailsPage() {
               </div>
               )}
             </div>
-            {convertTeam && !convertAssignee && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                ملاحظة: تعيين الفريق وحده لا يُظهر المهمة لأفراده حالياً. يرجى اختيار مستخدم مسؤول.
-              </p>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={converting}>إلغاء</Button>

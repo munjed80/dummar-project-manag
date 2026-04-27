@@ -7,7 +7,7 @@ import json
 import logging
 from app.core.database import get_db
 from app.models.contract import Contract, ContractApproval, ContractStatus, ContractType
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.contract import (
     ContractCreate,
     ContractUpdate,
@@ -27,6 +27,14 @@ import base64
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 logger = logging.getLogger("dummar.contracts")
+
+
+def _apply_contract_read_scope(query, current_user: User):
+    # Field teams and contractor users cannot browse operational contracts
+    # unless they own/created the record.
+    if current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER):
+        return query.filter(Contract.created_by_id == current_user.id)
+    return query
 
 
 def generate_qr_code(contract_id: int) -> str:
@@ -100,6 +108,7 @@ def list_contracts(
 ):
     query = db.query(Contract)
     query = perms.scope_query(query, db, current_user, Contract)
+    query = _apply_contract_read_scope(query, current_user)
 
     if status_filter:
         query = query.filter(Contract.status == status_filter)
@@ -140,6 +149,7 @@ def get_expiring_contracts(
         Contract.end_date >= date.today()
     )
     query = perms.scope_query(query, db, current_user, Contract)
+    query = _apply_contract_read_scope(query, current_user)
 
     return query.all()
 
@@ -157,6 +167,8 @@ def get_contract(
         db, current_user, perms.Action.READ, perms.ResourceType.CONTRACT, resource=contract
     ):
         raise HTTPException(status_code=403, detail="Out of organization scope")
+    if current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER) and contract.created_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied for this contract")
     return contract
 
 
@@ -268,6 +280,8 @@ def generate_contract_pdf_endpoint(
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
+    if current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER) and contract.created_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied for this contract")
     if not perms.authorize(
         db, current_user, perms.Action.EXPORT, perms.ResourceType.CONTRACT, resource=contract
     ) and not perms.authorize(
@@ -298,6 +312,12 @@ def get_contract_approvals(
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    if current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER) and contract.created_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied for this contract")
+
     approvals = db.query(ContractApproval).filter(
         ContractApproval.contract_id == contract_id
     ).order_by(ContractApproval.created_at.desc()).all()
