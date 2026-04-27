@@ -43,12 +43,18 @@ from app.schemas.location import (
     BuildingCreate, BuildingResponse,
     StreetCreate, StreetResponse,
 )
-from app.api.deps import get_current_user, get_current_internal_user
+from app.api.deps import get_current_internal_user, require_role
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_location_event
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 logger = logging.getLogger("dummar.locations")
+
+_location_managers = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.AREA_SUPERVISOR,
+)
 
 # Statuses considered "open" for operational indicators
 _OPEN_COMPLAINT_STATUSES = {
@@ -72,7 +78,7 @@ _HOTSPOT_THRESHOLD = 5  # locations with >= this many open complaints
 def create_location(
     payload: LocationCreate,
     request: Request,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db),
 ):
     """Create a new location node in the hierarchy."""
@@ -517,7 +523,7 @@ def update_location(
     location_id: int,
     payload: LocationUpdate,
     request: Request,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db),
 ):
     """Update an existing location."""
@@ -561,7 +567,7 @@ def update_location(
 def delete_location(
     location_id: int,
     request: Request,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db),
 ):
     """Soft-delete a location (set is_active=0). Only project_director can delete."""
@@ -1236,7 +1242,7 @@ def get_geo_dashboard(
 @router.post("/areas", response_model=AreaResponse)
 def create_area(
     area: AreaCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db)
 ):
     db_area = Area(**area.model_dump())
@@ -1268,7 +1274,7 @@ def get_area(area_id: int, db: Session = Depends(get_db)):
 def update_area(
     area_id: int,
     area_update: AreaUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db)
 ):
     area = db.query(Area).filter(Area.id == area_id).first()
@@ -1287,7 +1293,7 @@ def update_area(
 @router.post("/buildings", response_model=BuildingResponse)
 def create_building(
     building: BuildingCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db)
 ):
     db_building = Building(**building.model_dump())
@@ -1314,7 +1320,7 @@ def list_buildings(
 @router.post("/streets", response_model=StreetResponse)
 def create_street(
     street: StreetCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db)
 ):
     db_street = Street(**street.model_dump())

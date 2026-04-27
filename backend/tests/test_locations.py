@@ -531,7 +531,7 @@ class TestLocationRBAC:
             "code": "FLD-001",
             "location_type": "service_point",
         }, headers=_auth_headers(field_token))
-        assert resp.status_code == 200
+        assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------

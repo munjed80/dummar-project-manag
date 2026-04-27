@@ -9,7 +9,7 @@ import string
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.core.database import get_db
-from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus
+from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus, ComplaintPriority
 from app.models.user import User, UserRole
 from app.schemas.complaint import (
     ComplaintCreate,
@@ -93,6 +93,7 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
         area_id=complaint.area_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
+        location_text=complaint.location_text,
     )
     
     db_complaint = Complaint(
@@ -108,6 +109,7 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
         longitude=complaint.longitude,
         images=serialize_file_list(complaint.images),
         status=ComplaintStatus.NEW,
+        priority=ComplaintPriority.MEDIUM,
     )
     
     db.add(db_complaint)
@@ -480,15 +482,11 @@ def create_task_from_complaint(
 
     assigned_to_id = task_data.get("assigned_to_id")
     team_id = task_data.get("team_id")
-    if team_id and not assigned_to_id:
+    if not assigned_to_id:
         raise HTTPException(
             status_code=422,
-            detail=(
-                "Selecting team_id without assigned_to_id is not supported yet. "
-                "Please assign a responsible user."
-            ),
+            detail="A responsible assigned_to_id is required when converting a complaint to task",
         )
-
     task_priority = _coerce_task_priority(task_data.get("priority"), complaint.priority)
     if task_priority is None:
         task_priority = TaskPriority.MEDIUM

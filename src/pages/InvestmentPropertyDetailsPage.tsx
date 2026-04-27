@@ -171,7 +171,7 @@ export default function InvestmentPropertyDetailsPage() {
         <div className="space-y-4">
           <Button variant="ghost" onClick={() => navigate('/investment-properties')}>
             <ArrowLeft size={20} className="ml-1" />
-            العودة إلى الأملاك
+            العودة إلى الأصول
           </Button>
           <Card>
             <CardContent className="py-12 text-center text-destructive">
@@ -188,7 +188,7 @@ export default function InvestmentPropertyDetailsPage() {
       <div className="space-y-4">
         <Button variant="ghost" onClick={() => navigate('/investment-properties')}>
           <ArrowLeft size={20} className="ml-1" />
-          العودة إلى الأملاك
+          العودة إلى الأصول
         </Button>
 
         <Card>
