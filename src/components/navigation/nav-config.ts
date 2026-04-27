@@ -7,25 +7,25 @@ export interface NavItem {
   icon: ElementType;
   label: string;
   section: 'home' | 'work' | 'contracts' | 'assets' | 'admin';
-  mobileSection: 'dashboard' | 'operations' | 'contracts' | 'assets_admin';
+  mobileSection: 'home' | 'work' | 'contracts' | 'assets' | 'admin';
   roles?: UserRole[];
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { path: '/dashboard', icon: House, label: 'لوحة التحكم', section: 'home', mobileSection: 'dashboard', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
-  { path: '/citizen', icon: UserCircle, label: 'شكاواي', section: 'home', mobileSection: 'dashboard', roles: ['citizen'] },
-  { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', section: 'work', mobileSection: 'operations', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-  { path: '/tasks', icon: ListChecks, label: 'المهام', section: 'work', mobileSection: 'operations', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/dashboard', icon: House, label: 'لوحة التحكم', section: 'home', mobileSection: 'home', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
+  { path: '/citizen', icon: UserCircle, label: 'شكاواي', section: 'home', mobileSection: 'home', roles: ['citizen'] },
+  { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/tasks', icon: ListChecks, label: 'المهام', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/teams', icon: UsersThree, label: 'الفرق', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/projects', icon: FolderOpen, label: 'المشاريع', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
   { path: '/contract-intelligence', icon: Brain, label: 'تحليل عقود الاستثمار', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager'] },
   { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
-  { path: '/investment-properties', icon: Buildings, label: 'الأصول', section: 'assets', mobileSection: 'assets_admin', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
-  { path: '/teams', icon: UsersThree, label: 'الفرق', section: 'assets', mobileSection: 'assets_admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-  { path: '/projects', icon: FolderOpen, label: 'المشاريع', section: 'assets', mobileSection: 'assets_admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-  { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', section: 'assets', mobileSection: 'assets_admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-  { path: '/users', icon: UsersThree, label: 'المستخدمون', section: 'admin', mobileSection: 'assets_admin', roles: ['project_director'] },
-  { path: '/reports', icon: ChartBar, label: 'التقارير', section: 'admin', mobileSection: 'assets_admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
-  { path: '/settings', icon: GearSix, label: 'الإعدادات', section: 'admin', mobileSection: 'assets_admin' },
+  { path: '/investment-properties', icon: Buildings, label: 'الأصول', section: 'assets', mobileSection: 'assets', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
+  { path: '/users', icon: UsersThree, label: 'المستخدمون', section: 'admin', mobileSection: 'admin', roles: ['project_director'] },
+  { path: '/reports', icon: ChartBar, label: 'التقارير', section: 'admin', mobileSection: 'admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
+  { path: '/settings', icon: GearSix, label: 'الإعدادات', section: 'admin', mobileSection: 'admin' },
 ];
 
 export const DESKTOP_GROUP_LABELS: Record<NavItem['section'], string> = {
@@ -37,10 +37,11 @@ export const DESKTOP_GROUP_LABELS: Record<NavItem['section'], string> = {
 };
 
 export const MOBILE_GROUP_LABELS: Record<NavItem['mobileSection'], string> = {
-  dashboard: 'لوحة التحكم',
-  operations: 'الطلبات والعمليات',
+  home: 'الرئيسية',
+  work: 'الطلبات والعمل',
   contracts: 'العقود',
-  assets_admin: 'الأصول والإدارة',
+  assets: 'الأصول',
+  admin: 'الإدارة',
 };
 
 export function filterNavByRole(items: NavItem[], role: UserRole | null) {
