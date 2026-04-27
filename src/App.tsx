@@ -86,19 +86,20 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
     return <>{children}</>;
   }
 
-  // Citizen users go to their own dashboard; others go to main dashboard
-  if (role === 'citizen') {
-    return <Navigate to="/citizen" replace />;
+  if (role) {
+    if (role === 'citizen') return <Navigate to="/citizen" replace />;
+    if (role === 'property_manager') return <Navigate to="/investment-properties" replace />;
+    if (role === 'investment_manager') return <Navigate to="/investment-contracts" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Navigate to="/login" replace />;
 }
 
-// Internal staff roles (all roles except citizen)
-const INTERNAL_ROLES: UserRole[] = [
+// Internal staff roles with full operational dashboard access.
+const DASHBOARD_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
   'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
-  'property_manager', 'investment_manager',
 ];
 
 // Roles that can view reports
@@ -137,13 +138,18 @@ const OPERATIONAL_CONTRACT_ROLES: UserRole[] = [
 ];
 
 function RootRoute() {
+  const { role, loading } = useAuth();
   // Unauthenticated visitors see the public landing page so the complaint
   // intake CTAs are the very first thing they see — not the staff login.
   if (!apiService.isAuthenticated()) {
     return <PublicLandingPage />;
   }
-  // Authenticated users are routed to their role-appropriate home.
-  return <RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>;
+  if (loading) return <PageLoader />;
+  if (role === 'citizen') return <Navigate to="/citizen" replace />;
+  if (role === 'property_manager') return <Navigate to="/investment-properties" replace />;
+  if (role === 'investment_manager') return <Navigate to="/investment-contracts" replace />;
+  if (role && DASHBOARD_ROLES.includes(role)) return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/login" replace />;
 }
 
 function App() {
@@ -166,21 +172,21 @@ function App() {
           <Route path="/complaints/track" element={<ComplaintTrackPage />} />
           
           <Route path="/" element={<RootRoute />} />
-          <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
+          <Route path="/dashboard" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><DashboardPage /></RoleProtectedRoute>} />
           <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
-          <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
-          <Route path="/complaints/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/complaints-map" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
-          <Route path="/tasks" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TasksListPage /></RoleProtectedRoute>} />
-          <Route path="/tasks/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/complaints" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
+          <Route path="/complaints/:id" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/complaints-map" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
+          <Route path="/tasks" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><TasksListPage /></RoleProtectedRoute>} />
+          <Route path="/tasks/:id" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contracts" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
           <Route path="/contracts/:id" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
-          <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
-          <Route path="/teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/projects" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
+          <Route path="/projects/new" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/projects/:id" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/teams" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
+          <Route path="/teams/new" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/teams/:id" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
           <Route path="/manual-contracts" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
@@ -189,10 +195,10 @@ function App() {
           <Route path="/contract-intelligence/risks" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><RiskInsightsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/duplicates" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DuplicateReviewPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/reports" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><IntelligenceReportsPage /></RoleProtectedRoute>} />
-          <Route path="/locations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
+          <Route path="/locations" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
           <Route path="/locations/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><LocationReportsPage /></RoleProtectedRoute>} />
           <Route path="/locations/geo-dashboard" element={<RoleProtectedRoute roles={REPORT_ROLES}><GeoDashboardPage /></RoleProtectedRoute>} />
-          <Route path="/locations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
+          <Route path="/locations/:id" element={<RoleProtectedRoute roles={DASHBOARD_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
           <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

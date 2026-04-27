@@ -34,7 +34,15 @@ export default function LoginPage() {
         toast.success('تم تسجيل الدخول بنجاح');
         const cachedUserRaw = localStorage.getItem('cached_user');
         const cachedRole = cachedUserRaw ? JSON.parse(cachedUserRaw)?.role : null;
-        navigate(cachedRole === 'citizen' ? '/citizen' : '/dashboard');
+        if (cachedRole === 'citizen') {
+          navigate('/citizen');
+        } else if (cachedRole === 'property_manager') {
+          navigate('/investment-properties');
+        } else if (cachedRole === 'investment_manager') {
+          navigate('/investment-contracts');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error) {
       if (error instanceof ApiError) {
