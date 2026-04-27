@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     # (override with ENABLE_API_DOCS=true).
     ENVIRONMENT: str = "production"
     ENABLE_API_DOCS: bool = False
+    # SQLAlchemy connection pool tuning (important for gunicorn multi-worker
+    # deployments to prevent pool starvation and stale-connection crashes).
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # ── Background jobs (Celery + Redis) ──
     # When CELERY_BROKER_URL is empty OR CELERY_TASK_ALWAYS_EAGER is True the

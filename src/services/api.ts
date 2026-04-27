@@ -151,6 +151,7 @@ function sanitizeJsonPayload<T>(value: T): T {
 }
 async function throwApiError(response: Response, fallbackMessage: string): Promise<never> {
   const { detail, body } = await readErrorBody(response);
+  logApiFailureDiagnostic(response, detail);
   throw new ApiError({
     status: response.status,
     statusText: response.statusText,
@@ -174,6 +175,7 @@ async function throwApiError(response: Response, fallbackMessage: string): Promi
 // methods (could double-create resources).
 const TRANSIENT_STATUSES = new Set([502, 503, 504]);
 const RETRY_BACKOFF_MS = 400;
+const inFlightGetRequests = new Map<string, Promise<Response>>();
 
 function shouldRetry(method: string, statusOrNull: number | null): boolean {
   if (method.toUpperCase() !== 'GET') return false;
@@ -188,27 +190,57 @@ async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<R
   // call site keeps the API service consistent and avoids a class of bug
   // where a future maintainer forgets to wrap a new GET endpoint.
   const method = (init?.method ?? 'GET').toUpperCase();
-  try {
-    const response = await fetch(input, init);
-    if (!response.ok && shouldRetry(method, response.status)) {
-      await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
-      try {
-        const retry = await fetch(input, init);
-        return retry;
-      } catch {
-        // Retry threw — surface the original response so callers see a real status.
-        return response;
+  const url = typeof input === 'string' ? input : input.url;
+  const authHeader = new Headers(init?.headers ?? {}).get('Authorization') ?? '';
+  const dedupeKey = `${method}:${url}:${authHeader}`;
+
+  const run = async (): Promise<Response> => {
+    try {
+      const response = await fetch(input, init);
+      if (!response.ok && response.status >= 500) {
+        console.error('[api-diagnostic]', {
+          endpoint: response.url,
+          method,
+          status: response.status,
+          contentType: response.headers.get('content-type') ?? 'unknown',
+        });
       }
+      if (!response.ok && shouldRetry(method, response.status)) {
+        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+        try {
+          const retry = await fetch(input, init);
+          return retry;
+        } catch {
+          return response;
+        }
+      }
+      return response;
+    } catch (err) {
+      if (shouldRetry(method, null)) {
+        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
+        return fetch(input, init);
+      }
+      throw err;
     }
-    return response;
-  } catch (err) {
-    // Network error (DNS, connection reset, offline). Retry once for GETs.
-    if (shouldRetry(method, null)) {
-      await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
-      return fetch(input, init);
-    }
-    throw err;
-  }
+  };
+
+  if (method !== 'GET') return run();
+  const existing = inFlightGetRequests.get(dedupeKey);
+  if (existing) return existing.then((r) => r.clone());
+  const promise = run().finally(() => inFlightGetRequests.delete(dedupeKey));
+  inFlightGetRequests.set(dedupeKey, promise);
+  return promise.then((r) => r.clone());
+}
+
+function logApiFailureDiagnostic(response: Response, detail: string | null): void {
+  if (response.status < 500) return;
+  console.error('[api-diagnostic]', {
+    endpoint: response.url,
+    method: 'unknown',
+    status: response.status,
+    contentType: response.headers.get('content-type') ?? 'unknown',
+    detail,
+  });
 }
 
 class ApiService {

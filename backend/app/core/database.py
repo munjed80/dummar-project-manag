@@ -3,7 +3,20 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
 
-engine = create_engine(settings.DATABASE_URL)
+_engine_kwargs = {
+    "pool_pre_ping": True,
+    "pool_recycle": settings.DB_POOL_RECYCLE,
+    "pool_size": settings.DB_POOL_SIZE,
+    "max_overflow": settings.DB_MAX_OVERFLOW,
+    "pool_timeout": settings.DB_POOL_TIMEOUT,
+    "pool_use_lifo": True,
+}
+
+# SQLite (tests/local one-file db) does not support these pool knobs.
+if settings.DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs = {}
+
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
