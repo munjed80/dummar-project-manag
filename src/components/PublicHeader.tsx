@@ -22,11 +22,11 @@ export function PublicHeader() {
     <header className="sticky top-0 z-40 bg-primary text-primary-foreground shadow-md" dir="rtl">
       <div className="container mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
         <Link to="/" className="flex flex-col md:flex-row items-center gap-2 min-w-0 text-center md:text-right">
-          <span className="inline-flex items-center justify-center rounded-xl bg-white/95 border border-white/70 shadow-sm p-1.5">
+          <span className="inline-flex items-center justify-center rounded-2xl bg-white/95 border border-white/70 shadow-sm p-2 md:p-2.5">
             <img
-              src="/syrian-emblem.svg"
+              src="/syrian-emblem.png"
               alt="شعار الجمهورية العربية السورية"
-              className="h-14 w-14 md:h-[72px] md:w-[72px] object-contain"
+              className="h-14 w-14 md:h-20 md:w-20 lg:h-24 lg:w-24 object-contain"
               loading="eager"
             />
           </span>
