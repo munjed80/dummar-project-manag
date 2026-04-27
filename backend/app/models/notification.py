@@ -12,9 +12,9 @@ class NotificationType(str, enum.Enum):
     TASK_UPDATED = "task_updated"
     CONTRACT_APPROVED = "contract_approved"
     CONTRACT_UPDATED = "contract_updated"
+    GENERAL = "general"
     INTELLIGENCE_PROCESSING = "intelligence_processing"
     LOCATION_ALERT = "location_alert"
-    GENERAL = "general"
 
 
 class Notification(Base):
