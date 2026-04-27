@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Plus, MagnifyingGlass, House, SignIn } from '@phosphor-icons/react';
+import { Plus, MagnifyingGlass, SignIn } from '@phosphor-icons/react';
 
 /**
  * Lightweight public header for citizen-facing pages
@@ -20,22 +20,21 @@ export function PublicHeader() {
 
   return (
     <header className="sticky top-0 z-40 bg-primary text-primary-foreground shadow-md" dir="rtl">
-      <div className="container mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
-        <Link to="/" className="flex flex-col md:flex-row items-center gap-2 min-w-0 text-center md:text-right">
-          <span className="inline-flex items-center justify-center rounded-2xl bg-white/95 border border-white/70 shadow-sm p-2 md:p-2.5">
+      <div className="container mx-auto px-4 py-3 flex flex-col items-center justify-center gap-3">
+        <Link to="/" className="flex flex-col items-center gap-2 min-w-0 text-center">
+          <span className="inline-flex items-center justify-center rounded-2xl border border-primary-foreground/35 bg-primary-foreground/10 shadow-sm p-2 md:p-2.5 backdrop-blur-sm">
             <img
-              src="/syrian-emblem.png"
+              src="/syrian-emblem.svg"
               alt="شعار الجمهورية العربية السورية"
               className="h-14 w-14 md:h-20 md:w-20 lg:h-24 lg:w-24 object-contain"
               loading="eager"
             />
           </span>
-          <span className="inline-flex items-center gap-2 min-w-0">
-            <House size={22} weight="fill" />
+          <span className="inline-flex items-center gap-2 min-w-0 justify-center">
             <h1 className="text-base md:text-lg font-bold truncate">إدارة التجمع - مشروع دمر</h1>
           </span>
         </Link>
-        <nav className="flex items-center gap-1 md:gap-2">
+        <nav className="flex items-center justify-center gap-1 md:gap-2 flex-wrap">
           <Link to="/complaints/new" className={navLinkClass(pathname === '/complaints/new')}>
             <Plus size={16} />
             <span className="hidden sm:inline">تقديم طلب / شكوى</span>
