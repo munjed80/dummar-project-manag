@@ -191,7 +191,7 @@ HTTP_PORT=80
 LOG_LEVEL=info
 
 # Gunicorn workers — adjust to your server: 2×CPU + 1 (e.g. 2-core → 5)
-GUNICORN_WORKERS=4
+GUNICORN_WORKERS=2
 GUNICORN_TIMEOUT=120
 EOF
 

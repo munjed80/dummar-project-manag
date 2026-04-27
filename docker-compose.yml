@@ -73,7 +73,7 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
       # Background-job system (Celery + Redis)
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}

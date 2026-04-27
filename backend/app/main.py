@@ -2,12 +2,15 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import auth, complaints, tasks, contracts, projects, teams, app_settings, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence, jobs, automations, organization, execution_logs, investment_properties, investment_contracts
 from app.api.deps import get_current_internal_user
@@ -109,6 +112,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    request_id = getattr(request.state, "request_id", str(uuid4()))
+    logger.exception("request_id=%s unhandled sqlalchemy error path=%s", request_id, request.url.path)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Database temporarily unavailable. Please retry.",
+            "request_id": request_id,
+            "error_type": "database_error",
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", str(uuid4()))
+    logger.exception("request_id=%s unhandled exception path=%s", request_id, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "request_id": request_id,
+            "error_type": "internal_error",
+        },
+        headers={"X-Request-ID": request_id},
+    )
 
 # ---------------------------------------------------------------------------
 # Routers
