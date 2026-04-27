@@ -8,7 +8,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { OfflineSyncBanner } from '@/components/OfflineSyncBanner';
 import type { UserRole } from '@/hooks/useAuth';
 import { AppNavigation } from '@/components/navigation/AppNavigation';
-import { NAV_ITEMS, filterNavByRole } from '@/components/navigation/nav-config';
+import { NAV_ITEMS, filterNavByRole, formatRoleLabel } from '@/components/navigation/nav-config';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -40,6 +40,8 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = useMemo(() => filterNavByRole(NAV_ITEMS, effectiveRole), [effectiveRole]);
 
+  const canSubmitInternalComplaint = Boolean(effectiveRole && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(effectiveRole));
+
   if (!loading && !effectiveRole && !apiService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
@@ -48,23 +50,35 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="sticky top-0 z-50 border-b border-primary/70 bg-primary text-primary-foreground shadow-[0_2px_12px_rgba(15,23,42,0.18)]">
         <div className="container mx-auto px-3 md:px-4 py-2.5 md:py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 shrink-0">
-            <AppNavigation navItems={navItems} pathname={location.pathname} userName={user?.full_name} role={effectiveRole} />
-            <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <AppNavigation
+              navItems={navItems}
+              pathname={location.pathname}
+              userName={user?.full_name}
+              role={effectiveRole}
+              onLogout={handleLogout}
+              showInternalComplaintAction={canSubmitInternalComplaint}
+            />
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
+              {effectiveRole && (
+                <p className="hidden sm:block text-[11px] md:text-xs text-primary-foreground/75">{user?.full_name || 'مستخدم النظام'} • {formatRoleLabel(effectiveRole)}</p>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 md:gap-2 shrink-0">
-            {effectiveRole && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(effectiveRole) && (
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {canSubmitInternalComplaint && (
               <a
                 href="/complaints/new"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden sm:inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-xl text-xs md:text-sm border border-primary-foreground/30 bg-primary-foreground/10 hover:bg-primary-foreground/20 transition-colors"
-                title="فتح نموذج تقديم شكوى للمواطنين في تبويب جديد"
+                title="فتح نموذج تقديم شكوى داخلية في تبويب جديد"
               >
                 <Plus size={15} />
-                <span className="hidden md:inline">تقديم شكوى نيابة عن مواطن</span>
-                <span className="md:hidden">شكوى مواطن</span>
+                <span className="hidden md:inline">تقديم شكوى داخلية</span>
+                <span className="md:hidden">شكوى داخلية</span>
               </a>
             )}
             <NotificationBell />
