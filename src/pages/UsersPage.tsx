@@ -150,12 +150,19 @@ export default function UsersPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const trimmedUsername = formData.username.trim();
+      const trimmedFullName = formData.full_name.trim();
       if (editingUser) {
+        if (!trimmedUsername || !trimmedFullName) {
+          toast.error('اسم المستخدم والاسم الكامل مطلوبان');
+          setSaving(false);
+          return;
+        }
         // Admin edit: full_name, phone, role, active status.
         // Password is NOT changed here — use the dedicated reset action.
         const updateData: any = {
-          username: formData.username,
-          full_name: formData.full_name,
+          username: trimmedUsername,
+          full_name: trimmedFullName,
           phone: formData.phone || undefined,
           role: formData.role,
           is_active: editingUser.is_active,
@@ -164,7 +171,7 @@ export default function UsersPage() {
         await apiService.updateUser(editingUser.id, updateData);
         toast.success('تم تحديث المستخدم بنجاح');
       } else {
-        if (!formData.username || !formData.password || !formData.full_name) {
+        if (!trimmedUsername || !formData.password || !trimmedFullName) {
           toast.error('يرجى ملء الحقول المطلوبة');
           setSaving(false);
           return;
@@ -175,8 +182,8 @@ export default function UsersPage() {
           return;
         }
         const createPayload: any = {
-          username: formData.username,
-          full_name: formData.full_name,
+          username: trimmedUsername,
+          full_name: trimmedFullName,
           password: formData.password,
           role: formData.role,
           phone: formData.phone || undefined,

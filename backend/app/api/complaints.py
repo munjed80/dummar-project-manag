@@ -52,8 +52,11 @@ def _coerce_task_priority(
         if isinstance(raw_priority, TaskPriority):
             return raw_priority
         if isinstance(raw_priority, str):
+            normalized = raw_priority.strip().lower()
+            if not normalized:
+                raise HTTPException(status_code=422, detail="Invalid task priority")
             try:
-                return TaskPriority(raw_priority)
+                return TaskPriority(normalized)
             except ValueError as exc:
                 raise HTTPException(
                     status_code=422,
@@ -482,10 +485,13 @@ def create_task_from_complaint(
 
     assigned_to_id = task_data.get("assigned_to_id")
     team_id = task_data.get("team_id")
-    if not assigned_to_id and not team_id:
+    if not assigned_to_id:
         raise HTTPException(
             status_code=422,
-            detail="A responsible assignee is required (assigned_to_id or team_id)",
+            detail=(
+                "assigned_to_id is required. "
+                "team_id-only assignment is not supported until team membership visibility is implemented."
+            ),
         )
     task_priority = _coerce_task_priority(task_data.get("priority"), complaint.priority)
     if task_priority is None:

@@ -120,9 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Track whether a refresh is currently in flight so we don't kick off a
   // duplicate refresh when multiple consumers mount simultaneously.
   const refreshing = useRef(false);
+  // Monotonic auth-flow version used to ignore stale async completions
+  // (e.g. an old /auth/me refresh finishing after a newer login attempt).
+  const authFlowVersion = useRef(0);
 
   const refresh = useCallback(async () => {
     if (refreshing.current) return;
+    const flowVersionAtStart = authFlowVersion.current;
     if (!apiService.isAuthenticated()) {
       setUser(null);
       setCachedUser(null);
@@ -138,16 +142,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!hadCachedUser) setLoading(true);
     try {
       const u = await apiService.getCurrentUser();
+      if (flowVersionAtStart !== authFlowVersion.current) return;
       setUser(u);
       setCachedUser(u);
       setError(null);
       try {
         const p = await apiService.getCurrentUserPermissions();
+        if (flowVersionAtStart !== authFlowVersion.current) return;
         setPermissions(p);
       } catch {
+        if (flowVersionAtStart !== authFlowVersion.current) return;
         setPermissions(null);
       }
     } catch (err) {
+      if (flowVersionAtStart !== authFlowVersion.current) return;
       // 401 => the token is invalid/expired. Clear everything so the next
       // route guard redirects to /login cleanly. Other errors (network blips,
       // 5xx) MUST NOT log the user out — keep the cached user so the UI
@@ -163,33 +171,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       refreshing.current = false;
-      setLoading(false);
+      if (flowVersionAtStart === authFlowVersion.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   const login = useCallback(async (credentials: { username: string; password: string }) => {
     // Login must always attempt authentication for submitted credentials.
+    authFlowVersion.current += 1;
+    // Clear stale auth artifacts (expired/wrong-account token + cached user)
+    // before submitting fresh credentials.
+    apiService.logout();
+    setUser(null);
+    setCachedUser(null);
+    setPermissions(null);
     setLoading(true);
     setError(null);
-    await apiService.login(credentials);
-
-    // apiService.login() stores the token immediately and opportunistically
-    // caches `/auth/me`. Prefer that cached user first to update state
-    // synchronously, then fetch fresh permissions.
-    const cached = getCachedUser();
-    if (cached) {
-      setUser(cached);
-    } else {
+    try {
+      // apiService.login() stores token first. We then always load current
+      // user before resolving so callers can navigate only after hydration.
+      await apiService.login(credentials);
       const u = await apiService.getCurrentUser();
       setUser(u);
       setCachedUser(u);
-    }
+      setError(null);
 
-    try {
-      const p = await apiService.getCurrentUserPermissions();
-      setPermissions(p);
-    } catch {
+      try {
+        const p = await apiService.getCurrentUserPermissions();
+        setPermissions(p);
+      } catch {
+        setPermissions(null);
+      }
+    } catch (err) {
+      // Ensure failed login never leaves stale previous-session state behind.
+      apiService.logout();
+      setUser(null);
+      setCachedUser(null);
       setPermissions(null);
+      throw err;
     } finally {
       setLoading(false);
     }

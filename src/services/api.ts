@@ -258,7 +258,7 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sanitizeJsonPayload(credentials)),
     });
-    if (!response.ok) throw new Error('Login failed');
+    if (!response.ok) await throwApiError(response, 'Login failed');
     const data: AuthToken = await response.json();
     localStorage.setItem('access_token', data.access_token);
     if (data.must_change_password) {

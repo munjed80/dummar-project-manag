@@ -195,6 +195,57 @@ def test_admin_can_change_role_and_phone_and_full_name(client, director_token, d
     assert body["phone"] == "+963900000002"
 
 
+def test_director_can_update_another_users_username(client, director_token, db):
+    db.add(User(
+        username="rename_me", full_name="Rename Me",
+        hashed_password=get_password_hash("password123"),
+        role=UserRole.FIELD_TEAM, is_active=1,
+    ))
+    db.commit()
+    user = db.query(User).filter(User.username == "rename_me").first()
+
+    resp = client.put(
+        f"/users/{user.id}",
+        json={"username": "renamed_user"},
+        headers=_auth_headers(director_token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["username"] == "renamed_user"
+
+
+def test_duplicate_or_blank_username_update_is_rejected(client, director_token, db):
+    db.add_all([
+        User(
+            username="existing_name", full_name="Existing Name",
+            hashed_password=get_password_hash("password123"),
+            role=UserRole.FIELD_TEAM, is_active=1,
+        ),
+        User(
+            username="target_name", full_name="Target Name",
+            hashed_password=get_password_hash("password123"),
+            role=UserRole.FIELD_TEAM, is_active=1,
+        ),
+    ])
+    db.commit()
+    target = db.query(User).filter(User.username == "target_name").first()
+
+    duplicate = client.put(
+        f"/users/{target.id}",
+        json={"username": "existing_name"},
+        headers=_auth_headers(director_token),
+    )
+    assert duplicate.status_code == 400
+    assert "exists" in duplicate.json()["detail"].lower()
+
+    blank = client.put(
+        f"/users/{target.id}",
+        json={"username": "   "},
+        headers=_auth_headers(director_token),
+    )
+    assert blank.status_code == 422
+    assert "username" in str(blank.json()).lower()
+
+
 def test_director_full_user_management_flow(client, director_token):
     # 1) create user
     create = client.post(
