@@ -482,10 +482,10 @@ def create_task_from_complaint(
 
     assigned_to_id = task_data.get("assigned_to_id")
     team_id = task_data.get("team_id")
-    if not assigned_to_id:
+    if not assigned_to_id and not team_id:
         raise HTTPException(
             status_code=422,
-            detail="A responsible assigned_to_id is required when converting a complaint to task",
+            detail="A responsible assignee is required (assigned_to_id or team_id)",
         )
     task_priority = _coerce_task_priority(task_data.get("priority"), complaint.priority)
     if task_priority is None:
