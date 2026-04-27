@@ -786,6 +786,55 @@ class TestProjectInstanceAuthz:
         r = client.put(f"/projects/{p.id}", json={"title": "nope"}, headers=h)
         assert r.status_code == 403
 
+
+class TestRestrictedRoleAccess:
+    def _make_project(self, db, director, *, code, org_unit_id):
+        from app.models.project import Project, ProjectStatus
+        p = Project(
+            title="P", code=code, description="d",
+            status=ProjectStatus.PLANNED,
+            created_by_id=director.id,
+            org_unit_id=org_unit_id,
+        )
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        return p
+
+    def test_field_team_can_create_locations(self, client, db):
+        _make_user(db, "u_ft_loc", UserRole.FIELD_TEAM, None)
+        h = _login(client, "u_ft_loc")
+        r = client.post(
+            "/locations/",
+            json={"name": "منع-1", "code": "NOLOC-1", "location_type": "other", "status": "active"},
+            headers=h,
+        )
+        assert r.status_code == 200
+
+    def test_contractor_cannot_manage_locations(self, client, db):
+        _make_user(db, "u_con_loc", UserRole.CONTRACTOR_USER, None)
+        h = _login(client, "u_con_loc")
+        r = client.post(
+            "/locations/",
+            json={"name": "منع-2", "code": "NOLOC-2", "location_type": "other", "status": "active"},
+            headers=h,
+        )
+        assert r.status_code == 403
+
+    def test_field_team_contracts_list_is_empty_when_unowned(self, client, db):
+        _make_user(db, "u_ft_con", UserRole.FIELD_TEAM, None)
+        h = _login(client, "u_ft_con")
+        r = client.get("/contracts/", headers=h)
+        assert r.status_code == 200
+        assert r.json()["items"] == []
+
+    def test_contractor_contracts_list_is_empty_when_unowned(self, client, db):
+        _make_user(db, "u_con_con", UserRole.CONTRACTOR_USER, None)
+        h = _login(client, "u_con_con")
+        r = client.get("/contracts/", headers=h)
+        assert r.status_code == 200
+        assert r.json()["items"] == []
+
     def test_delete_out_of_scope_project_returns_403(self, client, db, org_tree):
         own = org_tree["dist_ga_m1_d1"]
         other = org_tree["dist_gb_m1_d1"]

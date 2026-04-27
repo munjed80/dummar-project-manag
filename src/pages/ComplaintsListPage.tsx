@@ -131,7 +131,7 @@ export default function ComplaintsListPage() {
                 </SelectContent>
               </Select>
               <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPage(0); }}>
-                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="المنطقة" /></SelectTrigger>
+                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="المنطقة / الحي" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">جميع المناطق</SelectItem>
                   {areas.map((a: any) => (
@@ -174,7 +174,8 @@ export default function ComplaintsListPage() {
                       <TableHead className="text-right">النوع</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">الأولوية</TableHead>
-                      <TableHead className="text-right">المنطقة</TableHead>
+                      <TableHead className="text-right">المنطقة / الحي</TableHead>
+                      <TableHead className="text-right">العنوان التفصيلي</TableHead>
                       <TableHead className="text-right">المشروع</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                     </TableRow>
@@ -182,7 +183,7 @@ export default function ComplaintsListPage() {
                   <TableBody>
                     {complaints.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           لا توجد شكاوى
                         </TableCell>
                       </TableRow>
@@ -207,7 +208,8 @@ export default function ComplaintsListPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>{areaMap[c.area_id] || '-'}</TableCell>
-                          <TableCell>{c.project_id ? (projectMap[c.project_id] || `#${c.project_id}`) : '-'}</TableCell>
+                          <TableCell className="max-w-[240px] truncate">{c.location_text || '-'}</TableCell>
+                          <TableCell>{c.project_id ? (projectMap[c.project_id] || `#${c.project_id}`) : 'غير مرتبط بمشروع'}</TableCell>
                           <TableCell>{c.created_at ? format(new Date(c.created_at), 'yyyy/MM/dd') : '-'}</TableCell>
                         </TableRow>
                       ))
@@ -244,6 +246,12 @@ export default function ComplaintsListPage() {
                           <>
                             <span>•</span>
                             <span>{areaMap[c.area_id]}</span>
+                          </>
+                        )}
+                        {c.location_text && (
+                          <>
+                            <span>•</span>
+                            <span className="truncate max-w-[180px]">{c.location_text}</span>
                           </>
                         )}
                         {c.project_id && (

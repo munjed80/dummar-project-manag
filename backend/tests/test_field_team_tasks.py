@@ -187,56 +187,56 @@ class TestComplaintToTaskDuplicatePrevention:
         db.refresh(c)
         return c
 
-    def test_first_conversion_succeeds(self, client, db, director_token):
+    def test_first_conversion_succeeds(self, client, db, director_token, director_user):
         c = self._make_heating_complaint(db)
         resp = client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "Repair", "description": "Fix"},
+            json={"title": "Repair", "description": "Fix", "assigned_to_id": director_user.id},
             headers=_auth_headers(director_token),
         )
         assert resp.status_code == 200, resp.text
 
     def test_second_conversion_blocked_with_409(
-        self, client, db, director_token
+        self, client, db, director_token, director_user
     ):
         c = self._make_heating_complaint(db)
         r1 = client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "Repair", "description": "Fix"},
+            json={"title": "Repair", "description": "Fix", "assigned_to_id": director_user.id},
             headers=_auth_headers(director_token),
         )
         assert r1.status_code == 200, r1.text
         r2 = client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "Repair2", "description": "Fix2"},
+            json={"title": "Repair2", "description": "Fix2", "assigned_to_id": director_user.id},
             headers=_auth_headers(director_token),
         )
         assert r2.status_code == 409
         assert "already exists" in (r2.json().get("detail") or "")
 
     def test_force_flag_allows_additional_task(
-        self, client, db, director_token
+        self, client, db, director_token, director_user
     ):
         c = self._make_heating_complaint(db)
         client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "Repair", "description": "Fix"},
+            json={"title": "Repair", "description": "Fix", "assigned_to_id": director_user.id},
             headers=_auth_headers(director_token),
         )
         r2 = client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "Followup", "description": "Followup", "force": True},
+            json={"title": "Followup", "description": "Followup", "assigned_to_id": director_user.id, "force": True},
             headers=_auth_headers(director_token),
         )
         assert r2.status_code == 200, r2.text
 
     def test_cancelled_task_does_not_block_new_one(
-        self, client, db, director_token
+        self, client, db, director_token, director_user
     ):
         c = self._make_heating_complaint(db)
         r1 = client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "Repair", "description": "Fix"},
+            json={"title": "Repair", "description": "Fix", "assigned_to_id": director_user.id},
             headers=_auth_headers(director_token),
         )
         first_id = r1.json()["id"]
@@ -250,7 +250,7 @@ class TestComplaintToTaskDuplicatePrevention:
         # Now a new one should be allowed without force
         r2 = client.post(
             f"/complaints/{c.id}/create-task",
-            json={"title": "New", "description": "New"},
+            json={"title": "New", "description": "New", "assigned_to_id": director_user.id},
             headers=_auth_headers(director_token),
         )
         assert r2.status_code == 200, r2.text
