@@ -45,19 +45,19 @@ export function Layout({ children }: LayoutProps) {
   const effectiveRole: UserRole | null = role ?? readCachedRole();
 
   const allNavItems: NavItem[] = useMemo(() => [
-    { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
     { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
     { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/tasks', icon: ListChecks, label: 'المهام', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
     { path: '/contract-intelligence', icon: Brain, label: 'تحليل العقود الاستثمارية', roles: ['project_director', 'contracts_manager'] },
-    { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'investment_manager', 'property_manager'] },
+    { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
     { path: '/investment-properties', icon: Buildings, label: 'الأصول', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
     { path: '/teams', icon: UsersThree, label: 'الفرق', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
     { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
-    { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+    { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },
   ], []);
 
