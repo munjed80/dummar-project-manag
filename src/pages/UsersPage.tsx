@@ -148,14 +148,36 @@ export default function UsersPage() {
   };
 
   const handleSave = async () => {
+    const username = formData.username.trim();
+    if (!username || !formData.full_name.trim()) {
+      toast.error('يرجى ملء الحقول المطلوبة');
+      return;
+    }
+
+    if (
+      users.some((u) => u.username === username && (!editingUser || u.id !== editingUser.id))
+    ) {
+      toast.error('اسم المستخدم موجود مسبقاً');
+      return;
+    }
+
+    if (
+      editingUser &&
+      currentUser?.id === editingUser.id &&
+      formData.role !== editingUser.role
+    ) {
+      toast.error('لا يمكنك تغيير دور حسابك الشخصي');
+      return;
+    }
+
     setSaving(true);
     try {
       if (editingUser) {
         // Admin edit: full_name, phone, role, active status.
         // Password is NOT changed here — use the dedicated reset action.
         const updateData: any = {
-          username: formData.username,
-          full_name: formData.full_name,
+          username,
+          full_name: formData.full_name.trim(),
           phone: formData.phone || undefined,
           role: formData.role,
           is_active: editingUser.is_active,
@@ -164,7 +186,7 @@ export default function UsersPage() {
         await apiService.updateUser(editingUser.id, updateData);
         toast.success('تم تحديث المستخدم بنجاح');
       } else {
-        if (!formData.username || !formData.password || !formData.full_name) {
+        if (!formData.password) {
           toast.error('يرجى ملء الحقول المطلوبة');
           setSaving(false);
           return;
@@ -175,8 +197,8 @@ export default function UsersPage() {
           return;
         }
         const createPayload: any = {
-          username: formData.username,
-          full_name: formData.full_name,
+          username,
+          full_name: formData.full_name.trim(),
           password: formData.password,
           role: formData.role,
           phone: formData.phone || undefined,

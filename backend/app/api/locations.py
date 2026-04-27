@@ -754,7 +754,7 @@ def link_contract_to_location(
     contract_id: int,
     location_id: int,
     request: Request,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db),
 ):
     """Link a contract to a location for coverage tracking."""
@@ -799,7 +799,7 @@ def unlink_contract_from_location(
     contract_id: int,
     location_id: int,
     request: Request,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(_location_managers),
     db: Session = Depends(get_db),
 ):
     """Remove a contract-location link."""

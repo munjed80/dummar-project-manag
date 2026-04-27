@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
+import type { UserRole } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { roleDefaultRoute } from '@/config/roleAccess';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -32,8 +34,8 @@ export default function LoginPage() {
       } else {
         toast.success('تم تسجيل الدخول بنجاح');
         const cachedUserRaw = localStorage.getItem('cached_user');
-        const cachedRole = cachedUserRaw ? JSON.parse(cachedUserRaw)?.role : null;
-        navigate(cachedRole === 'citizen' ? '/citizen' : '/dashboard');
+        const cachedRole = cachedUserRaw ? (JSON.parse(cachedUserRaw)?.role as UserRole | null) ?? null : null;
+        navigate(roleDefaultRoute(cachedRole));
       }
     } catch (error) {
       toast.error('فشل تسجيل الدخول. تحقق من اسم المستخدم وكلمة المرور.');

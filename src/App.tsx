@@ -4,6 +4,15 @@ import { Suspense, lazy } from 'react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserRole } from '@/hooks/useAuth';
+import {
+  INTERNAL_ROLES,
+  REPORT_ROLES,
+  CONTRACT_INTELLIGENCE_ROLES,
+  INVESTMENT_PROPERTIES_ROLES,
+  INVESTMENT_CONTRACTS_ROLES,
+  MANUAL_CONTRACTS_ROLES,
+  OPERATIONAL_CONTRACT_ROLES,
+} from '@/config/roleAccess';
 import { InstallPrompt } from '@/components/InstallPrompt';
 
 // Lazy-loaded page components
@@ -94,47 +103,6 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
   return <Navigate to="/login" replace />;
 }
 
-// Internal staff roles (all roles except citizen)
-const INTERNAL_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
-  'property_manager', 'investment_manager',
-];
-
-// Roles that can view reports
-const REPORT_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor',
-];
-
-// Roles that can access contract intelligence
-const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager',
-];
-
-// Roles that can access investment properties (per spec: director, property
-// manager, investment manager view, contracts manager view).
-const INVESTMENT_PROPERTIES_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager',
-  'property_manager', 'investment_manager',
-];
-
-// Roles that can access investment contracts (per spec: director,
-// contracts_manager, investment_manager full access; property_manager view).
-const INVESTMENT_CONTRACTS_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager',
-  'investment_manager', 'property_manager',
-];
-
-const MANUAL_CONTRACTS_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager', 'investment_manager', 'property_manager',
-  'engineer_supervisor', 'complaints_officer', 'area_supervisor',
-];
-
-const OPERATIONAL_CONTRACT_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor', 'property_manager', 'investment_manager',
-];
 
 function RootRoute() {
   // Unauthenticated visitors see the public landing page so the complaint

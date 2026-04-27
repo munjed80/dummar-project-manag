@@ -7,6 +7,7 @@ import json
 import logging
 from app.core.database import get_db
 from app.models.contract import Contract, ContractApproval, ContractStatus, ContractType
+from app.models.task import Task
 from app.models.user import User, UserRole
 from app.schemas.contract import (
     ContractCreate,
@@ -30,10 +31,21 @@ logger = logging.getLogger("dummar.contracts")
 
 
 def _apply_contract_read_scope(query, current_user: User):
-    # Field teams and contractor users cannot browse operational contracts
-    # unless they own/created the record.
+    # Field-team and contractor accounts may only see contracts they truly own
+    # (created/approved by them) or contracts tied to tasks assigned to them.
     if current_user.role in (UserRole.FIELD_TEAM, UserRole.CONTRACTOR_USER):
-        return query.filter(Contract.created_by_id == current_user.id)
+        return query.filter(
+            or_(
+                Contract.created_by_id == current_user.id,
+                Contract.approved_by_id == current_user.id,
+                Contract.id.in_(
+                    query.session.query(Task.contract_id).filter(
+                        Task.contract_id.isnot(None),
+                        Task.assigned_to_id == current_user.id,
+                    )
+                ),
+            )
+        )
     return query
 
 

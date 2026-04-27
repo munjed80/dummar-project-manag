@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
 import { OfflineSyncBanner } from '@/components/OfflineSyncBanner';
 import type { UserRole } from '@/hooks/useAuth';
+import { NAV_ROLE_RULES } from '@/config/roleAccess';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -45,19 +46,19 @@ export function Layout({ children }: LayoutProps) {
   const effectiveRole: UserRole | null = role ?? readCachedRole();
 
   const allNavItems: NavItem[] = useMemo(() => [
-    { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
-    { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
-    { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/tasks', icon: ListChecks, label: 'المهام', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
-    { path: '/contract-intelligence', icon: Brain, label: 'تحليل العقود الاستثمارية', roles: ['project_director', 'contracts_manager'] },
-    { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
-    { path: '/investment-properties', icon: Buildings, label: 'الأصول', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
-    { path: '/teams', icon: UsersThree, label: 'الفرق', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
-    { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
+    { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: NAV_ROLE_RULES.dashboard },
+    { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: NAV_ROLE_RULES.citizen },
+    { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: NAV_ROLE_RULES.complaints },
+    { path: '/tasks', icon: ListChecks, label: 'المهام', roles: NAV_ROLE_RULES.tasks },
+    { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: NAV_ROLE_RULES.investmentContracts },
+    { path: '/contract-intelligence', icon: Brain, label: 'تحليل العقود الاستثمارية', roles: NAV_ROLE_RULES.contractIntelligence },
+    { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', roles: NAV_ROLE_RULES.manualContracts },
+    { path: '/investment-properties', icon: Buildings, label: 'الأصول', roles: NAV_ROLE_RULES.investmentProperties },
+    { path: '/teams', icon: UsersThree, label: 'الفرق', roles: NAV_ROLE_RULES.teams },
+    { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: NAV_ROLE_RULES.projects },
+    { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', roles: NAV_ROLE_RULES.complaintsMap },
+    { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: NAV_ROLE_RULES.users },
+    { path: '/reports', icon: ChartBar, label: 'التقارير', roles: NAV_ROLE_RULES.reports },
     { path: '/settings', icon: GearSix, label: 'الإعدادات' },
   ], []);
 

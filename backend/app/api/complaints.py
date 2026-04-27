@@ -11,6 +11,7 @@ from slowapi.util import get_remote_address
 from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintActivity, ComplaintStatus, ComplaintPriority
 from app.models.user import User, UserRole
+from app.models.team import Team
 from app.schemas.complaint import (
     ComplaintCreate,
     ComplaintUpdate,
@@ -487,6 +488,18 @@ def create_task_from_complaint(
             status_code=422,
             detail="A responsible assigned_to_id is required when converting a complaint to task",
         )
+
+    assigned_user = db.query(User).filter(User.id == assigned_to_id).first()
+    if not assigned_user or not assigned_user.is_active:
+        raise HTTPException(status_code=422, detail="assigned_to_id must reference an active user")
+    if assigned_user.role == UserRole.CITIZEN:
+        raise HTTPException(status_code=422, detail="assigned_to_id must reference an internal user")
+
+    if team_id is not None:
+        team = db.query(Team).filter(Team.id == team_id, Team.is_active.is_(True)).first()
+        if not team:
+            raise HTTPException(status_code=422, detail="team_id must reference an active team")
+
     task_priority = _coerce_task_priority(task_data.get("priority"), complaint.priority)
     if task_priority is None:
         task_priority = TaskPriority.MEDIUM
