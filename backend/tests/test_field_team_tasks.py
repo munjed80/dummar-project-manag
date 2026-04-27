@@ -419,7 +419,7 @@ class TestComplaintToMaintenanceWorkflow:
         assert repair["after_photos"] == ["tasks/after_heat_1.jpg"]
         assert repair["task_status"] == "completed"
 
-    def test_create_task_allows_team_assignment_without_user(
+    def test_create_task_rejects_team_assignment_without_user(
         self, client, db, director_token
     ):
         team = Team(name="Field Crew A", team_type=TeamType.FIELD_CREW)
@@ -444,11 +444,10 @@ class TestComplaintToMaintenanceWorkflow:
             json={"title": "Repair", "description": "d", "team_id": team.id},
             headers=_auth_headers(director_token),
         )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["team_id"] == team.id
-        assert resp.json()["assigned_to_id"] is None
+        assert resp.status_code == 422
+        assert "assigned_to_id is required" in (resp.json().get("detail") or "")
 
-    def test_create_task_requires_assignee_or_team(
+    def test_create_task_requires_assigned_user(
         self, client, db, director_token
     ):
         complaint = Complaint(
@@ -469,7 +468,7 @@ class TestComplaintToMaintenanceWorkflow:
             headers=_auth_headers(director_token),
         )
         assert resp.status_code == 422
-        assert "assigned_to_id or team_id" in (resp.json().get("detail") or "")
+        assert "assigned_to_id is required" in (resp.json().get("detail") or "")
 
     def test_create_task_priority_is_safely_mapped(
         self, client, db, director_token, field_user
