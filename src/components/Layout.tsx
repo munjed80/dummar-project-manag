@@ -1,23 +1,17 @@
 import { useMemo } from 'react';
-import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { House, ChatCircleDots, ListChecks, FileText, SignOut, UsersThree, ChartBar, GearSix, UserCircle, Brain, FolderOpen, Plus, Buildings, Rows, MapTrifold } from '@phosphor-icons/react';
+import { Plus, SignOut } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
 import { OfflineSyncBanner } from '@/components/OfflineSyncBanner';
 import type { UserRole } from '@/hooks/useAuth';
+import { AppNavigation } from '@/components/navigation/AppNavigation';
+import { NAV_ITEMS, filterNavByRole } from '@/components/navigation/nav-config';
 
 interface LayoutProps {
   children: React.ReactNode;
-}
-
-interface NavItem {
-  path: string;
-  icon: React.ElementType;
-  label: string;
-  /** If set, only these roles see this item. Empty/undefined = everyone. */
-  roles?: UserRole[];
 }
 
 function readCachedRole(): UserRole | null {
@@ -34,7 +28,7 @@ function readCachedRole(): UserRole | null {
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { role, loading } = useAuth();
+  const { role, loading, user } = useAuth();
 
   const handleLogout = () => {
     apiService.logout();
@@ -44,41 +38,7 @@ export function Layout({ children }: LayoutProps) {
 
   const effectiveRole: UserRole | null = role ?? readCachedRole();
 
-  const allNavItems: NavItem[] = useMemo(() => [
-    // Primary workflow-first order (keep contract experiences grouped).
-    { path: '/dashboard', icon: House, label: 'لوحة التحكم', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
-    { path: '/citizen', icon: UserCircle, label: 'شكاواي', roles: ['citizen'] },
-    { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/tasks', icon: ListChecks, label: 'المهام', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
-    { path: '/contract-intelligence', icon: Brain, label: 'تحليل العقود الاستثمارية', roles: ['project_director', 'contracts_manager'] },
-    { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
-    { path: '/investment-properties', icon: Buildings, label: 'الأصول', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
-    { path: '/teams', icon: UsersThree, label: 'الفرق', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-    { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
-    { path: '/reports', icon: ChartBar, label: 'التقارير', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },
-    { path: '/settings', icon: GearSix, label: 'الإعدادات' },
-  ], []);
-
-  const navItems = useMemo(
-    () =>
-      allNavItems.filter((item) => {
-        if (!item.roles || item.roles.length === 0) return true;
-        return effectiveRole ? item.roles.includes(effectiveRole) : false;
-      }),
-    [allNavItems, effectiveRole],
-  );
-
-  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
-  const isDashboardRoute = location.pathname === '/dashboard';
-
-  const handleHorizontalWheel = (event: React.WheelEvent<HTMLUListElement>) => {
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    event.currentTarget.scrollBy({ left: event.deltaY, behavior: 'smooth' });
-    event.preventDefault();
-  };
+  const navItems = useMemo(() => filterNavByRole(NAV_ITEMS, effectiveRole), [effectiveRole]);
 
   if (!loading && !effectiveRole && !apiService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
@@ -87,8 +47,12 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="sticky top-0 z-50 border-b border-primary/70 bg-primary text-primary-foreground shadow-[0_2px_12px_rgba(15,23,42,0.18)]">
-        <div className="container mx-auto px-3 md:px-4 py-2 md:py-2.5 flex items-center justify-between gap-2">
-          <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
+        <div className="container mx-auto px-3 md:px-4 py-2.5 md:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <AppNavigation navItems={navItems} pathname={location.pathname} userName={user?.full_name} role={effectiveRole} />
+            <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
+          </div>
+
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
             {effectiveRole && ['project_director', 'contracts_manager', 'complaints_officer', 'area_supervisor'].includes(effectiveRole) && (
               <a
@@ -110,64 +74,12 @@ export function Layout({ children }: LayoutProps) {
             </Button>
           </div>
         </div>
-
-        <nav className="border-t border-primary-foreground/25 bg-primary/95 lg:hidden">
-          <div className="container mx-auto px-2 md:px-4">
-            <ul
-              className="flex items-center gap-2 py-2 overflow-x-auto overflow-y-hidden whitespace-nowrap scroll-smooth touch-pan-x overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              onWheel={handleHorizontalWheel}
-            >
-              {navItems.map(({ path, icon: Icon, label }) => (
-                <li key={path} className="shrink-0">
-                  <Link
-                    to={path}
-                    className={`group inline-flex items-center gap-1.5 md:gap-2 rounded-xl px-3 md:px-3.5 py-1.5 md:py-2 text-xs md:text-sm font-medium transition-all duration-200 border ${
-                      isActive(path)
-                        ? 'bg-primary-foreground/20 text-primary-foreground border-primary-foreground/35 shadow-[0_1px_6px_rgba(0,0,0,0.14)]'
-                        : 'bg-transparent text-primary-foreground/85 border-transparent hover:border-primary-foreground/25 hover:bg-primary-foreground/10 hover:text-primary-foreground'
-                    }`}
-                  >
-                    <Icon size={15} weight={isActive(path) ? 'fill' : 'regular'} className={isActive(path) ? 'opacity-100' : 'opacity-80'} />
-                    <span>{label}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </nav>
       </header>
 
       <OfflineSyncBanner />
 
       <div className="container mx-auto px-3 md:px-4 py-4 md:py-6">
-        <div className="flex items-start gap-4 md:gap-6">
-          <aside className={`hidden lg:block shrink-0 transition-all duration-200 ${isDashboardRoute ? 'w-64' : 'w-20'}`}>
-            <nav className="sticky top-24 rounded-2xl border border-border/80 bg-slate-100 shadow-sm p-2">
-              <ul className="space-y-1">
-                {navItems.map(({ path, icon: Icon, label }) => (
-                  <li key={`sidebar-${path}`}>
-                    <Link
-                      to={path}
-                      title={label}
-                      className={`group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 border ${isDashboardRoute ? 'justify-between' : 'justify-center'} ${
-                        isActive(path)
-                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                          : 'bg-white/80 text-slate-700 border-transparent hover:bg-white hover:text-slate-900 hover:border-slate-300'
-                      }`}
-                    >
-                      <span className={isDashboardRoute ? 'inline' : 'sr-only'}>{label}</span>
-                      <Icon size={18} weight={isActive(path) ? 'fill' : 'regular'} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          </aside>
-
-          <main className="flex-1 min-w-0">
-            {children}
-          </main>
-        </div>
+        <main className="min-w-0">{children}</main>
       </div>
 
       <footer className="bg-muted mt-8 md:mt-12 py-4 md:py-6">
