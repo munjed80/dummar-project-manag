@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
 import { OfflineSyncBanner } from '@/components/OfflineSyncBanner';
 import type { UserRole } from '@/hooks/useAuth';
-import { AppNavigation } from '@/components/navigation/AppNavigation';
+import { DesktopNavigation, MobileNavigation } from '@/components/navigation/AppNavigation';
 import { NAV_ITEMS, filterNavByRole, formatRoleLabel } from '@/components/navigation/nav-config';
 
 interface LayoutProps {
@@ -50,21 +50,11 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="sticky top-0 z-50 border-b border-primary/70 bg-primary text-primary-foreground shadow-[0_2px_12px_rgba(15,23,42,0.18)]">
         <div className="container mx-auto px-3 md:px-4 py-2.5 md:py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <AppNavigation
-              navItems={navItems}
-              pathname={location.pathname}
-              userName={user?.full_name}
-              role={effectiveRole}
-              onLogout={handleLogout}
-              showInternalComplaintAction={canSubmitInternalComplaint}
-            />
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
-              {effectiveRole && (
-                <p className="hidden sm:block text-[11px] md:text-xs text-primary-foreground/75">{user?.full_name || 'مستخدم النظام'} • {formatRoleLabel(effectiveRole)}</p>
-              )}
-            </div>
+          <div className="min-w-0">
+            <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-primary-foreground truncate">إدارة التجمع - مشروع دمر</h1>
+            {effectiveRole && (
+              <p className="hidden sm:block text-[11px] md:text-xs text-primary-foreground/75">{user?.full_name || 'مستخدم النظام'} • {formatRoleLabel(effectiveRole)}</p>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
@@ -82,12 +72,19 @@ export function Layout({ children }: LayoutProps) {
               </a>
             )}
             <NotificationBell />
-            <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground hover:bg-primary-foreground/20 px-2 md:px-3 rounded-xl">
+            <Button variant="ghost" onClick={handleLogout} className="hidden sm:inline-flex text-primary-foreground hover:bg-primary-foreground/20 px-2 md:px-3 rounded-xl">
               <SignOut size={18} />
-              <span className="hidden sm:inline mr-1 text-sm">تسجيل الخروج</span>
+              <span className="mr-1 text-sm">تسجيل الخروج</span>
             </Button>
+            <MobileNavigation
+              navItems={navItems}
+              pathname={location.pathname}
+              onLogout={handleLogout}
+              showInternalComplaintAction={canSubmitInternalComplaint}
+            />
           </div>
         </div>
+        <DesktopNavigation navItems={navItems} pathname={location.pathname} />
       </header>
 
       <OfflineSyncBanner />
