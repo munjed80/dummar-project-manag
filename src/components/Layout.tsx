@@ -85,7 +85,7 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_2px_16px_rgba(0,0,0,0.04)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <header className="sticky top-0 z-50 border-b border-border/70 bg-card shadow-[0_2px_12px_rgba(15,23,42,0.08)]">
         <div className="container mx-auto px-3 md:px-4 py-2 md:py-2.5 flex items-center justify-between gap-2">
           <h1 className="text-sm sm:text-base md:text-lg font-semibold tracking-tight text-foreground/90 truncate">إدارة التجمع - مشروع دمر</h1>
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
@@ -110,7 +110,7 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
 
-        <nav className="border-t border-border/60 bg-muted/20">
+        <nav className="border-t border-border/70 bg-slate-100/90 lg:hidden">
           <div className="container mx-auto px-2 md:px-4">
             <ul
               className="flex items-center gap-2 py-2 overflow-x-auto overflow-y-hidden whitespace-nowrap scroll-smooth touch-pan-x overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -138,9 +138,35 @@ export function Layout({ children }: LayoutProps) {
 
       <OfflineSyncBanner />
 
-      <main className="container mx-auto px-3 md:px-4 py-4 md:py-6">
-        {children}
-      </main>
+      <div className="container mx-auto px-3 md:px-4 py-4 md:py-6">
+        <div className="flex items-start gap-4 md:gap-6">
+          <aside className="hidden lg:block w-64 shrink-0">
+            <nav className="sticky top-24 rounded-2xl border border-border/80 bg-slate-100 shadow-sm p-2">
+              <ul className="space-y-1">
+                {navItems.map(({ path, icon: Icon, label }) => (
+                  <li key={`sidebar-${path}`}>
+                    <Link
+                      to={path}
+                      className={`group flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 border ${
+                        isActive(path)
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'bg-white/80 text-slate-700 border-transparent hover:bg-white hover:text-slate-900 hover:border-slate-300'
+                      }`}
+                    >
+                      <span>{label}</span>
+                      <Icon size={18} weight={isActive(path) ? 'fill' : 'regular'} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </aside>
+
+          <main className="flex-1 min-w-0">
+            {children}
+          </main>
+        </div>
+      </div>
 
       <footer className="bg-muted mt-8 md:mt-12 py-4 md:py-6">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-xs md:text-sm">
