@@ -29,6 +29,7 @@ from app.models.execution_log import (
     ACTION_TYPE_TASK,
 )
 from app.models.investment_property import InvestmentProperty, PropertyType, PropertyStatus
+from app.models.internal_message import MessageThread, MessageThreadType, MessageThreadParticipant, Message
 from app.models.investment_contract import (
     InvestmentContract,
     InvestmentType,
@@ -91,4 +92,8 @@ __all__ = [
     "InvestmentContract",
     "InvestmentType",
     "InvestmentContractStatus",
+    "MessageThread",
+    "MessageThreadType",
+    "MessageThreadParticipant",
+    "Message",
 ]
