@@ -157,7 +157,7 @@ services:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${NGINX_CONF:-./nginx.conf}:/etc/nginx/conf.d/default.conf:ro
       - ./dist:/usr/share/nginx/html:ro
       - backend_uploads:/usr/share/nginx/uploads:ro
       # SSL certificates — mounted unconditionally so HTTPS enablement does
