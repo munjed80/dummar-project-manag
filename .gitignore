@@ -33,6 +33,7 @@ pids
 
 .spark-workbench-id
 __pycache__/
+nginx-runtime.conf
 
 # Playwright
 /playwright-report/

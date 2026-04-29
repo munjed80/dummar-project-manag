@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 echo "=== Dummar Backend Entrypoint ==="
 echo "Waiting for database to be ready..."
@@ -30,6 +30,9 @@ fi
 echo "Running database migrations..."
 if ! alembic upgrade head; then
     echo "FATAL: Database migrations failed."
+    echo "FATAL: Alembic current/head diagnostic output:"
+    alembic current || true
+    alembic heads || true
     echo "FATAL: Refusing to start the API in an inconsistent schema state."
     echo "FATAL: Check DATABASE_URL connectivity and migration files in alembic/versions/."
     exit 1

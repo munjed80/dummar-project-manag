@@ -62,6 +62,10 @@ cert_present() {
     return 1
 }
 
+# Deploy-time nginx config path (kept out of git to prevent pull-time clobber).
+NGINX_CONF="./nginx.conf"
+export NGINX_CONF
+
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
@@ -246,36 +250,17 @@ if [ -n "$DOMAIN" ]; then
     fi
 
     # ---------------------------------------------------------------------
-    # SSL self-heal: if a Let's Encrypt cert already exists for this domain
-    # but nginx.conf is the HTTP-only template (which happens after every
-    # `git pull` — git restores the repo's nginx.conf and silently overwrites
-    # the on-VPS SSL version), automatically re-apply nginx-ssl.conf so the
-    # next nginx restart serves HTTPS instead of falling back to HTTP.
-    #
-    # This makes  `git pull && ./deploy.sh --rebuild --domain=X`  idempotent
-    # for HTTPS — no hidden manual edits required on the VPS.
+    # SSL runtime config: if a Let's Encrypt cert exists, render a local
+    # nginx runtime config from nginx-ssl.conf and mount it via NGINX_CONF.
+    # This keeps tracked nginx.conf untouched and avoids git pull overwriting
+    # SSL configuration between deploy runs.
     # ---------------------------------------------------------------------
     if cert_present "$LE_CERT" && [ -f nginx-ssl.conf ]; then
-        # Detect whether the live nginx.conf is already SSL-enabled. We look
-        # for the `listen 443 ssl` directive AND the substituted server_name
-        # (i.e. DOMAIN_PLACEHOLDER has been replaced with the real domain).
-        NEEDS_SSL_APPLY=true
-        if [ -f nginx.conf ] \
-           && grep -q 'listen 443 ssl' nginx.conf \
-           && grep -q "server_name ${DOMAIN}" nginx.conf \
-           && ! grep -q 'DOMAIN_PLACEHOLDER' nginx.conf; then
-            NEEDS_SSL_APPLY=false
-        fi
-
-        if [ "$NEEDS_SSL_APPLY" = true ]; then
-            warn "SSL cert exists for ${DOMAIN} but nginx.conf is not the SSL"
-            warn "version (likely overwritten by git pull). Re-applying SSL config…"
-            cp nginx-ssl.conf nginx.conf
-            sed -i "s/DOMAIN_PLACEHOLDER/${DOMAIN}/g" nginx.conf
-            success "nginx.conf re-generated from nginx-ssl.conf for ${DOMAIN}."
-        else
-            info "nginx.conf already configured for HTTPS on ${DOMAIN} — no change."
-        fi
+        NGINX_CONF="./nginx-runtime.conf"
+        export NGINX_CONF
+        cp nginx-ssl.conf "$NGINX_CONF"
+        sed -i "s/DOMAIN_PLACEHOLDER/${DOMAIN}/g" "$NGINX_CONF"
+        success "Using generated runtime SSL config: ${NGINX_CONF} (${DOMAIN})."
     elif [ -n "$DOMAIN" ] && ! cert_present "$LE_CERT"; then
         info "No Let's Encrypt cert at ${LE_CERT} yet — staying on HTTP nginx.conf."
         info "Run  sudo ./ssl-setup.sh ${DOMAIN} --auto  once to enable HTTPS."
@@ -432,7 +417,7 @@ check_endpoint() {
 # paths) to avoid false [ERROR] lines that mislead the operator.
 # ---------------------------------------------------------------------------
 SSL_ENABLED=false
-if [ -f nginx.conf ] && grep -q 'listen 443 ssl' nginx.conf; then
+if [ -f "$NGINX_CONF" ] && grep -q 'listen 443 ssl' "$NGINX_CONF"; then
     SSL_ENABLED=true
 fi
 
@@ -465,7 +450,7 @@ if [ "$SSL_ENABLED" = true ]; then
     HTTPS_PORT_LOCAL=$(grep '^HTTPS_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "443")
     HTTPS_PORT_LOCAL="${HTTPS_PORT_LOCAL:-443}"
 
-    info "SSL is enabled in nginx.conf — verifying origin TLS on localhost…"
+    info "SSL is enabled in ${NGINX_CONF} — verifying origin TLS on localhost…"
 
     # Probe https://localhost directly. -k because the cert is for $DOMAIN,
     # not "localhost". A working TLS stack returns 200/301/etc.; a broken

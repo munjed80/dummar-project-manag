@@ -1,7 +1,7 @@
 """add internal messages
 
-Revision ID: 021_add_internal_messages
-Revises: 020_add_more_investment_contract_attachments
+Revision ID: 021
+Revises: 020
 Create Date: 2026-04-29
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "021_add_internal_messages"
-down_revision = "020_add_more_investment_contract_attachments"
+revision = "021"
+down_revision = "020"
 branch_labels = None
 depends_on = None
 
