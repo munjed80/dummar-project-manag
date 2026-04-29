@@ -61,7 +61,7 @@ export default function TeamsListPage() {
           <div className="flex justify-between items-center">
             <CardTitle className="text-2xl">الفرق التنفيذية</CardTitle>
             {canCreate && (
-              <Button onClick={() => navigate('/teams/new')}>
+              <Button onClick={() => navigate('/inspection-teams/new')}>
                 <Plus size={20} className="ml-1" />
                 إضافة فريق
               </Button>
@@ -117,7 +117,7 @@ export default function TeamsListPage() {
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-lg mb-2">لا توجد فرق بعد</p>
               {canCreate && (
-                <Button onClick={() => navigate('/teams/new')} className="mt-4">
+                <Button onClick={() => navigate('/inspection-teams/new')} className="mt-4">
                   إضافة أول فريق
                 </Button>
               )}
@@ -139,7 +139,7 @@ export default function TeamsListPage() {
                   </TableHeader>
                   <TableBody>
                     {teams.map((team) => (
-                      <TableRow key={team.id} onClick={() => navigate(`/teams/${team.id}`)} className="cursor-pointer hover:bg-muted/50">
+                      <TableRow key={team.id} onClick={() => navigate(`/inspection-teams/${team.id}`)} className="cursor-pointer hover:bg-muted/50">
                         <TableCell className="font-semibold">{team.name}</TableCell>
                         <TableCell>{typeLabels[team.team_type] || team.team_type}</TableCell>
                         <TableCell>{team.contact_name || '-'}</TableCell>

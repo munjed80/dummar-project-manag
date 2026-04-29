@@ -73,7 +73,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex gap-2">
             <Button asChild size="sm" variant="outline">
-              <Link to="/complaints">
+              <Link to="/violations">
                 <ChatCircleDots size={16} className="ml-1" />
                 الشكاوى
                 <ArrowRight size={14} className="mr-1" />

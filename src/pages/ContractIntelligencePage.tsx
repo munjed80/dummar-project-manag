@@ -125,7 +125,7 @@ export default function ContractIntelligencePage() {
             <Button variant="outline" onClick={() => navigate('/investment-contracts')}>
               عرض العقود الاستثمارية
             </Button>
-            <Button variant="outline" onClick={() => navigate('/manual-contracts')}>
+            <Button variant="outline" onClick={() => navigate('/licenses')}>
               العقود التشغيلية
             </Button>
           </div>

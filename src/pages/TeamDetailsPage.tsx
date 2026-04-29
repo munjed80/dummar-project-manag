@@ -69,7 +69,7 @@ export default function TeamDetailsPage() {
       } else {
         const created = await apiService.createTeam(formData);
         toast.success('تم إنشاء الفريق');
-        navigate(`/teams/${created.id}`);
+        navigate(`/inspection-teams/${created.id}`);
       }
     } catch (err) {
       const message = err instanceof ApiError
@@ -92,7 +92,7 @@ export default function TeamDetailsPage() {
   return (
     <Layout>
       <div className="space-y-4">
-        <Button variant="ghost" onClick={() => navigate('/teams')}>
+        <Button variant="ghost" onClick={() => navigate('/inspection-teams')}>
           <ArrowLeft size={20} className="ml-1" />
           العودة إلى الفرق
         </Button>
