@@ -168,8 +168,10 @@ function App() {
           <Route path="/" element={<RootRoute />} />
           <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
           <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
-          <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
-          <Route path="/complaints/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/violations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
+          <Route path="/violations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/complaints" element={<Navigate to="/violations" replace />} />
+          <Route path="/complaints/:id" element={<Navigate to="/violations" replace />} />
           <Route path="/complaints-map" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
           <Route path="/tasks" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TasksListPage /></RoleProtectedRoute>} />
           <Route path="/tasks/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
@@ -178,11 +180,15 @@ function App() {
           <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
           <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
-          <Route path="/teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/inspection-teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
+          <Route path="/inspection-teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/inspection-teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/teams" element={<Navigate to="/inspection-teams" replace />} />
+          <Route path="/teams/new" element={<Navigate to="/inspection-teams/new" replace />} />
+          <Route path="/teams/:id" element={<Navigate to="/inspection-teams" replace />} />
           <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
-          <Route path="/manual-contracts" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
+          <Route path="/licenses" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
+          <Route path="/manual-contracts" element={<Navigate to="/licenses" replace />} />
           <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/documents/:id" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DocumentReviewPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/bulk-import" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><BulkImportPage /></RoleProtectedRoute>} />
