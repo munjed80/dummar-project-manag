@@ -328,7 +328,7 @@ export default function ComplaintDetailsPage() {
         <div className="text-center py-12">
           <Warning size={48} className="mx-auto mb-4 text-muted-foreground" />
           <p className="text-muted-foreground">{error || 'لم يتم العثور على الشكوى'}</p>
-          <Link to="/complaints" className="text-primary hover:underline mt-2 inline-block">العودة للقائمة</Link>
+          <Link to="/violations" className="text-primary hover:underline mt-2 inline-block">العودة للقائمة</Link>
         </div>
       </Layout>
     );
