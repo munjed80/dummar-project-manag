@@ -47,6 +47,8 @@ const InvestmentPropertiesPage = lazy(() => import('@/pages/InvestmentProperties
 const InvestmentPropertyDetailsPage = lazy(() => import('@/pages/InvestmentPropertyDetailsPage'));
 const InvestmentContractsPage = lazy(() => import('@/pages/InvestmentContractsPage'));
 const InvestmentContractDetailsPage = lazy(() => import('@/pages/InvestmentContractDetailsPage'));
+const InternalMessagesPage = lazy(() => import('@/pages/InternalMessagesPage'));
+const InternalBotPage = lazy(() => import('@/pages/InternalBotPage'));
 
 function PageLoader() {
   return (
@@ -201,6 +203,8 @@ function App() {
           <Route path="/locations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
           <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
+          <Route path="/messages" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalMessagesPage /></RoleProtectedRoute>} />
+          <Route path="/internal-bot" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalBotPage /></RoleProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/investment-properties" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertiesPage /></RoleProtectedRoute>} />
           <Route path="/investment-properties/:id" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertyDetailsPage /></RoleProtectedRoute>} />

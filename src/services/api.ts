@@ -42,6 +42,26 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
+
+
+export interface MessageThreadPayload {
+  title?: string;
+  participant_ids: number[];
+  is_group?: boolean;
+}
+
+export interface MessagePayload {
+  body: string;
+}
+
+export interface InternalBotQueryPayload {
+  question: string;
+  days?: number;
+  municipality_id?: number;
+  district_id?: number;
+  project_id?: number;
+}
+
 /**
  * Structured error thrown by the API service for non-2xx HTTP responses.
  *
@@ -1601,6 +1621,49 @@ class ApiService {
   isAuthenticated(): boolean {
     return !!localStorage.getItem('access_token');
   }
+  async getMessageThreads(): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch internal message threads');
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async createMessageThread(payload: MessageThreadPayload): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to create internal message thread');
+    return response.json();
+  }
+
+  async getMessageThread(threadId: number | string): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads/${threadId}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch internal message thread');
+    return response.json();
+  }
+
+  async sendMessage(threadId: number | string, payload: MessagePayload): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads/${threadId}/messages`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to send internal message');
+    return response.json();
+  }
+
+  async queryInternalBot(payload: InternalBotQueryPayload): Promise<any> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-bot/query`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to query internal bot');
+    return response.json();
+  }
+
 }
 
 export const apiService = new ApiService();
