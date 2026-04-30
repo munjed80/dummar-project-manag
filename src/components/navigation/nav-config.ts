@@ -1,6 +1,6 @@
 import type { ElementType } from 'react';
 import type { UserRole } from '@/hooks/useAuth';
-import { Buildings, Brain, ChartBar, ChatCircleDots, FileText, FolderOpen, GearSix, House, ListChecks, MapTrifold, Rows, UserCircle, UsersThree } from '@phosphor-icons/react';
+import { Buildings, Brain, ChartBar, ChatCircleDots, FileText, FolderOpen, GearSix, House, IdentificationCard, ListChecks, MapTrifold, Rows, UserCircle, Users, UsersThree, WarningCircle } from '@phosphor-icons/react';
 
 export interface NavItem {
   path: string;
@@ -14,14 +14,17 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', icon: House, label: 'لوحة التحكم', section: 'home', mobileSection: 'home', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
   { path: '/citizen', icon: UserCircle, label: 'شكاواي', section: 'home', mobileSection: 'home', roles: ['citizen'] },
-  { path: '/violations', icon: ChatCircleDots, label: 'المخالفات', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/violations', icon: WarningCircle, label: 'المخالفات', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/tasks', icon: ListChecks, label: 'المهام', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
-  { path: '/inspection-teams', icon: UsersThree, label: 'فرق التفتيش', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/teams', icon: UsersThree, label: 'الفرق التنفيذية', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/inspection-teams', icon: Users, label: 'فرق التفتيش', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/projects', icon: FolderOpen, label: 'المشاريع', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
   { path: '/contract-intelligence', icon: Brain, label: 'تحليل عقود الاستثمار', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager'] },
-  { path: '/licenses', icon: Rows, label: 'التراخيص', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
+  { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
+  { path: '/licenses', icon: IdentificationCard, label: 'التراخيص', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'investment_manager', 'property_manager'] },
   { path: '/investment-properties', icon: Buildings, label: 'الأصول', section: 'assets', mobileSection: 'assets', roles: ['project_director', 'contracts_manager', 'property_manager', 'investment_manager'] },
   { path: '/users', icon: UsersThree, label: 'المستخدمون', section: 'admin', mobileSection: 'admin', roles: ['project_director'] },
   { path: '/reports', icon: ChartBar, label: 'التقارير', section: 'admin', mobileSection: 'admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'] },

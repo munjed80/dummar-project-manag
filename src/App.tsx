@@ -35,6 +35,9 @@ const ProjectsListPage = lazy(() => import('@/pages/ProjectsListPage'));
 const ProjectDetailsPage = lazy(() => import('@/pages/ProjectDetailsPage'));
 const TeamsListPage = lazy(() => import('@/pages/TeamsListPage'));
 const TeamDetailsPage = lazy(() => import('@/pages/TeamDetailsPage'));
+const ViolationsPage = lazy(() => import('@/pages/ViolationsPage'));
+const LicensesPage = lazy(() => import('@/pages/LicensesPage'));
+const InspectionTeamsPage = lazy(() => import('@/pages/InspectionTeamsPage'));
 const UsersPage = lazy(() => import('@/pages/UsersPage'));
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
@@ -168,8 +171,7 @@ function App() {
           <Route path="/" element={<RootRoute />} />
           <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
           <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
-          <Route path="/violations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
-          <Route path="/violations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/violations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ViolationsPage /></RoleProtectedRoute>} />
           <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
           <Route path="/complaints/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
           <Route path="/complaints-map" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
@@ -180,14 +182,12 @@ function App() {
           <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
           <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/inspection-teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
-          <Route path="/inspection-teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/inspection-teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/inspection-teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InspectionTeamsPage /></RoleProtectedRoute>} />
           <Route path="/teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
           <Route path="/teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
-          <Route path="/licenses" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
+          <Route path="/licenses" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><LicensesPage /></RoleProtectedRoute>} />
           <Route path="/manual-contracts" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/documents/:id" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DocumentReviewPage /></RoleProtectedRoute>} />
