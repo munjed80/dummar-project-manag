@@ -1,6 +1,6 @@
 import type { ElementType } from 'react';
 import type { UserRole } from '@/hooks/useAuth';
-import { Buildings, Brain, ChartBar, ChatCircleDots, FileText, FolderOpen, GearSix, House, IdentificationCard, ListChecks, MapTrifold, Rows, UserCircle, Users, UsersThree, WarningCircle } from '@phosphor-icons/react';
+import { Buildings, Brain, ChartBar, ChatCircleDots, FileText, FolderOpen, GearSix, House, IdentificationCard, ListChecks, MapTrifold, Robot, Rows, UserCircle, Users, UsersThree, WarningCircle } from '@phosphor-icons/react';
 
 export interface NavItem {
   path: string;
@@ -20,6 +20,8 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/teams', icon: UsersThree, label: 'الفرق التنفيذية', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/inspection-teams', icon: Users, label: 'فرق التفتيش', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/projects', icon: FolderOpen, label: 'المشاريع', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
+  { path: '/messages', icon: ChatCircleDots, label: 'الرسائل الداخلية', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
+  { path: '/internal-bot', icon: Robot, label: 'المساعد الذكي', section: 'admin', mobileSection: 'admin', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user', 'property_manager', 'investment_manager'] },
   { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', section: 'work', mobileSection: 'work', roles: ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user'] },
   { path: '/investment-contracts', icon: FileText, label: 'العقود الاستثمارية', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager', 'investment_manager', 'property_manager'] },
   { path: '/contract-intelligence', icon: Brain, label: 'تحليل عقود الاستثمار', section: 'contracts', mobileSection: 'contracts', roles: ['project_director', 'contracts_manager'] },
