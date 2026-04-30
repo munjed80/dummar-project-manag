@@ -42,6 +42,26 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
+export interface MessageThread {
+  id: number;
+  title?: string | null;
+  is_group?: boolean;
+  participants?: User[];
+  unread_count?: number;
+  last_message_at?: string | null;
+  last_message_preview?: string | null;
+  created_at?: string;
+}
+
+export interface MessageItem {
+  id: number;
+  thread_id: number;
+  sender_id: number;
+  content: string;
+  created_at: string;
+  sender?: User;
+}
+
 /**
  * Structured error thrown by the API service for non-2xx HTTP responses.
  *
@@ -1589,6 +1609,55 @@ class ApiService {
       body: fd,
     });
     if (!response.ok) await throwApiError(response, 'Failed to upload file');
+    return response.json();
+  }
+
+  // ── Internal Messages & Bot ──
+  async getMessageThreads(): Promise<MessageThread[]> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch message threads');
+    return response.json();
+  }
+
+  async createMessageThread(payload: { title?: string; participant_ids: number[]; is_group?: boolean }): Promise<MessageThread> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to create message thread');
+    return response.json();
+  }
+
+  async getMessageThread(threadId: number): Promise<{ thread: MessageThread; messages: MessageItem[] }> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads/${threadId}`, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch message thread');
+    return response.json();
+  }
+
+  async sendMessage(threadId: number, payload: { content: string }): Promise<MessageItem> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads/${threadId}/messages`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to send message');
+    return response.json();
+  }
+
+  async queryInternalBot(payload: {
+    question: string;
+    intent?: string;
+    days?: number;
+    location_id?: number;
+    project_id?: number;
+  }): Promise<{ summary?: string; intent?: string; rows?: Record<string, unknown>[]; [k: string]: unknown }> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/internal-bot/query`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to query internal bot');
     return response.json();
   }
 
