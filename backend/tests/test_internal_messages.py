@@ -73,3 +73,102 @@ def test_reject_blank_messages(client, db):
         headers=_auth_headers(token),
     )
     assert send.status_code == 422
+
+
+# ── Phase 2: context-linked threads ──────────────────────────────────────────
+
+
+def _make_complaint(db, tracking="CTX001"):
+    from app.models.complaint import Complaint, ComplaintType, ComplaintStatus
+
+    c = Complaint(
+        tracking_number=tracking,
+        full_name="Ctx Citizen",
+        phone="0991111111",
+        complaint_type=ComplaintType.OTHER,
+        description="ctx test",
+        status=ComplaintStatus.NEW,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+def test_context_thread_creates_when_missing(client, db):
+    _create_user(db, "ctx_director", UserRole.PROJECT_DIRECTOR)
+    token = _login(client, "ctx_director")
+    complaint = _make_complaint(db, tracking="CTX_NEW1")
+
+    resp = client.get(
+        f"/internal-messages/context/complaint/{complaint.id}?context_title=Ticket%20A",
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["context_type"] == "complaint"
+    assert data["context_id"] == complaint.id
+    assert data["context_title"] == "Ticket A"
+    assert data["thread_type"] == "group"
+    assert any(p["user_id"] for p in data["participants"])
+
+
+def test_context_thread_is_idempotent(client, db):
+    _create_user(db, "ctx_dup", UserRole.PROJECT_DIRECTOR)
+    token = _login(client, "ctx_dup")
+    complaint = _make_complaint(db, tracking="CTX_DUP1")
+
+    first = client.get(
+        f"/internal-messages/context/complaint/{complaint.id}",
+        headers=_auth_headers(token),
+    )
+    second = client.get(
+        f"/internal-messages/context/complaint/{complaint.id}",
+        headers=_auth_headers(token),
+    )
+    assert first.status_code == 200 and second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
+
+
+def test_context_thread_auto_adds_new_participant(client, db):
+    _create_user(db, "ctx_owner", UserRole.PROJECT_DIRECTOR)
+    other = _create_user(db, "ctx_other", UserRole.ENGINEER_SUPERVISOR)
+    owner_token = _login(client, "ctx_owner")
+    other_token = _login(client, "ctx_other")
+    complaint = _make_complaint(db, tracking="CTX_JOIN1")
+
+    first = client.get(
+        f"/internal-messages/context/complaint/{complaint.id}",
+        headers=_auth_headers(owner_token),
+    )
+    assert first.status_code == 200
+    thread_id = first.json()["id"]
+
+    joined = client.get(
+        f"/internal-messages/context/complaint/{complaint.id}",
+        headers=_auth_headers(other_token),
+    )
+    assert joined.status_code == 200
+    assert joined.json()["id"] == thread_id
+    user_ids = {p["user_id"] for p in joined.json()["participants"]}
+    assert other.id in user_ids
+
+
+def test_context_thread_rejects_unknown_context_type(client, db):
+    _create_user(db, "ctx_bad", UserRole.PROJECT_DIRECTOR)
+    token = _login(client, "ctx_bad")
+    resp = client.get(
+        "/internal-messages/context/contract/1",
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 400
+
+
+def test_context_thread_404_when_complaint_missing(client, db):
+    _create_user(db, "ctx_404", UserRole.PROJECT_DIRECTOR)
+    token = _login(client, "ctx_404")
+    resp = client.get(
+        "/internal-messages/context/complaint/999999",
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 404

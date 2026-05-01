@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Layout } from '@/components/Layout';
 import {
   apiService,
@@ -7,15 +7,25 @@ import {
   type MessageThread,
   type User,
 } from '@/services/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  ChatCircleDots, Plus, PaperPlaneRight, Spinner, UsersThree, Warning,
+  ChatCircleDots,
+  Plus,
+  PaperPlaneRight,
+  Spinner,
+  UsersThree,
+  Warning,
+  MagnifyingGlass,
+  ArrowClockwise,
+  UserCircle,
+  ChatTeardropDots,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,10 +34,52 @@ import { describeLoadError } from '@/lib/loadError';
 function fmtDateTime(value?: string | null) {
   if (!value) return '';
   try {
-    return new Date(value).toLocaleString('ar-SY');
+    return new Date(value).toLocaleString('ar-SY', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   } catch {
     return value;
   }
+}
+
+function fmtRelative(value?: string | null): string {
+  if (!value) return '';
+  try {
+    const diff = Date.now() - new Date(value).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return 'الآن';
+    if (mins < 60) return `منذ ${mins} د`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `منذ ${hrs} س`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `منذ ${days} ي`;
+    return new Date(value).toLocaleDateString('ar-SY');
+  } catch {
+    return value;
+  }
+}
+
+function AvatarIcon({ name, mine }: { name: string; mine?: boolean }) {
+  const initials = name
+    .split(' ')
+    .map((w) => w[0] ?? '')
+    .slice(0, 2)
+    .join('');
+  return (
+    <div
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+        mine
+          ? 'bg-sky-600 text-white'
+          : 'bg-slate-600 text-slate-200'
+      }`}
+      title={name}
+    >
+      {initials || <UserCircle size={16} />}
+    </div>
+  );
 }
 
 export default function InternalMessagesPage() {
@@ -41,12 +93,16 @@ export default function InternalMessagesPage() {
   const [draft, setDraft] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [threadSearch, setThreadSearch] = useState('');
 
   // New thread dialog state
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newParticipantIds, setNewParticipantIds] = useState<number[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const userMap = useMemo(() => {
     const map = new Map<number, User>();
@@ -57,6 +113,31 @@ export default function InternalMessagesPage() {
   const selectedThread = useMemo(
     () => threads.find((t) => t.id === selectedThreadId) || null,
     [threads, selectedThreadId],
+  );
+
+  const filteredThreads = useMemo(() => {
+    if (!threadSearch.trim()) return threads;
+    const q = threadSearch.trim().toLowerCase();
+    return threads.filter((t) => {
+      const title = t.title ?? '';
+      const preview = t.last_message?.body ?? '';
+      return title.toLowerCase().includes(q) || preview.toLowerCase().includes(q);
+    });
+  }, [threads, threadSearch]);
+
+  const filteredUsers = useMemo(() => {
+    if (!userSearch.trim()) return users;
+    const q = userSearch.trim().toLowerCase();
+    return users.filter(
+      (u) =>
+        u.full_name.toLowerCase().includes(q) ||
+        u.username.toLowerCase().includes(q),
+    );
+  }, [users, userSearch]);
+
+  const totalUnread = useMemo(
+    () => threads.reduce((acc, t) => acc + (t.unread_count ?? 0), 0),
+    [threads],
   );
 
   const loadThreads = useCallback(async (preselectId?: number) => {
@@ -93,6 +174,11 @@ export default function InternalMessagesPage() {
     }
   }, []);
 
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   useEffect(() => { void loadThreads(); }, [loadThreads]);
 
   useEffect(() => {
@@ -100,8 +186,6 @@ export default function InternalMessagesPage() {
     else setMessages([]);
   }, [selectedThreadId, loadThread]);
 
-  // Load internal users for thread creation. Failure is non-fatal: the user
-  // simply won't be able to start a brand-new thread.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -109,7 +193,6 @@ export default function InternalMessagesPage() {
         const res = await apiService.getUsers({ limit: 200 });
         if (cancelled) return;
         const list = Array.isArray(res?.items) ? res.items : [];
-        // Hide the current user from the picker to avoid inviting themselves.
         setUsers(list.filter((u) => u.id !== currentUser?.id));
       } catch {
         if (!cancelled) setUsers([]);
@@ -127,7 +210,6 @@ export default function InternalMessagesPage() {
       await apiService.sendMessage(selectedThreadId, { body });
       setDraft('');
       await loadThread(selectedThreadId);
-      // Refresh threads list to update last_message preview / order.
       await loadThreads(selectedThreadId);
     } catch (e) {
       const msg = e instanceof ApiError ? (e.detail || e.message) : 'تعذّر إرسال الرسالة';
@@ -151,6 +233,7 @@ export default function InternalMessagesPage() {
       setCreateOpen(false);
       setNewTitle('');
       setNewParticipantIds([]);
+      setUserSearch('');
       await loadThreads(thread.id);
       toast.success('تم إنشاء المحادثة');
     } catch (e) {
@@ -167,7 +250,7 @@ export default function InternalMessagesPage() {
     );
   };
 
-  const senderLabel = (m: MessageItem) => {
+  const senderLabel = (m: MessageItem): string => {
     if (currentUser && m.sender_user_id === currentUser.id) return 'أنت';
     const u = userMap.get(m.sender_user_id);
     return u ? u.full_name : `مستخدم #${m.sender_user_id}`;
@@ -176,7 +259,6 @@ export default function InternalMessagesPage() {
   const threadTitle = (t: MessageThread): string => {
     if (t.title) return t.title;
     if (t.thread_type === 'group') return 'محادثة جماعية';
-    // For direct threads, show the other participant's name when known.
     const other = t.participants?.find((p) => p.user_id !== currentUser?.id);
     if (other) {
       const u = userMap.get(other.user_id);
@@ -186,84 +268,169 @@ export default function InternalMessagesPage() {
     return `محادثة #${t.id}`;
   };
 
+  const threadSubtitle = (t: MessageThread): string => {
+    if (t.thread_type === 'group') {
+      return `${t.participants?.length ?? 0} مشاركين`;
+    }
+    const other = t.participants?.find((p) => p.user_id !== currentUser?.id);
+    if (other) {
+      const u = userMap.get(other.user_id);
+      return u ? (u.role ?? 'موظف') : 'محادثة مباشرة';
+    }
+    return 'محادثة مباشرة';
+  };
+
   return (
     <Layout>
-      <div dir="rtl" className="p-4 md:p-6 space-y-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <ChatCircleDots size={24} className="text-primary" />
-              الرسائل الداخلية
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              قناة تواصل داخلية بين موظفي البلدية والفرق التنفيذية.
-            </p>
+      <div dir="rtl" className="flex flex-col h-[calc(100vh-120px)] min-h-[600px]">
+        {/* Page header */}
+        <div className="flex items-center justify-between gap-3 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 shadow">
+              <ChatCircleDots size={22} weight="fill" className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-foreground leading-tight">
+                مركز التواصل الداخلي
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                قناة تشغيلية آمنة للفرق البلدية
+              </p>
+            </div>
+            {totalUnread > 0 && (
+              <Badge
+                variant="destructive"
+                className="rounded-full px-2 py-0.5 text-xs"
+              >
+                {totalUnread} غير مقروء
+              </Badge>
+            )}
           </div>
-          <Button onClick={() => setCreateOpen(true)} className="gap-2">
-            <Plus size={16} weight="bold" />
-            محادثة جديدة
-          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadThreads(selectedThreadId ?? undefined)}
+              disabled={loadingThreads}
+              className="gap-1.5 text-xs"
+            >
+              <ArrowClockwise size={14} className={loadingThreads ? 'animate-spin' : ''} />
+              تحديث
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+              className="gap-1.5 text-xs bg-sky-600 hover:bg-sky-500"
+            >
+              <Plus size={14} weight="bold" />
+              محادثة جديدة
+            </Button>
+          </div>
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            <Warning size={18} className="mt-0.5 shrink-0" />
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <Warning size={16} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Thread list */}
-          <Card className="lg:col-span-1 min-h-[600px] flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">المحادثات</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto px-2">
+        {/* Main layout: thread list + conversation */}
+        <div className="flex flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
+          {/* ── Thread list panel ── */}
+          <div className="flex w-72 shrink-0 flex-col border-l border-border bg-muted/30">
+            {/* Search */}
+            <div className="border-b border-border p-3">
+              <div className="relative">
+                <MagnifyingGlass
+                  size={14}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  placeholder="بحث في المحادثات..."
+                  value={threadSearch}
+                  onChange={(e) => setThreadSearch(e.target.value)}
+                  className="h-8 pr-8 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Thread items */}
+            <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
               {loadingThreads ? (
-                <div className="flex items-center justify-center py-10 text-muted-foreground">
-                  <Spinner size={20} className="animate-spin ml-2" />
-                  جاري التحميل...
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <Spinner size={18} className="animate-spin ml-2" />
+                  <span className="text-xs">جاري التحميل...</span>
                 </div>
-              ) : threads.length === 0 ? (
-                <div className="text-center py-10 text-sm text-muted-foreground">
-                  <ChatCircleDots size={36} className="mx-auto mb-2 opacity-40" />
-                  لا توجد محادثات بعد. ابدأ محادثة جديدة.
+              ) : filteredThreads.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground px-4 text-center">
+                  <ChatCircleDots size={32} className="mb-2 opacity-30" />
+                  <p className="text-xs">
+                    {threadSearch
+                      ? 'لا توجد نتائج للبحث.'
+                      : 'لا توجد محادثات بعد. أنشئ محادثة جديدة للبدء.'}
+                  </p>
                 </div>
               ) : (
-                <ul className="space-y-1">
-                  {threads.map((t) => {
+                <ul className="divide-y divide-border">
+                  {filteredThreads.map((t) => {
                     const isActive = t.id === selectedThreadId;
-                    const preview = t.last_message?.body || 'لا توجد رسائل بعد';
-                    const time = t.last_message?.created_at || t.updated_at;
+                    const hasUnread = (t.unread_count ?? 0) > 0;
                     return (
                       <li key={t.id}>
                         <button
                           type="button"
                           onClick={() => setSelectedThreadId(t.id)}
-                          className={`w-full text-right p-3 rounded-md border transition-colors ${
+                          className={`w-full px-3 py-3 text-right transition-colors ${
                             isActive
-                              ? 'bg-primary/10 border-primary'
-                              : 'border-transparent hover:bg-muted/40'
+                              ? 'bg-sky-500/10 border-r-2 border-sky-500'
+                              : 'hover:bg-muted/60 border-r-2 border-transparent'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="font-medium truncate flex items-center gap-1">
-                              {t.thread_type === 'group' && (
-                                <UsersThree size={14} className="text-muted-foreground" />
+                          <div className="flex items-start gap-2">
+                            <div className="mt-0.5">
+                              {t.thread_type === 'group' ? (
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                                  <UsersThree size={16} />
+                                </div>
+                              ) : (
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+                                  <ChatTeardropDots size={16} />
+                                </div>
                               )}
-                              <span className="truncate">{threadTitle(t)}</span>
                             </div>
-                            {(t.unread_count ?? 0) > 0 && (
-                              <Badge variant="destructive" className="text-[10px] h-5">
-                                {t.unread_count}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1 truncate">
-                            {preview}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground mt-1">
-                            {fmtDateTime(time)}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <span
+                                  className={`truncate text-xs font-semibold ${
+                                    isActive ? 'text-sky-700' : 'text-foreground'
+                                  }`}
+                                >
+                                  {threadTitle(t)}
+                                </span>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {hasUnread && (
+                                    <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                                      {(t.unread_count ?? 0) > 99 ? '99+' : t.unread_count}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                    {fmtRelative(t.last_message?.created_at || t.updated_at)}
+                                  </span>
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                {threadSubtitle(t)}
+                              </p>
+                              <p
+                                className={`mt-0.5 truncate text-[11px] ${
+                                  hasUnread ? 'font-medium text-foreground' : 'text-muted-foreground'
+                                }`}
+                              >
+                                {t.last_message?.body || 'لا توجد رسائل بعد'}
+                              </p>
+                            </div>
                           </div>
                         </button>
                       </li>
@@ -271,154 +438,292 @@ export default function InternalMessagesPage() {
                   })}
                 </ul>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          {/* Conversation panel */}
-          <Card className="lg:col-span-2 min-h-[600px] flex flex-col">
+          {/* ── Conversation panel ── */}
+          <div className="flex flex-1 flex-col overflow-hidden bg-background">
             {selectedThread ? (
               <>
-                <CardHeader className="pb-2 border-b">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {selectedThread.thread_type === 'group' && (
-                      <UsersThree size={16} className="text-muted-foreground" />
+                {/* Thread header */}
+                <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+                  <div>
+                    {selectedThread.thread_type === 'group' ? (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                        <UsersThree size={18} />
+                      </div>
+                    ) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+                        <ChatTeardropDots size={18} />
+                      </div>
                     )}
-                    {threadTitle(selectedThread)}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedThread.participants?.length || 0} مشاركاً ·{' '}
-                    {selectedThread.thread_type === 'group' ? 'جماعية' : 'مباشرة'}
-                  </p>
-                </CardHeader>
-                <CardContent className="flex-1 overflow-auto py-3 space-y-2">
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-sm font-semibold truncate">
+                      {threadTitle(selectedThread)}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedThread.participants?.length ?? 0} مشاركين ·{' '}
+                      {selectedThread.thread_type === 'group' ? 'محادثة جماعية' : 'محادثة مباشرة'} ·{' '}
+                      آخر نشاط: {fmtDateTime(selectedThread.updated_at)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 [scrollbar-width:thin]">
                   {loadingMessages ? (
-                    <div className="flex items-center justify-center py-10 text-muted-foreground">
+                    <div className="flex items-center justify-center py-12 text-muted-foreground">
                       <Spinner size={20} className="animate-spin ml-2" />
-                      جاري التحميل...
+                      <span className="text-sm">جاري التحميل...</span>
                     </div>
                   ) : messages.length === 0 ? (
-                    <div className="text-center py-10 text-sm text-muted-foreground">
-                      لا توجد رسائل في هذه المحادثة بعد. اكتب أول رسالة أدناه.
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                      <ChatCircleDots size={40} className="mb-3 opacity-20" />
+                      <p className="text-sm font-medium">لا توجد رسائل بعد</p>
+                      <p className="text-xs mt-1">ابدأ المحادثة بكتابة رسالة أدناه.</p>
                     </div>
                   ) : (
-                    messages.map((m) => {
-                      const isMine = currentUser && m.sender_user_id === currentUser.id;
-                      return (
-                        <div
-                          key={m.id}
-                          className={`flex ${isMine ? 'justify-start' : 'justify-end'}`}
-                        >
+                    <>
+                      {messages.map((m, idx) => {
+                        const isMine = currentUser && m.sender_user_id === currentUser.id;
+                        const label = senderLabel(m);
+                        const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                        const showSender =
+                          !prevMsg || prevMsg.sender_user_id !== m.sender_user_id;
+
+                        return (
                           <div
-                            className={`max-w-[80%] rounded-lg p-3 border ${
-                              isMine ? 'bg-primary/10 border-primary/30' : 'bg-muted/40'
-                            }`}
+                            key={m.id}
+                            className={`flex gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
                           >
-                            <div className="text-xs text-muted-foreground mb-1 flex justify-between gap-3">
-                              <span className="font-medium">{senderLabel(m)}</span>
-                              <span>{fmtDateTime(m.created_at)}</span>
+                            {showSender && (
+                              <AvatarIcon name={label} mine={!!isMine} />
+                            )}
+                            {!showSender && <div className="w-8 shrink-0" />}
+                            <div
+                              className={`max-w-[70%] space-y-1 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}
+                            >
+                              {showSender && (
+                                <div
+                                  className={`flex items-baseline gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+                                >
+                                  <span className="text-xs font-medium text-foreground">
+                                    {label}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {fmtDateTime(m.created_at)}
+                                  </span>
+                                </div>
+                              )}
+                              <div
+                                className={`rounded-2xl px-3.5 py-2.5 text-sm ${
+                                  isMine
+                                    ? 'rounded-tr-sm bg-sky-600 text-white'
+                                    : 'rounded-tl-sm bg-muted text-foreground border border-border'
+                                }`}
+                              >
+                                <p className="whitespace-pre-wrap break-words leading-relaxed">
+                                  {m.body}
+                                </p>
+                              </div>
+                              {!showSender && (
+                                <span className="text-[10px] text-muted-foreground px-1">
+                                  {fmtDateTime(m.created_at)}
+                                </span>
+                              )}
                             </div>
-                            <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
                           </div>
-                        </div>
-                      );
-                    })
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
+                    </>
                   )}
-                </CardContent>
-                <div className="border-t p-3 flex gap-2">
-                  <Input
-                    placeholder="اكتب رسالة..."
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleSend();
-                      }
-                    }}
-                    disabled={sending}
-                    className="flex-1"
-                  />
-                  <Button onClick={handleSend} disabled={sending || !draft.trim()} className="gap-2">
-                    {sending ? <Spinner size={16} className="animate-spin" /> : <PaperPlaneRight size={16} />}
-                    إرسال
-                  </Button>
+                </div>
+
+                {/* Composer */}
+                <div className="border-t border-border p-3">
+                  <div className="flex items-end gap-2">
+                    <Textarea
+                      dir="rtl"
+                      rows={2}
+                      placeholder="اكتب رسالة... (Enter للإرسال، Shift+Enter لسطر جديد)"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          void handleSend();
+                        }
+                      }}
+                      disabled={sending}
+                      className="flex-1 resize-none text-sm min-h-[60px]"
+                    />
+                    <Button
+                      onClick={() => void handleSend()}
+                      disabled={sending || !draft.trim()}
+                      className="h-[60px] w-12 shrink-0 flex-col gap-1 bg-sky-600 hover:bg-sky-500 p-2"
+                    >
+                      {sending ? (
+                        <Spinner size={16} className="animate-spin" />
+                      ) : (
+                        <PaperPlaneRight size={18} />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground text-center">
+                    هذه القناة محمية ومخصصة للتواصل الداخلي بين موظفي البلدية فقط.
+                  </p>
                 </div>
               </>
             ) : (
-              <CardContent className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                {threads.length === 0
-                  ? 'لا توجد محادثات. أنشئ محادثة جديدة لتبدأ.'
-                  : 'اختر محادثة من القائمة لعرض الرسائل.'}
-              </CardContent>
+              /* Empty state — no thread selected */
+              <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground gap-3">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                  <ChatCircleDots size={32} className="opacity-40" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium">
+                    {threads.length === 0
+                      ? 'لا توجد محادثات'
+                      : 'اختر محادثة للعرض'}
+                  </p>
+                  <p className="text-xs mt-1 text-muted-foreground">
+                    {threads.length === 0
+                      ? 'ابدأ بإنشاء محادثة مع أحد زملائك'
+                      : 'انقر على محادثة من القائمة للبدء'}
+                  </p>
+                </div>
+                {threads.length === 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => setCreateOpen(true)}
+                    className="gap-2 bg-sky-600 hover:bg-sky-500 mt-2"
+                  >
+                    <Plus size={14} />
+                    محادثة جديدة
+                  </Button>
+                )}
+              </div>
             )}
-          </Card>
+          </div>
         </div>
+      </div>
 
-        {/* Create thread dialog */}
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent dir="rtl" className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>محادثة جديدة</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium block mb-1">
-                  عنوان المحادثة (اختياري للمحادثات الجماعية)
+      {/* Create thread dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus size={16} className="text-sky-600" />
+              محادثة جديدة
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium block mb-1.5">
+                عنوان المحادثة
+                <span className="text-muted-foreground font-normal mr-1">(اختياري)</span>
+              </label>
+              <Input
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="مثال: تنسيق فريق المنطقة الشرقية"
+              />
+            </div>
+
+            <Separator />
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium">
+                  المشاركون
                 </label>
+                {newParticipantIds.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {newParticipantIds.length} مختار
+                    {newParticipantIds.length === 1 ? ' — مباشرة' : ' — جماعية'}
+                  </Badge>
+                )}
+              </div>
+              <div className="relative mb-2">
+                <MagnifyingGlass
+                  size={14}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
                 <Input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="مثال: تنسيق فريق المنطقة الشرقية"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="بحث عن مستخدم..."
+                  className="pr-8 h-8 text-sm"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium block mb-1">
-                  المشاركون ({newParticipantIds.length} مختار)
-                </label>
-                {users.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    لا توجد قائمة مستخدمين متاحة.
-                  </p>
-                ) : (
-                  <div className="max-h-64 overflow-auto border rounded-md divide-y">
-                    {users.map((u) => {
-                      const checked = newParticipantIds.includes(u.id);
-                      return (
-                        <label
-                          key={u.id}
-                          className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/30"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleParticipant(u.id)}
-                          />
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">{u.full_name}</div>
-                            <div className="text-xs text-muted-foreground">{u.username}</div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  اختر مستخدماً واحداً لمحادثة مباشرة، أو أكثر لإنشاء محادثة جماعية.
+              {users.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  لا توجد قائمة مستخدمين متاحة.
                 </p>
-              </div>
+              ) : (
+                <div className="max-h-56 overflow-auto rounded-lg border divide-y">
+                  {filteredUsers.map((u) => {
+                    const checked = newParticipantIds.includes(u.id);
+                    return (
+                      <label
+                        key={u.id}
+                        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+                          checked ? 'bg-sky-50' : 'hover:bg-muted/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleParticipant(u.id)}
+                          className="rounded"
+                        />
+                        <AvatarIcon name={u.full_name} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{u.full_name}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {u.username} · {u.role ?? '—'}
+                          </div>
+                        </div>
+                        {checked && (
+                          <span className="text-[10px] text-sky-600 font-medium shrink-0">✓</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                  {filteredUsers.length === 0 && (
+                    <div className="py-4 text-center text-xs text-muted-foreground">
+                      لا توجد نتائج
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-2">
+                مستخدم واحد = محادثة مباشرة · أكثر من مستخدم = محادثة جماعية
+              </p>
             </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
-                إلغاء
-              </Button>
-              <Button onClick={handleCreateThread} disabled={creating || newParticipantIds.length === 0}>
-                {creating ? <Spinner size={16} className="animate-spin ml-1" /> : null}
-                إنشاء
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => { setCreateOpen(false); setUserSearch(''); setNewTitle(''); setNewParticipantIds([]); }}
+              disabled={creating}
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={() => void handleCreateThread()}
+              disabled={creating || newParticipantIds.length === 0}
+              className="gap-2 bg-sky-600 hover:bg-sky-500"
+            >
+              {creating && <Spinner size={14} className="animate-spin" />}
+              إنشاء المحادثة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
+

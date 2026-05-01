@@ -49,6 +49,7 @@ const InvestmentContractsPage = lazy(() => import('@/pages/InvestmentContractsPa
 const InvestmentContractDetailsPage = lazy(() => import('@/pages/InvestmentContractDetailsPage'));
 const InternalMessagesPage = lazy(() => import('@/pages/InternalMessagesPage'));
 const InternalBotPage = lazy(() => import('@/pages/InternalBotPage'));
+const ExecutiveBriefingPage = lazy(() => import('@/pages/ExecutiveBriefingPage'));
 
 function PageLoader() {
   return (
@@ -210,6 +211,7 @@ function App() {
           <Route path="/investment-contracts/:id" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractDetailsPage /></RoleProtectedRoute>}/>
           <Route path="/messages" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalMessagesPage /></RoleProtectedRoute>} />
           <Route path="/internal-bot" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalBotPage /></RoleProtectedRoute>} />
+          <Route path="/executive-briefing" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ExecutiveBriefingPage /></RoleProtectedRoute>} />
         </Routes>
       </Suspense>
     </BrowserRouter>

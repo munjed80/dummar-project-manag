@@ -58,6 +58,26 @@ export interface MessageThreadParticipant {
   last_read_at?: string | null;
 }
 
+/**
+ * Context entity types that a message thread can be linked to.
+ * Phase 2 (current): the backend persists `context_type='complaint'` via the
+ * `/internal-messages/context/...` endpoint. The remaining values are reserved
+ * for future phases — sending them today will return HTTP 400.
+ */
+export type MessageContextType =
+  | 'complaint'
+  | 'contract'
+  | 'task'
+  | 'asset'
+  | 'license'
+  | 'violation';
+
+/** Frontend convenience reference to attach a thread to a specific entity. */
+export interface MessageContextRef {
+  contextType: MessageContextType;
+  contextId: number;
+}
+
 export interface MessageThread {
   id: number;
   title?: string | null;
@@ -68,18 +88,44 @@ export interface MessageThread {
   last_message?: MessageItem | null;
   unread_count?: number;
   participants?: MessageThreadParticipant[];
+  /** Backend-persisted context link (Phase 2). */
+  context_type?: string | null;
+  context_id?: number | null;
+  context_title?: string | null;
+  /**
+   * Frontend-only convenience field. The authoritative persisted values live
+   * in `context_type`/`context_id`/`context_title` above; `_contextRef` is
+   * just a typed shortcut used by some UI surfaces.
+   */
+  _contextRef?: MessageContextRef;
 }
 
 export type InternalBotIntent =
   | 'complaints_summary'
   | 'tasks_summary'
-  | 'contracts_expiring';
+  | 'contracts_expiring'
+  | 'context_analysis';
+
+export type InternalBotRiskLevel = 'low' | 'medium' | 'high';
+
+export interface InternalBotRelatedItem {
+  type: string;
+  id: number;
+  label: string;
+}
 
 export interface InternalBotResponse {
   intent: InternalBotIntent;
   summary: string;
   data: Record<string, unknown>[];
   generated_on: string;
+  /** Phase-3 contextual analysis fields — populated when `intent === 'context_analysis'`. */
+  risk_level?: InternalBotRiskLevel | null;
+  key_points?: string[] | null;
+  recommended_actions?: string[] | null;
+  related_items?: InternalBotRelatedItem[] | null;
+  context_type?: string | null;
+  context_id?: number | null;
 }
 
 // ── Violations ────────────────────────────────────────────────────────────
@@ -1731,6 +1777,25 @@ class ApiService {
     return response.json();
   }
 
+  /**
+   * Phase-2 contextual threads. Returns the existing thread for the
+   * given (contextType, contextId) or creates a new group thread linked
+   * to that entity. Currently the backend only supports `contextType =
+   * 'complaint'`.
+   */
+  async getOrCreateContextThread(
+    contextType: MessageContextType,
+    contextId: number,
+    contextTitle?: string,
+  ): Promise<MessageThread> {
+    const qs = new URLSearchParams();
+    if (contextTitle) qs.set('context_title', contextTitle);
+    const url = `${API_BASE_URL}/internal-messages/context/${encodeURIComponent(contextType)}/${contextId}${qs.toString() ? `?${qs}` : ''}`;
+    const response = await fetchWithRetry(url, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to load context thread');
+    return response.json();
+  }
+
   async queryInternalBot(payload: {
     question?: string;
     intent?: InternalBotIntent;
@@ -1738,6 +1803,9 @@ class ApiService {
     limit?: number;
     location_id?: number;
     project_id?: number;
+    /** Phase-3: optional context pointer for rule-based decision support. */
+    context_type?: string;
+    context_id?: number;
   }): Promise<InternalBotResponse> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-bot/query`, {
       method: 'POST',
