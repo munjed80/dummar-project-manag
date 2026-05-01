@@ -42,24 +42,44 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
-export interface MessageThread {
-  id: number;
-  title?: string | null;
-  is_group?: boolean;
-  participants?: User[];
-  unread_count?: number;
-  last_message_at?: string | null;
-  last_message_preview?: string | null;
-  created_at?: string;
-}
+export type MessageThreadType = 'direct' | 'group';
 
 export interface MessageItem {
   id: number;
   thread_id: number;
-  sender_id: number;
-  content: string;
+  sender_user_id: number;
+  body: string;
   created_at: string;
-  sender?: User;
+}
+
+export interface MessageThreadParticipant {
+  user_id: number;
+  joined_at: string;
+  last_read_at?: string | null;
+}
+
+export interface MessageThread {
+  id: number;
+  title?: string | null;
+  thread_type: MessageThreadType;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+  last_message?: MessageItem | null;
+  unread_count?: number;
+  participants?: MessageThreadParticipant[];
+}
+
+export type InternalBotIntent =
+  | 'complaints_summary'
+  | 'tasks_summary'
+  | 'contracts_expiring';
+
+export interface InternalBotResponse {
+  intent: InternalBotIntent;
+  summary: string;
+  data: Record<string, unknown>[];
+  generated_on: string;
 }
 
 /**
@@ -1613,13 +1633,20 @@ class ApiService {
   }
 
   // ── Internal Messages & Bot ──
-  async getMessageThreads(): Promise<MessageThread[]> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, { headers: this.getAuthHeaders() });
+  async getMessageThreads(params?: { skip?: number; limit?: number }): Promise<MessageThread[]> {
+    const qs = new URLSearchParams();
+    if (params?.skip !== undefined) qs.set('skip', String(params.skip));
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const url = `${API_BASE_URL}/internal-messages/threads${qs.toString() ? `?${qs}` : ''}`;
+    const response = await fetchWithRetry(url, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch message threads');
-    return response.json();
+    const data = await response.json();
+    // Backend returns PaginatedThreadListResponse: { total_count, items }
+    if (data && Array.isArray(data.items)) return data.items as MessageThread[];
+    return Array.isArray(data) ? (data as MessageThread[]) : [];
   }
 
-  async createMessageThread(payload: { title?: string; participant_ids: number[]; is_group?: boolean }): Promise<MessageThread> {
+  async createMessageThread(payload: { title?: string; participant_user_ids: number[] }): Promise<MessageThread> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -1635,7 +1662,7 @@ class ApiService {
     return response.json();
   }
 
-  async sendMessage(threadId: number, payload: { content: string }): Promise<MessageItem> {
+  async sendMessage(threadId: number, payload: { body: string }): Promise<MessageItem> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads/${threadId}/messages`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -1646,12 +1673,13 @@ class ApiService {
   }
 
   async queryInternalBot(payload: {
-    question: string;
-    intent?: string;
+    question?: string;
+    intent?: InternalBotIntent;
     days?: number;
+    limit?: number;
     location_id?: number;
     project_id?: number;
-  }): Promise<{ summary?: string; intent?: string; rows?: Record<string, unknown>[]; [k: string]: unknown }> {
+  }): Promise<InternalBotResponse> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-bot/query`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
