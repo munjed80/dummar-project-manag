@@ -9,6 +9,7 @@ unchanged.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -46,9 +47,11 @@ router = APIRouter(prefix="/violations", tags=["violations"])
 def _generate_violation_number(db: Session) -> str:
     """Return a unique human-readable identifier like VIO-2026-0001.
 
-    The numeric suffix counts existing rows for the current calendar year and
-    falls back to a microsecond-based suffix on the (rare) race where two
-    concurrent inserts would otherwise collide.
+    The numeric suffix counts existing rows for the current calendar year.
+    A defensive uniqueness check then falls back to a UUID-derived suffix
+    on the (rare) race where two concurrent inserts would collide. The
+    underlying column also carries a UNIQUE constraint, so any remaining
+    race is caught by the database.
     """
     year = datetime.now(timezone.utc).year
     prefix = f"VIO-{year}-"
@@ -58,10 +61,10 @@ def _generate_violation_number(db: Session) -> str:
         .count()
     )
     candidate = f"{prefix}{count + 1:04d}"
-    # Defensive uniqueness check (handles concurrent inserts within the same
-    # transaction-window better than relying solely on the count).
     if db.query(Violation).filter(Violation.violation_number == candidate).first():
-        candidate = f"{prefix}{int(datetime.now(timezone.utc).timestamp() * 1000) % 1_000_000:06d}"
+        # UUID-derived fallback: 8 hex chars ⇒ 16M-space, collision-free for
+        # all realistic concurrency.
+        candidate = f"{prefix}{uuid.uuid4().hex[:8]}"
     return candidate
 
 
