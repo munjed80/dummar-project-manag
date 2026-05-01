@@ -156,7 +156,8 @@ export default function ExecutiveBriefingPage() {
     },
     {
       title: 'الملفات التي تحتاج قراراً إدارياً',
-      count: null, // No dedicated KPI — kept as a forward-looking placeholder.
+      // TODO: replace with a real KPI once a dedicated endpoint exists.
+      count: null,
       href: '/messages',
       icon: Files,
       description: 'ملفات مرفوعة للنقاش الداخلي بانتظار قرار',
