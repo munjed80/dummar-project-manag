@@ -35,6 +35,12 @@ from app.models.investment_contract import (
     InvestmentType,
     InvestmentContractStatus,
 )
+from app.models.violation import (
+    Violation,
+    ViolationType,
+    ViolationSeverity,
+    ViolationStatus,
+)
 
 __all__ = [
     "Base",
@@ -96,4 +102,8 @@ __all__ = [
     "MessageThreadType",
     "MessageThreadParticipant",
     "Message",
+    "Violation",
+    "ViolationType",
+    "ViolationSeverity",
+    "ViolationStatus",
 ]

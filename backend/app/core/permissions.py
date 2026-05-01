@@ -43,6 +43,7 @@ class ResourceType(str, enum.Enum):
     NOTIFICATION = "notification"
     INVESTMENT_PROPERTY = "investment_property"
     INVESTMENT_CONTRACT = "investment_contract"
+    VIOLATION = "violation"
 
 
 class Action(str, enum.Enum):
@@ -86,6 +87,8 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.INVESTMENT_CONTRACT, Action.CREATE),
         (ResourceType.INVESTMENT_CONTRACT, Action.UPDATE),
         (ResourceType.INVESTMENT_CONTRACT, Action.DELETE),
+        (ResourceType.VIOLATION, Action.CREATE),
+        (ResourceType.VIOLATION, Action.UPDATE),
     },
     UserRole.ENGINEER_SUPERVISOR: _ALL_INTERNAL_READ
     | {
@@ -94,6 +97,9 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.TASK, Action.ASSIGN),
         (ResourceType.COMPLAINT, Action.UPDATE),
         (ResourceType.COMPLAINT, Action.ASSIGN),
+        (ResourceType.VIOLATION, Action.CREATE),
+        (ResourceType.VIOLATION, Action.UPDATE),
+        (ResourceType.VIOLATION, Action.ASSIGN),
     },
     UserRole.COMPLAINTS_OFFICER: _ALL_INTERNAL_READ
     | {
@@ -102,6 +108,8 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.COMPLAINT, Action.ASSIGN),
         (ResourceType.TASK, Action.CREATE),
         (ResourceType.TASK, Action.UPDATE),
+        (ResourceType.VIOLATION, Action.CREATE),
+        (ResourceType.VIOLATION, Action.UPDATE),
     },
     UserRole.AREA_SUPERVISOR: _ALL_INTERNAL_READ
     | {
@@ -110,6 +118,9 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.TASK, Action.CREATE),
         (ResourceType.TASK, Action.UPDATE),
         (ResourceType.TASK, Action.ASSIGN),
+        (ResourceType.VIOLATION, Action.CREATE),
+        (ResourceType.VIOLATION, Action.UPDATE),
+        (ResourceType.VIOLATION, Action.ASSIGN),
     },
     UserRole.FIELD_TEAM: {
         (ResourceType.COMPLAINT, Action.READ),

@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api import auth, complaints, tasks, contracts, projects, teams, app_settings, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence, jobs, automations, organization, execution_logs, investment_properties, investment_contracts, internal_bot, internal_messages
+from app.api import auth, complaints, tasks, contracts, projects, teams, app_settings, locations, dashboard, users, uploads, reports, notifications, gis, health, audit_logs, contract_intelligence, jobs, automations, organization, execution_logs, investment_properties, investment_contracts, internal_bot, internal_messages, violations
 from app.api.deps import get_current_internal_user
 from app.core.config import settings
 from app.middleware.request_logging import RequestLoggingMiddleware
@@ -171,6 +171,7 @@ app.include_router(investment_properties.router)
 app.include_router(investment_contracts.router)
 app.include_router(internal_bot.router)
 app.include_router(internal_messages.router)
+app.include_router(violations.router)
 
 # Ensure the upload directory exists. NOTE: we intentionally do NOT mount it as
 # unauthenticated StaticFiles. All file access goes through app.api.uploads

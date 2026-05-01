@@ -42,25 +42,104 @@ export interface PaginatedResponse<T> {
   items: T[];
 }
 
-export interface MessageThread {
-  id: number;
-  title?: string | null;
-  is_group?: boolean;
-  participants?: User[];
-  unread_count?: number;
-  last_message_at?: string | null;
-  last_message_preview?: string | null;
-  created_at?: string;
-}
+export type MessageThreadType = 'direct' | 'group';
 
 export interface MessageItem {
   id: number;
   thread_id: number;
-  sender_id: number;
-  content: string;
+  sender_user_id: number;
+  body: string;
   created_at: string;
-  sender?: User;
 }
+
+export interface MessageThreadParticipant {
+  user_id: number;
+  joined_at: string;
+  last_read_at?: string | null;
+}
+
+export interface MessageThread {
+  id: number;
+  title?: string | null;
+  thread_type: MessageThreadType;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+  last_message?: MessageItem | null;
+  unread_count?: number;
+  participants?: MessageThreadParticipant[];
+}
+
+export type InternalBotIntent =
+  | 'complaints_summary'
+  | 'tasks_summary'
+  | 'contracts_expiring';
+
+export interface InternalBotResponse {
+  intent: InternalBotIntent;
+  summary: string;
+  data: Record<string, unknown>[];
+  generated_on: string;
+}
+
+// ── Violations ────────────────────────────────────────────────────────────
+export type ViolationType =
+  | 'building'
+  | 'occupancy'
+  | 'market'
+  | 'hygiene'
+  | 'road'
+  | 'environment'
+  | 'public_property'
+  | 'other';
+
+export type ViolationSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export type ViolationStatus =
+  | 'new'
+  | 'under_review'
+  | 'inspection_required'
+  | 'violation_confirmed'
+  | 'notice_sent'
+  | 'fined'
+  | 'resolved'
+  | 'rejected'
+  | 'referred_to_legal';
+
+export interface Violation {
+  id: number;
+  violation_number: string;
+  title: string;
+  description: string;
+  violation_type: ViolationType;
+  severity: ViolationSeverity;
+  status: ViolationStatus;
+  municipality_id: number | null;
+  district_id: number | null;
+  org_unit_id: number | null;
+  reported_by_user_id: number | null;
+  assigned_to_user_id: number | null;
+  related_complaint_id: number | null;
+  related_task_id: number | null;
+  location_text: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  legal_reference: string | null;
+  fine_amount: string | null;
+  deadline_date: string | null;
+  resolved_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ViolationListResponse {
+  total_count: number;
+  page: number;
+  page_size: number;
+  items: Violation[];
+}
+
 
 /**
  * Structured error thrown by the API service for non-2xx HTTP responses.
@@ -1613,13 +1692,20 @@ class ApiService {
   }
 
   // ── Internal Messages & Bot ──
-  async getMessageThreads(): Promise<MessageThread[]> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, { headers: this.getAuthHeaders() });
+  async getMessageThreads(params?: { skip?: number; limit?: number }): Promise<MessageThread[]> {
+    const qs = new URLSearchParams();
+    if (params?.skip !== undefined) qs.set('skip', String(params.skip));
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    const url = `${API_BASE_URL}/internal-messages/threads${qs.toString() ? `?${qs}` : ''}`;
+    const response = await fetchWithRetry(url, { headers: this.getAuthHeaders() });
     if (!response.ok) await throwApiError(response, 'Failed to fetch message threads');
-    return response.json();
+    const data = await response.json();
+    // Backend returns PaginatedThreadListResponse: { total_count, items }
+    if (data && Array.isArray(data.items)) return data.items as MessageThread[];
+    return Array.isArray(data) ? (data as MessageThread[]) : [];
   }
 
-  async createMessageThread(payload: { title?: string; participant_ids: number[]; is_group?: boolean }): Promise<MessageThread> {
+  async createMessageThread(payload: { title?: string; participant_user_ids: number[] }): Promise<MessageThread> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -1635,7 +1721,7 @@ class ApiService {
     return response.json();
   }
 
-  async sendMessage(threadId: number, payload: { content: string }): Promise<MessageItem> {
+  async sendMessage(threadId: number, payload: { body: string }): Promise<MessageItem> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-messages/threads/${threadId}/messages`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
@@ -1646,18 +1732,96 @@ class ApiService {
   }
 
   async queryInternalBot(payload: {
-    question: string;
-    intent?: string;
+    question?: string;
+    intent?: InternalBotIntent;
     days?: number;
+    limit?: number;
     location_id?: number;
     project_id?: number;
-  }): Promise<{ summary?: string; intent?: string; rows?: Record<string, unknown>[]; [k: string]: unknown }> {
+  }): Promise<InternalBotResponse> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-bot/query`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify(sanitizeJsonPayload(payload)),
     });
     if (!response.ok) await throwApiError(response, 'Failed to query internal bot');
+    return response.json();
+  }
+
+  // ── Violations ────────────────────────────────────────────────────────
+  async listViolations(params?: {
+    status?: ViolationStatus;
+    violation_type?: ViolationType;
+    severity?: ViolationSeverity;
+    municipality_id?: number;
+    district_id?: number;
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<ViolationListResponse> {
+    const qp = new URLSearchParams();
+    if (params?.status) qp.append('status', params.status);
+    if (params?.violation_type) qp.append('violation_type', params.violation_type);
+    if (params?.severity) qp.append('severity', params.severity);
+    if (params?.municipality_id !== undefined) qp.append('municipality_id', String(params.municipality_id));
+    if (params?.district_id !== undefined) qp.append('district_id', String(params.district_id));
+    if (params?.q) qp.append('q', params.q);
+    if (params?.page !== undefined) qp.append('page', String(params.page));
+    if (params?.page_size !== undefined) qp.append('page_size', String(params.page_size));
+    const response = await fetchWithRetry(`${API_BASE_URL}/violations/?${qp}`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch violations');
+    return response.json();
+  }
+
+  async getViolation(id: number): Promise<Violation> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/violations/${id}`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch violation');
+    return response.json();
+  }
+
+  async createViolation(data: Partial<Violation>): Promise<Violation> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/violations/`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to create violation');
+    return response.json();
+  }
+
+  async updateViolation(id: number, data: Partial<Violation>): Promise<Violation> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/violations/${id}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(data)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to update violation');
+    return response.json();
+  }
+
+  async updateViolationStatus(
+    id: number,
+    payload: { status: ViolationStatus; note?: string },
+  ): Promise<Violation> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/violations/${id}/status`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(sanitizeJsonPayload(payload)),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to update violation status');
+    return response.json();
+  }
+
+  async deleteViolation(id: number): Promise<{ message: string; id: number }> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/violations/${id}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to delete violation');
     return response.json();
   }
 
