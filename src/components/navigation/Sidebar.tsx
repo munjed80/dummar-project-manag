@@ -93,7 +93,7 @@ function LeafLink({
       {active && (
         <span
           aria-hidden
-          className="absolute inset-y-1 right-0 w-[3px] rounded-l-full bg-sky-400"
+          className="absolute inset-y-1 right-0 w-[3px] rounded-l-full bg-[#C8A24A]"
         />
       )}
       <Icon

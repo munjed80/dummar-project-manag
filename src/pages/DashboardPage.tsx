@@ -90,10 +90,10 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className="border-t-2 border-t-[#C8A24A]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الشكاوى</CardTitle>
-              <ChatCircleDots size={20} className="text-accent" />
+              <ChatCircleDots size={20} className="text-[#C8A24A]" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalComplaints}</div>
@@ -103,10 +103,10 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-t-2 border-t-[#C8A24A]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">إجمالي المهام</CardTitle>
-              <ListChecks size={20} className="text-accent" />
+              <ListChecks size={20} className="text-[#C8A24A]" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalTasks}</div>
@@ -116,10 +116,10 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-t-2 border-t-[#C8A24A]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">العقود النشطة</CardTitle>
-              <FileText size={20} className="text-accent" />
+              <FileText size={20} className="text-[#C8A24A]" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats?.active_contracts || 0}</div>
@@ -129,7 +129,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-t-2 border-t-[#C8A24A]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">عقود قرب الانتهاء</CardTitle>
               <WarningCircle size={20} className="text-destructive" />

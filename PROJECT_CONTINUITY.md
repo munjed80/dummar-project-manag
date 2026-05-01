@@ -8,6 +8,27 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-01 — Executive-gold accent wiring
+
+**Task completed:** Wired the executive-gold accent `#C8A24A` from the palette into two high-signal places so the navy/blue identity feels complete.
+
+**What was done:**
+- **Sidebar active rail:** changed the 3-px right rail next to active items in `src/components/navigation/Sidebar.tsx` from `bg-sky-400` to `bg-[#C8A24A]`. The active item icon/text stays sky for legibility on navy; the gold rail provides the elegant "you-are-here" marker the spec asked for.
+- **Dashboard KPI cards:** in `src/pages/DashboardPage.tsx`, added a 2-px gold top border (`border-t-2 border-t-[#C8A24A]`) to all four top-row KPI cards (إجمالي الشكاوى، إجمالي المهام، العقود النشطة، عقود قرب الانتهاء). The first three card icons also moved from generic `text-accent` to `text-[#C8A24A]` so the gold reads as a deliberate accent, not a fluke. The fourth card keeps its red `WarningCircle` icon because that's a true alert state.
+
+Status indicators (progress bars, status badges, expiry alert tiles) were intentionally left on their existing semantic colors — gold is reserved for executive/identity accents, not data states.
+
+**Files changed:**
+- `src/components/navigation/Sidebar.tsx`
+- `src/pages/DashboardPage.tsx`
+- `PROJECT_CONTINUITY.md`
+
+**Build:** `npm run build` — green (1.06s, 0 errors).
+
+**Recommended next step:** awaiting user to specify which functional feature to tackle next (no specific feature was named in the prompt).
+
+---
+
 ### Session: 2026-05-01 — Visual identity, sync status UI, PWA install polish
 
 **Task completed:** Aligned the platform on a single navy/blue government-dashboard identity, replaced the yellow full-width sync banner with a compact topbar control, and polished the PWA install experience (iOS instructions + graceful fallback). Frontend-only.
