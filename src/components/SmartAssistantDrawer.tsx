@@ -150,6 +150,8 @@ const COLUMN_LABELS: Record<string, string> = {
 
 // ── Result display ────────────────────────────────────────────────────────────
 
+type BotRow = Record<string, unknown>;
+
 function ResultPanel({ response }: { response: InternalBotResponse }) {
   const columns = useMemo(() => {
     const rows = response.data ?? [];
@@ -164,10 +166,13 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
       (r) => typeof r === 'object' && r !== null && 'count' in r,
     );
     if (!isCountTable) return [];
-    return rows.map((r) => ({
-      label: String((r as Record<string, unknown>).status ?? '—'),
-      count: Number((r as Record<string, unknown>).count ?? 0),
-    }));
+    return rows.map((r) => {
+      const row = r as BotRow;
+      return {
+        label: String(row.status ?? '—'),
+        count: Number(row.count ?? 0),
+      };
+    });
   }, [response]);
 
   const totalCount = useMemo(
@@ -246,7 +251,7 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
                   <TableRow key={idx} className="border-white/5 hover:bg-white/5">
                     {columns.map((c) => (
                       <TableCell key={c} className="text-xs text-slate-300 py-2">
-                        {String((row as Record<string, unknown>)[c] ?? '—')}
+                        {String((row as BotRow)[c] ?? '—')}
                       </TableCell>
                     ))}
                   </TableRow>

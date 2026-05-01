@@ -412,7 +412,7 @@ export default function InternalMessagesPage() {
                                 <div className="flex shrink-0 items-center gap-1">
                                   {hasUnread && (
                                     <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                                      {t.unread_count! > 99 ? '99+' : t.unread_count}
+                                      {(t.unread_count ?? 0) > 99 ? '99+' : t.unread_count}
                                     </span>
                                   )}
                                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -707,7 +707,7 @@ export default function InternalMessagesPage() {
           <DialogFooter className="gap-2 pt-2">
             <Button
               variant="outline"
-              onClick={() => { setCreateOpen(false); setUserSearch(''); }}
+              onClick={() => { setCreateOpen(false); setUserSearch(''); setNewTitle(''); setNewParticipantIds([]); }}
               disabled={creating}
             >
               إلغاء
