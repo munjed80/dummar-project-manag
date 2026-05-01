@@ -221,7 +221,7 @@ export function SidebarNav({ entries, pathname, badges, onNavigate, compact }: S
       aria-label="القائمة الرئيسية"
       className={cn(
         'flex h-full flex-col text-slate-100',
-        compact ? '' : 'bg-slate-950',
+        compact ? '' : 'bg-[#123B63]',
       )}
     >
       <div className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:thin]">

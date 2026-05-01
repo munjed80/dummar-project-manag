@@ -4,7 +4,6 @@ import { Suspense, lazy } from 'react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserRole } from '@/hooks/useAuth';
-import { InstallPrompt } from '@/components/InstallPrompt';
 
 // Lazy-loaded page components
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -155,7 +154,6 @@ function App() {
   return (
     <BrowserRouter>
       <Toaster />
-      <InstallPrompt />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
