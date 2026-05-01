@@ -60,8 +60,9 @@ export interface MessageThreadParticipant {
 
 /**
  * Context entity types that a message thread can be linked to.
- * These fields are frontend-only scaffolding for future contextual linking —
- * they are NOT sent to the backend until the backend supports them.
+ * Phase 2 (current): the backend persists `context_type='complaint'` via the
+ * `/internal-messages/context/...` endpoint. The remaining values are reserved
+ * for future phases — sending them today will return HTTP 400.
  */
 export type MessageContextType =
   | 'complaint'
@@ -71,7 +72,7 @@ export type MessageContextType =
   | 'license'
   | 'violation';
 
-/** Frontend-only context reference to attach a thread to a specific entity. */
+/** Frontend convenience reference to attach a thread to a specific entity. */
 export interface MessageContextRef {
   contextType: MessageContextType;
   contextId: number;
@@ -92,8 +93,9 @@ export interface MessageThread {
   context_id?: number | null;
   context_title?: string | null;
   /**
-   * Frontend-only: context link for future contextual thread support.
-   * Not persisted on the backend — stored/resolved client-side only.
+   * Frontend-only convenience field. The authoritative persisted values live
+   * in `context_type`/`context_id`/`context_title` above; `_contextRef` is
+   * just a typed shortcut used by some UI surfaces.
    */
   _contextRef?: MessageContextRef;
 }

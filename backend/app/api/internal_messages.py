@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, func
@@ -216,7 +217,7 @@ def send_message(
 def get_or_create_context_thread(
     context_type: str,
     context_id: int,
-    context_title: str | None = None,
+    context_title: Optional[str] = None,
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db),
 ):
