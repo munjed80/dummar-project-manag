@@ -8,6 +8,84 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-01 — Phase 3: Context-aware smart assistant (complaint analysis)
+
+**Task completed:** Extended the existing `/internal-bot/query` endpoint and the `SmartAssistantDrawer` so the assistant can produce a rule-based, Arabic, structured analysis of a single complaint when opened from `ComplaintDetailsPage`.
+
+**Backend:**
+- `backend/app/schemas/internal_bot.py`:
+  - Added `intent='context_analysis'` literal.
+  - Added `RiskLevel = 'low' | 'medium' | 'high'` and `RelatedItem` model.
+  - Added `SUPPORTED_CONTEXT_TYPES = ('complaint',)`.
+  - Extended `InternalBotQuery` with optional `context_type` (max 50) and `context_id` (≥1).
+  - Extended `InternalBotResponse` with optional `risk_level`, `key_points`, `recommended_actions`, `related_items`, `context_type`, `context_id` (all `None` for legacy intents → backward compatible).
+- `backend/app/api/internal_bot.py`:
+  - New `_build_complaint_analysis(db, complaint)` helper — pure deterministic rule-based logic, no external AI calls. Aggregates the complaint, the latest linked task, and the Phase-2 context-linked `MessageThread` (message_count, last_message_at, last 3 messages summarized to ~140 chars), resolves location/area names, and computes a risk level via simple rules:
+    - URGENT + open → high; HIGH + open + age≥2d → high; open + age≥14d → high.
+    - HIGH/URGENT open → medium; open + age≥7d → medium; NEW + age≥3d → medium.
+    - Otherwise low.
+  - Generates Arabic `summary`, `key_points`, `recommended_actions` (e.g. "أنشئ مهمة تنفيذية" when no linked task, "افتح نقاشاً داخلياً" when no thread, "تابع المهمة المرتبطة" for stale tasks, etc).
+  - `POST /internal-bot/query` now branches on `context_type`/`context_id`:
+    - both must be supplied (422 otherwise),
+    - `context_type` validated against `SUPPORTED_CONTEXT_TYPES` (400 otherwise),
+    - complaint missing → 404,
+    - audited via `write_audit_log(action='internal_bot_query', entity_type='internal_bot')`.
+  - Explicit guard: `intent='context_analysis'` without context fields returns 422 (prevents falling through to `contracts_expiring`).
+- `backend/tests/test_internal_bot.py`: +5 new tests
+  - `test_internal_bot_context_complaint_returns_structured_analysis`
+  - `test_internal_bot_context_includes_task_and_thread` (verifies task + Phase-2 thread aggregation)
+  - `test_internal_bot_context_404_when_complaint_missing`
+  - `test_internal_bot_context_rejects_unsupported_type` (e.g. `contract` → 400)
+  - `test_internal_bot_context_requires_both_fields` (422)
+
+**Frontend:**
+- `src/services/api.ts`:
+  - `InternalBotIntent` now includes `'context_analysis'`.
+  - New `InternalBotRiskLevel` and `InternalBotRelatedItem` types.
+  - `InternalBotResponse` extended with optional `risk_level`, `key_points`, `recommended_actions`, `related_items`, `context_type`, `context_id`.
+  - `apiService.queryInternalBot` accepts optional `context_type`/`context_id`.
+- `src/components/SmartAssistantDrawer.tsx`:
+  - New optional `context?: SmartAssistantContext` prop (`contextType: 'complaint'`, `contextId`, `contextTitle?`).
+  - Auto-runs the contextual analysis the first time the drawer is opened for a given (type,id) pair (dedup via `autoRanFor`).
+  - Context banner: "تحليل مرتبط بالشكوى رقم …" + "حلّل هذه الشكوى" quick prompt button.
+  - New `ContextAnalysisPanel` renders summary, color-coded risk badge (low=emerald, medium=amber, high=red), key points list, recommended actions list, and related items chips.
+  - Existing `ResultPanel` still used for the three legacy intents — switched at render time based on `response.intent`.
+- `src/pages/ComplaintDetailsPage.tsx`:
+  - New header button "تحليل ذكي للشكوى" (Robot icon, sky-toned outline).
+  - Opens `SmartAssistantDrawer` with `context={contextType:'complaint', contextId:complaint.id, contextTitle:tracking_number}`.
+- `/messages` page **not** modified.
+
+**Files changed:**
+- `backend/app/schemas/internal_bot.py`
+- `backend/app/api/internal_bot.py`
+- `backend/tests/test_internal_bot.py`
+- `src/services/api.ts`
+- `src/components/SmartAssistantDrawer.tsx`
+- `src/pages/ComplaintDetailsPage.tsx`
+- `PROJECT_CONTINUITY.md` *(this entry)*
+
+**Backend behavior added:** `POST /internal-bot/query` now optionally accepts `context_type` + `context_id`. When both are present and `context_type='complaint'`, the endpoint returns an `InternalBotResponse` with `intent='context_analysis'`, an Arabic summary, a risk level, key points, recommended actions, and related items (linked task + linked message thread). Other context types are reserved (400). Pure rule-based — no external AI APIs.
+
+**Frontend behavior added:** `ComplaintDetailsPage` exposes a "تحليل ذكي للشكوى" button that opens the existing assistant drawer with complaint context. The drawer shows a banner "تحليل مرتبط بالشكوى رقم …", auto-runs the analysis, exposes a "حلّل هذه الشكوى" re-run button, and renders the structured response (summary + risk + key points + recommended actions + related items).
+
+**Commands run:**
+- `cd backend && python -m pytest tests/ -q` → ✅ **595 passed** in 243s (was 590; +5 Phase-3 tests; internal-bot file 2 → 7 tests).
+- `npm install && npm run build` → ✅ built in 868ms, 0 errors.
+- `grep -rln "context_type|context_id|risk_level|recommended_actions|تحليل ذكي للشكوى" backend src` → all expected files present.
+
+**What was intentionally not changed:**
+- No Alembic / migrations touched.
+- No deploy/docker/nginx/SSL files touched.
+- No module renames or route remaps.
+- `/messages` page UI unchanged.
+- No external AI APIs introduced — analysis is fully deterministic rule-based logic.
+- The drawer's three legacy tabs (ask/daily/suggest) and their quick prompts are unchanged.
+
+**Recommended next step:**
+- Wire the same "تحليل ذكي" entry point on `TaskDetailsPage` and `ContractDetailsPage`, then extend `SUPPORTED_CONTEXT_TYPES = ('complaint','task','contract')` and add the matching analyser branches in `internal_bot.py`. The schema, drawer, and frontend are already context-agnostic.
+
+---
+
 ### Session: 2026-05-01 — Phase 2: Context-linked internal message threads (complaint)
 
 **Task completed:** Added backend persistence + endpoint + frontend panel that links an internal-messages thread to a specific complaint.

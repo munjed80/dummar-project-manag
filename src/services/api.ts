@@ -103,13 +103,29 @@ export interface MessageThread {
 export type InternalBotIntent =
   | 'complaints_summary'
   | 'tasks_summary'
-  | 'contracts_expiring';
+  | 'contracts_expiring'
+  | 'context_analysis';
+
+export type InternalBotRiskLevel = 'low' | 'medium' | 'high';
+
+export interface InternalBotRelatedItem {
+  type: string;
+  id: number;
+  label: string;
+}
 
 export interface InternalBotResponse {
   intent: InternalBotIntent;
   summary: string;
   data: Record<string, unknown>[];
   generated_on: string;
+  /** Phase-3 contextual analysis fields — populated when `intent === 'context_analysis'`. */
+  risk_level?: InternalBotRiskLevel | null;
+  key_points?: string[] | null;
+  recommended_actions?: string[] | null;
+  related_items?: InternalBotRelatedItem[] | null;
+  context_type?: string | null;
+  context_id?: number | null;
 }
 
 // ── Violations ────────────────────────────────────────────────────────────
@@ -1787,6 +1803,9 @@ class ApiService {
     limit?: number;
     location_id?: number;
     project_id?: number;
+    /** Phase-3: optional context pointer for rule-based decision support. */
+    context_type?: string;
+    context_id?: number;
   }): Promise<InternalBotResponse> {
     const response = await fetchWithRetry(`${API_BASE_URL}/internal-bot/query`, {
       method: 'POST',

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -25,12 +25,16 @@ import {
   LightbulbFilament,
   Info,
   ArrowClockwise,
+  ShieldWarning,
+  CheckCircle,
+  Link as LinkIcon,
 } from '@phosphor-icons/react';
 import {
   apiService,
   ApiError,
   type InternalBotIntent,
   type InternalBotResponse,
+  type InternalBotRiskLevel,
 } from '@/services/api';
 import { describeLoadError } from '@/lib/loadError';
 
@@ -137,6 +141,22 @@ const INTENT_LABELS: Record<InternalBotIntent, string> = {
   complaints_summary: 'ملخص الشكاوى',
   tasks_summary: 'ملخص المهام',
   contracts_expiring: 'العقود المنتهية قريباً',
+  context_analysis: 'تحليل سياقي',
+};
+
+const RISK_META: Record<InternalBotRiskLevel, { label: string; classes: string }> = {
+  low: {
+    label: 'منخفض',
+    classes: 'border-emerald-500/30 bg-emerald-950/30 text-emerald-300',
+  },
+  medium: {
+    label: 'متوسط',
+    classes: 'border-amber-500/30 bg-amber-950/30 text-amber-300',
+  },
+  high: {
+    label: 'مرتفع',
+    classes: 'border-red-500/30 bg-red-950/30 text-red-300',
+  },
 };
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -147,6 +167,96 @@ const COLUMN_LABELS: Record<string, string> = {
   end_date: 'تاريخ الانتهاء',
   days_until_expiry: 'أيام حتى الانتهاء',
 };
+
+// ── Context analysis panel (Phase 3) ─────────────────────────────────────────
+
+function ContextAnalysisPanel({ response }: { response: InternalBotResponse }) {
+  const risk = response.risk_level ?? 'low';
+  const riskMeta = RISK_META[risk];
+  const keyPoints = response.key_points ?? [];
+  const actions = response.recommended_actions ?? [];
+  const related = response.related_items ?? [];
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="rounded-lg border border-sky-200/30 bg-sky-950/40 p-4">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 text-sky-300 font-medium text-sm">
+            <ChartBar size={16} />
+            <span>الخلاصة</span>
+          </div>
+          <Badge
+            variant="secondary"
+            className="text-[10px] bg-indigo-900/60 text-indigo-200 border border-indigo-500/30"
+          >
+            {INTENT_LABELS[response.intent] ?? response.intent}
+          </Badge>
+        </div>
+        <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+          {response.summary}
+        </p>
+        <p className="text-[11px] text-slate-500 mt-2">توليد: {response.generated_on}</p>
+      </div>
+
+      {/* Risk badge */}
+      <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${riskMeta.classes}`}>
+        <ShieldWarning size={18} />
+        <span className="font-medium">مستوى المخاطر:</span>
+        <span className="font-bold">{riskMeta.label}</span>
+      </div>
+
+      {/* Key points */}
+      {keyPoints.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-2">النقاط الرئيسية</p>
+          <ul className="space-y-1.5 rounded-lg border border-white/10 bg-white/5 p-3">
+            {keyPoints.map((kp, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-slate-200">
+                <Info size={12} className="mt-0.5 shrink-0 text-sky-400" />
+                <span className="leading-relaxed">{kp}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Recommended actions */}
+      {actions.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-2">إجراءات مقترحة</p>
+          <ul className="space-y-1.5 rounded-lg border border-emerald-500/20 bg-emerald-950/20 p-3">
+            {actions.map((a, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-emerald-200">
+                <CheckCircle size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+                <span className="leading-relaxed">{a}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Related items */}
+      {related.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-400 mb-2">عناصر مرتبطة</p>
+          <div className="space-y-1.5">
+            {related.map((item) => (
+              <div
+                key={`${item.type}-${item.id}`}
+                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200"
+              >
+                <LinkIcon size={12} className="text-sky-400" />
+                <span className="font-medium">{item.label}</span>
+                <span className="text-[10px] text-slate-500">#{item.id} · {item.type}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Result display ────────────────────────────────────────────────────────────
 
@@ -273,22 +383,41 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
 
 // ── Main drawer component ─────────────────────────────────────────────────────
 
+export interface SmartAssistantContext {
+  contextType: 'complaint';
+  contextId: number;
+  contextTitle?: string;
+}
+
 interface SmartAssistantDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Optional contextual pointer (Phase 3). When provided, the drawer
+   * shows a context banner, swaps in a "حلّل هذه الشكوى" quick prompt
+   * and auto-runs the analysis the first time it is opened.
+   */
+  context?: SmartAssistantContext | null;
 }
 
-export function SmartAssistantDrawer({ open, onOpenChange }: SmartAssistantDrawerProps) {
+export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssistantDrawerProps) {
   const [activeTab, setActiveTab] = useState<AssistantTab>('ask');
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<InternalBotResponse | null>(null);
+  // Track which context we've already auto-run for to avoid re-firing.
+  const [autoRanFor, setAutoRanFor] = useState<string | null>(null);
 
-  const runQuery = async (opts: { intent?: InternalBotIntent; question?: string }) => {
+  const runQuery = async (opts: {
+    intent?: InternalBotIntent;
+    question?: string;
+    useContext?: boolean;
+  }) => {
+    const useContext = opts.useContext && context;
     const q = opts.question?.trim() || question.trim() || undefined;
     const intent = opts.intent;
-    if (!intent && !q) {
+    if (!useContext && !intent && !q) {
       setError('اكتب سؤالاً أو اختر استعلاماً سريعاً.');
       return;
     }
@@ -296,7 +425,14 @@ export function SmartAssistantDrawer({ open, onOpenChange }: SmartAssistantDrawe
     setError(null);
     setResponse(null);
     try {
-      const res = await apiService.queryInternalBot({ intent, question: q });
+      const res = await apiService.queryInternalBot(
+        useContext
+          ? {
+              context_type: context!.contextType,
+              context_id: context!.contextId,
+            }
+          : { intent, question: q },
+      );
       setResponse(res);
     } catch (e) {
       if (e instanceof ApiError) {
@@ -308,6 +444,17 @@ export function SmartAssistantDrawer({ open, onOpenChange }: SmartAssistantDrawe
       setLoading(false);
     }
   };
+
+  // Auto-run the contextual analysis the first time the drawer is opened
+  // for a given context. Re-runnable manually via the quick prompt.
+  useEffect(() => {
+    if (!open || !context) return;
+    const key = `${context.contextType}:${context.contextId}`;
+    if (autoRanFor === key) return;
+    setAutoRanFor(key);
+    void runQuery({ useContext: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, context?.contextType, context?.contextId]);
 
   const handlePrompt = (p: QuickPrompt) => {
     setQuestion(p.question);
@@ -380,6 +527,31 @@ export function SmartAssistantDrawer({ open, onOpenChange }: SmartAssistantDrawe
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-4 py-4 [scrollbar-width:thin] space-y-4">
+          {/* Context banner (Phase 3) */}
+          {context && (
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-950/30 p-3 text-xs text-sky-200">
+                <Info size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  تحليل مرتبط بالشكوى رقم {context.contextTitle ?? `#${context.contextId}`}
+                </span>
+              </div>
+              <Button
+                onClick={() => void runQuery({ useContext: true })}
+                disabled={loading}
+                size="sm"
+                className="w-full gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium"
+              >
+                {loading ? (
+                  <Spinner size={14} className="animate-spin" />
+                ) : (
+                  <Robot size={14} />
+                )}
+                حلّل هذه الشكوى
+              </Button>
+            </div>
+          )}
+
           {/* Info banner */}
           <div className="flex items-start gap-2 rounded-lg border border-indigo-500/20 bg-indigo-950/30 p-3 text-xs text-indigo-300">
             <Info size={14} className="mt-0.5 shrink-0" />
@@ -488,7 +660,11 @@ export function SmartAssistantDrawer({ open, onOpenChange }: SmartAssistantDrawe
           )}
 
           {/* Results */}
-          {!loading && response && <ResultPanel response={response} />}
+          {!loading && response && (
+            response.intent === 'context_analysis'
+              ? <ContextAnalysisPanel response={response} />
+              : <ResultPanel response={response} />
+          )}
 
           {/* Empty state */}
           {!loading && !response && !error && (
