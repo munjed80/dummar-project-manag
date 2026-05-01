@@ -34,6 +34,11 @@ _OPEN_COMPLAINT_STATUSES = {
     ComplaintStatus.IN_PROGRESS,
 }
 
+# Maximum characters of a message body shown in the contextual analysis
+# preview. Long enough to capture intent, short enough to keep the JSON
+# response compact and the frontend chip readable on small screens.
+_MESSAGE_PREVIEW_MAX_LENGTH = 140
+
 
 def _arabic_status(status: ComplaintStatus | None) -> str:
     return {
@@ -119,8 +124,8 @@ def _build_complaint_analysis(db: Session, complaint: Complaint) -> InternalBotR
             # Show in chronological order, body trimmed to ~140 chars.
             for m in reversed(recent):
                 body = (m.body or "").strip()
-                if len(body) > 140:
-                    body = body[:137].rstrip() + "…"
+                if len(body) > _MESSAGE_PREVIEW_MAX_LENGTH:
+                    body = body[: _MESSAGE_PREVIEW_MAX_LENGTH - 3].rstrip() + "…"
                 last_messages.append(
                     {
                         "sender_user_id": m.sender_user_id,
@@ -302,7 +307,7 @@ def run_internal_bot_query(
     # ── Phase-3 context-aware branch ───────────────────────────────────
     # When a context pointer is supplied, run the rule-based analysis and
     # short-circuit the rest of the intent handling.
-    if payload.context_type or payload.context_id is not None:
+    if payload.context_type is not None or payload.context_id is not None:
         if not payload.context_type or payload.context_id is None:
             raise HTTPException(
                 status_code=422,
