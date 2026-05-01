@@ -8,6 +8,77 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-01 — Decision Center UX (Smart Assistant Drawer + Messages Upgrade)
+
+**Task completed:** Turned the internal messages and smart assistant into a professional "Decision Center" experience (Parts 1–4 of the spec).
+
+**What was done:**
+
+**Part 1 — Smart Assistant Topbar Drawer (`SmartAssistantDrawer.tsx`)**
+- Created `src/components/SmartAssistantDrawer.tsx`: a full-height right-side RTL `Sheet` drawer with a premium dark government-dashboard style.
+- Three tabs: **اسأل النظام** (free-text + quick prompts), **ملخص اليوم** (daily summaries), **اقترح إجراء** (suggested actions).
+- Quick prompts in a 2-column grid: ملخص الشكاوى اليوم, المهام المتأخرة, العقود التي تقترب من الانتهاء, أكثر المناطق ضغطاً.
+- Calls `POST /internal-bot/query` via existing `apiService.queryInternalBot()`.
+- Displays: summary text, stat-cards grid with totals, data table with Arabic column labels.
+- Loading skeleton (pulse animation), inline error, empty state with robot icon.
+- Updated `SmartAssistantButton.tsx` to open the drawer via `useState(open)` instead of linking to `/internal-bot`. The `/internal-bot` full page is preserved unchanged.
+
+**Part 2 — Internal Messages UX Upgrade (`InternalMessagesPage.tsx`)**
+- Full rewrite of the page to a professional "مركز التواصل الداخلي" layout.
+- Left column: thread list with search filter, unread badge, relative time, thread type icons (direct/group), live total unread count in header.
+- Right column: thread header with participant count and last-activity time, message bubbles with RTL alignment (my messages right-aligned sky-blue, others left-aligned muted), grouped sender rows with avatar initials, auto-scroll to latest message via `useRef`.
+- Composer: multi-line `Textarea` (Enter sends, Shift+Enter = new line), send button.
+- New thread dialog: user search filter, avatar previews, participant count badge (direct vs. group indicator), user role shown.
+- Loading/error/empty states at every level.
+- Refresh button with spinner animation.
+
+**Part 3 — Context-ready types (`api.ts`)**
+- Added `MessageContextType = 'complaint' | 'contract' | 'task' | 'asset' | 'license' | 'violation'`
+- Added `MessageContextRef { contextType: MessageContextType; contextId: number }`
+- Added optional `_contextRef?: MessageContextRef` to `MessageThread` (frontend-only field, never sent to backend — documented with JSDoc comment).
+
+**Part 4 — Safety**
+- No backend files modified.
+- No alembic migrations touched.
+- No deployment files (nginx.conf, docker-compose.yml, etc.) changed.
+- No existing complaints/teams/contracts logic altered.
+- Navigation structure unchanged (`/messages` route preserved); only the topbar assistant button behavior changed (link → drawer).
+
+**Files changed:**
+- `src/components/SmartAssistantDrawer.tsx` *(new)*
+- `src/components/navigation/SmartAssistantButton.tsx` *(updated — now opens drawer)*
+- `src/pages/InternalMessagesPage.tsx` *(rewritten — professional ops center UI)*
+- `src/services/api.ts` *(types: MessageContextType, MessageContextRef, _contextRef on MessageThread)*
+- `PROJECT_CONTINUITY.md` *(this entry)*
+
+**API methods used:**
+- `POST /internal-bot/query` — assistant queries (existing `apiService.queryInternalBot`)
+- `GET /internal-messages/threads` — thread list (existing)
+- `GET /internal-messages/threads/:id` — thread messages (existing)
+- `POST /internal-messages/threads/:id/messages` — send message (existing)
+- `POST /internal-messages/threads` — create thread (existing)
+- `GET /users/` — user picker for thread creation (existing)
+
+**Commands run:**
+- `npm install` → OK
+- `npm run build` → ✅ built in 1.20s, 0 TS or bundling errors.
+- `grep -rn "InternalMessages|InternalBot|assistant|messages|PROJECT_CONTINUITY" src/ PROJECT_CONTINUITY.md` → all expected files present.
+
+**Build result:** ✅ Success. All 7311 modules transformed. `InternalMessagesPage` chunk: 21.09 kB gzip 6.40 kB. `Layout` chunk: 145.94 kB gzip 38.08 kB (SmartAssistantDrawer is lazy-loaded inside the button component and tree-shaken into the Layout bundle).
+
+**What was intentionally not changed:**
+- `/internal-bot` full page (`InternalBotPage.tsx`) — preserved as-is for direct access.
+- All backend code, API routes, migrations, models, permissions.
+- All deployment infrastructure files.
+- All other frontend pages and navigation structure.
+
+**Recommended next step:**
+- Connect `_contextRef` to the backend once `/internal-messages/threads` supports `context_type` / `context_id` query params — the frontend types are already in place.
+- Add a "لا إجابة" fallback for the "أكثر المناطق ضغطاً" preset (currently the bot returns a graceful 200 with a message if unsupported).
+- Consider adding 30-second auto-refresh for the messages thread list to keep unread counts live without a full page reload.
+
+---
+
 ### Session: 2026-05-01 — Sidebar redesign (collapsible admin menu)
 
 **Task completed:** Redesigned and reorganized the sidebar navigation into a professional collapsible admin menu (WordPress / Xtream Codes style). Smart Assistant moved from sidebar to topbar icon.

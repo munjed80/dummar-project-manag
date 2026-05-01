@@ -58,6 +58,25 @@ export interface MessageThreadParticipant {
   last_read_at?: string | null;
 }
 
+/**
+ * Context entity types that a message thread can be linked to.
+ * These fields are frontend-only scaffolding for future contextual linking —
+ * they are NOT sent to the backend until the backend supports them.
+ */
+export type MessageContextType =
+  | 'complaint'
+  | 'contract'
+  | 'task'
+  | 'asset'
+  | 'license'
+  | 'violation';
+
+/** Frontend-only context reference to attach a thread to a specific entity. */
+export interface MessageContextRef {
+  contextType: MessageContextType;
+  contextId: number;
+}
+
 export interface MessageThread {
   id: number;
   title?: string | null;
@@ -68,6 +87,11 @@ export interface MessageThread {
   last_message?: MessageItem | null;
   unread_count?: number;
   participants?: MessageThreadParticipant[];
+  /**
+   * Frontend-only: context link for future contextual thread support.
+   * Not persisted on the backend — stored/resolved client-side only.
+   */
+  _contextRef?: MessageContextRef;
 }
 
 export type InternalBotIntent =
