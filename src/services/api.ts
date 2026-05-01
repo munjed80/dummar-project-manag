@@ -87,6 +87,10 @@ export interface MessageThread {
   last_message?: MessageItem | null;
   unread_count?: number;
   participants?: MessageThreadParticipant[];
+  /** Backend-persisted context link (Phase 2). */
+  context_type?: string | null;
+  context_id?: number | null;
+  context_title?: string | null;
   /**
    * Frontend-only: context link for future contextual thread support.
    * Not persisted on the backend — stored/resolved client-side only.
@@ -1752,6 +1756,25 @@ class ApiService {
       body: JSON.stringify(sanitizeJsonPayload(payload)),
     });
     if (!response.ok) await throwApiError(response, 'Failed to send message');
+    return response.json();
+  }
+
+  /**
+   * Phase-2 contextual threads. Returns the existing thread for the
+   * given (contextType, contextId) or creates a new group thread linked
+   * to that entity. Currently the backend only supports `contextType =
+   * 'complaint'`.
+   */
+  async getOrCreateContextThread(
+    contextType: MessageContextType,
+    contextId: number,
+    contextTitle?: string,
+  ): Promise<MessageThread> {
+    const qs = new URLSearchParams();
+    if (contextTitle) qs.set('context_title', contextTitle);
+    const url = `${API_BASE_URL}/internal-messages/context/${encodeURIComponent(contextType)}/${contextId}${qs.toString() ? `?${qs}` : ''}`;
+    const response = await fetchWithRetry(url, { headers: this.getAuthHeaders() });
+    if (!response.ok) await throwApiError(response, 'Failed to load context thread');
     return response.json();
   }
 

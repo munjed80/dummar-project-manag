@@ -78,7 +78,15 @@ def _build_thread_summary(db: Session, thread: MessageThread, current_user_id: i
             )
             for p in thread.participants
         ],
+        context_type=thread.context_type,
+        context_id=thread.context_id,
+        context_title=thread.context_title,
     )
+
+
+# Set of context_type values that the backend accepts. Phase 2 ships only
+# 'complaint' — extend here when wiring contracts/tasks/etc.
+SUPPORTED_CONTEXT_TYPES = {"complaint"}
 
 
 @router.post("/threads", response_model=ThreadSummaryResponse)
@@ -117,6 +125,9 @@ def create_thread(
         title=payload.title.strip() if payload.title else None,
         thread_type=thread_type,
         created_by_user_id=current_user.id,
+        context_type=payload.context_type,
+        context_id=payload.context_id,
+        context_title=payload.context_title,
     )
     db.add(thread)
     db.flush()
@@ -196,3 +207,81 @@ def send_message(
     db.commit()
     db.refresh(msg)
     return msg
+
+
+@router.get(
+    "/context/{context_type}/{context_id}",
+    response_model=ThreadSummaryResponse,
+)
+def get_or_create_context_thread(
+    context_type: str,
+    context_id: int,
+    context_title: str | None = None,
+    current_user: User = Depends(get_current_internal_user),
+    db: Session = Depends(get_db),
+):
+    """Phase-2 contextual thread endpoint.
+
+    If a thread already exists for (context_type, context_id), return it.
+    Otherwise create a new GROUP thread linked to that context with the
+    current user as the sole participant. The returned shape matches
+    ``ThreadSummaryResponse`` so the frontend can immediately reuse the
+    standard thread-detail endpoints.
+
+    Currently only ``context_type='complaint'`` is supported.
+    """
+    if context_type not in SUPPORTED_CONTEXT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported context_type '{context_type}'",
+        )
+    if context_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid context_id")
+
+    # Validate the referenced entity exists. Currently only complaint is wired.
+    if context_type == "complaint":
+        from app.models.complaint import Complaint  # local import avoids cycle
+
+        complaint = db.query(Complaint).filter(Complaint.id == context_id).first()
+        if complaint is None:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+
+    existing = (
+        db.query(MessageThread)
+        .filter(
+            MessageThread.context_type == context_type,
+            MessageThread.context_id == context_id,
+        )
+        .order_by(MessageThread.id.asc())
+        .first()
+    )
+    if existing is not None:
+        # Make sure the current user can participate; auto-add if missing so
+        # any internal staff member opening the complaint joins the discussion.
+        if not any(p.user_id == current_user.id for p in existing.participants):
+            db.add(
+                MessageThreadParticipant(
+                    thread_id=existing.id,
+                    user_id=current_user.id,
+                )
+            )
+            db.commit()
+            db.refresh(existing)
+        return _build_thread_summary(db, existing, current_user.id)
+
+    thread = MessageThread(
+        title=context_title.strip() if context_title else None,
+        thread_type=MessageThreadType.GROUP,
+        created_by_user_id=current_user.id,
+        context_type=context_type,
+        context_id=context_id,
+        context_title=context_title.strip() if context_title else None,
+    )
+    db.add(thread)
+    db.flush()
+    db.add(
+        MessageThreadParticipant(thread_id=thread.id, user_id=current_user.id)
+    )
+    db.commit()
+    db.refresh(thread)
+    return _build_thread_summary(db, thread, current_user.id)

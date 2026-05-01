@@ -8,6 +8,65 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-01 — Phase 2: Context-linked internal message threads (complaint)
+
+**Task completed:** Added backend persistence + endpoint + frontend panel that links an internal-messages thread to a specific complaint.
+
+**Backend:**
+- `backend/app/models/internal_message.py`: added nullable `context_type` (String 50, indexed), `context_id` (Integer, indexed), `context_title` (String 255) to `MessageThread`.
+- `backend/alembic/versions/023_add_message_thread_context.py`: new migration (rev `023`, down_revision `022`) adding the three columns and the two indices `ix_message_threads_context_type` / `ix_message_threads_context_id`. **No old migrations were edited.**
+- `backend/app/schemas/internal_message.py`: `ThreadCreateRequest` and `ThreadSummaryResponse` now expose the optional context fields.
+- `backend/app/api/internal_messages.py`:
+  - `_build_thread_summary` now returns `context_type` / `context_id` / `context_title`.
+  - `create_thread` passes through context fields if provided.
+  - **New endpoint**: `GET /internal-messages/context/{context_type}/{context_id}?context_title=...` — validates `context_type` against the `SUPPORTED_CONTEXT_TYPES` set (currently `{'complaint'}`), validates `context_id`, verifies the complaint exists, then returns the existing thread or creates a new GROUP thread linked to that context with the current user as participant. Auto-adds the current user to an existing thread's participants on access (any internal staff opening the complaint joins the discussion).
+- `backend/tests/test_internal_messages.py`: 5 new tests
+  - `test_context_thread_creates_when_missing`
+  - `test_context_thread_is_idempotent`
+  - `test_context_thread_auto_adds_new_participant`
+  - `test_context_thread_rejects_unknown_context_type` (e.g. `contract` returns 400)
+  - `test_context_thread_404_when_complaint_missing`
+
+**Frontend:**
+- `src/services/api.ts`:
+  - `MessageThread` now also exposes optional backend-persisted `context_type`/`context_id`/`context_title` (the existing frontend-only `_contextRef` is preserved).
+  - Added `apiService.getOrCreateContextThread(contextType, contextId, contextTitle?)` that calls `GET /internal-messages/context/{type}/{id}`.
+- `src/components/messages/ContextMessagesPanel.tsx` *(new)*: RTL Card titled **"النقاش الداخلي"** that loads/creates the thread on mount, renders messages in chat-bubble style with auto-scroll, provides a multi-line composer (Enter sends, Shift+Enter newline), and handles loading/empty/error states (with a "إعادة المحاولة" button on error).
+- `src/pages/ComplaintDetailsPage.tsx`: imports and mounts the panel inside the page (`contextType="complaint"`, `contextId=complaint.id`, `contextTitle="شكوى {tracking_number}"`). Inserted between the linked-tasks card and the activity history card. **No other changes** to the page.
+- `/messages` page is intentionally NOT redesigned. Contracts/tasks/etc. are NOT wired yet.
+
+**Files changed:**
+- `backend/app/models/internal_message.py`
+- `backend/app/schemas/internal_message.py`
+- `backend/app/api/internal_messages.py`
+- `backend/alembic/versions/023_add_message_thread_context.py` *(new)*
+- `backend/tests/test_internal_messages.py`
+- `src/services/api.ts`
+- `src/components/messages/ContextMessagesPanel.tsx` *(new)*
+- `src/pages/ComplaintDetailsPage.tsx`
+- `PROJECT_CONTINUITY.md` *(this entry)*
+
+**Migration name:** `023_add_message_thread_context.py` (revision `023`, down_revision `022`).
+
+**Endpoint added:** `GET /internal-messages/context/{context_type}/{context_id}` (query: `context_title`). Currently `context_type` must be `complaint`.
+
+**Commands run:**
+- `cd backend && python -m pytest tests/ -q` → ✅ **590 passed** in 240s (was 526; +64 tests across the session — internal-messages tests grew from 3 to 8).
+- `npm install && npm run build` → ✅ built in 853ms, 0 errors.
+- `grep -rln "context_type|context_id|ContextMessagesPanel|internal-messages/context" backend src` → all expected files present.
+
+**What was intentionally not changed:**
+- No deploy/docker/nginx/SSL files touched.
+- No module renames or route remaps.
+- `/messages` page UI unchanged.
+- Contracts/tasks/asset/license/violation context wiring NOT implemented (only the backend's `SUPPORTED_CONTEXT_TYPES` set needs to be extended when those are added).
+
+**Recommended next step:**
+- Wire the same `ContextMessagesPanel` into `ContractDetailsPage` and `TaskDetailsPage`, and extend `SUPPORTED_CONTEXT_TYPES = {'complaint', 'contract', 'task'}` in `internal_messages.py`.
+- Consider auto-adding domain-relevant participants (e.g. assigned engineer) when the contextual thread is first created, instead of only the user who opened it.
+
+---
+
 ### Session: 2026-05-01 — Decision Center UX (Smart Assistant Drawer + Messages Upgrade)
 
 **Task completed:** Turned the internal messages and smart assistant into a professional "Decision Center" experience (Parts 1–4 of the spec).

@@ -21,6 +21,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ContextMessagesPanel } from '@/components/messages/ContextMessagesPanel';
 
 const statusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -606,6 +607,13 @@ export default function ComplaintDetailsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Internal discussion (Phase 2 — context-linked thread) */}
+        <ContextMessagesPanel
+          contextType="complaint"
+          contextId={complaint.id}
+          contextTitle={complaint.tracking_number ? `شكوى ${complaint.tracking_number}` : `شكوى #${complaint.id}`}
+        />
 
         {/* Activity History */}
         <Card>

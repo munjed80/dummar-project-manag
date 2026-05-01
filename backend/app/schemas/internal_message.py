@@ -21,6 +21,9 @@ class MessageSendRequest(BaseModel):
 class ThreadCreateRequest(BaseModel):
     participant_user_ids: List[int] = Field(min_length=1)
     title: Optional[str] = Field(default=None, max_length=200)
+    context_type: Optional[str] = Field(default=None, max_length=50)
+    context_id: Optional[int] = None
+    context_title: Optional[str] = Field(default=None, max_length=255)
 
 
 class MessageResponse(BaseModel):
@@ -50,6 +53,9 @@ class ThreadSummaryResponse(BaseModel):
     last_message: Optional[MessageResponse] = None
     unread_count: int = 0
     participants: List[ThreadParticipantResponse] = Field(default_factory=list)
+    context_type: Optional[str] = None
+    context_id: Optional[int] = None
+    context_title: Optional[str] = None
 
 
 class ThreadDetailResponse(BaseModel):
