@@ -89,13 +89,15 @@ export default function InternalBotPage() {
     try {
       const parsedDays = days === '' ? undefined : Number(days);
       const parsedLimit = limit === '' ? undefined : Number(limit);
+      const parsedLocation = locationId === '' ? undefined : Number(locationId);
+      const parsedProject = projectId === '' ? undefined : Number(projectId);
       const res = await apiService.queryInternalBot({
         intent: effectiveIntent,
         question: effectiveQuestion,
         days: Number.isFinite(parsedDays) ? parsedDays : undefined,
         limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
-        location_id: locationId === '' ? undefined : Number(locationId),
-        project_id: projectId === '' ? undefined : Number(projectId),
+        location_id: Number.isFinite(parsedLocation) ? parsedLocation : undefined,
+        project_id: Number.isFinite(parsedProject) ? parsedProject : undefined,
       });
       setResponse(res);
     } catch (e) {
