@@ -16,6 +16,7 @@ import {
   IdentificationCard,
   ListChecks,
   MapTrifold,
+  PaperPlaneTilt,
   Rows,
   ShieldCheck,
   SquaresFour,
@@ -96,6 +97,13 @@ export const NAV_ENTRIES: NavEntry[] = [
     path: '/dashboard',
     icon: House,
     label: 'لوحة القيادة',
+    roles: INTERNAL_ROLES,
+  },
+  {
+    kind: 'single',
+    path: '/executive-briefing',
+    icon: PaperPlaneTilt,
+    label: 'موجز المحافظ',
     roles: INTERNAL_ROLES,
   },
   {

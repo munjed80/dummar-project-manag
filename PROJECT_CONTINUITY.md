@@ -8,6 +8,71 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-01 — Phase 4: Executive Governor Briefing / Demo Readiness
+
+**Task completed:** Added a polished, frontend-only "موجز المحافظ" presentation page intended as a 7–10 minute governor-level walkthrough of the platform. No backend, migrations, deploy, or module changes.
+
+**Files changed:**
+- `src/pages/ExecutiveBriefingPage.tsx` *(new)* — full executive briefing page.
+- `src/App.tsx` — lazy-imported `ExecutiveBriefingPage` and registered `/executive-briefing` route under `INTERNAL_ROLES`.
+- `src/components/navigation/nav-config.ts` — added a single nav entry "موجز المحافظ" right after "لوحة القيادة" using the `PaperPlaneTilt` icon (does not disturb any existing group).
+- `src/pages/DashboardPage.tsx` — added a primary "فتح موجز المحافظ" shortcut button at the top of the page; added a graceful Arabic error banner shown when `getDashboardStats()` fails.
+- `PROJECT_CONTINUITY.md` *(this entry)*.
+
+**Route added:** `GET /executive-briefing` → `<ExecutiveBriefingPage />` (protected by `RoleProtectedRoute roles={INTERNAL_ROLES}`).
+
+**Where the menu/dashboard shortcut was added:**
+- Top-level sidebar: single entry "موجز المحافظ" placed immediately after "لوحة القيادة" (file: `src/components/navigation/nav-config.ts`).
+- Dashboard top bar: primary button "فتح موجز المحافظ" (indigo) added before the existing الشكاوى/المهام shortcuts (file: `src/pages/DashboardPage.tsx`).
+
+**Page contents (`/executive-briefing`):**
+1. **Hero** — "موجز المحافظ" + Arabic subtitle ("منصّة موحّدة تحوّل الشكاوى والمهام والعقود والقرارات الداخلية إلى نظام تشغيل رقمي للمحافظة …") + badge "نسخة عرض تنفيذية" + three CTAs (افتح المساعد الذكي / لوحة القيادة / التقارير).
+2. **KPI cards (6)** — الشكاوى / المهام / العقود / المتأخرات / التنبيهات / الرسائل الداخلية — sourced from `apiService.getDashboardStats()` and `apiService.getMessageThreads({limit:50})`. Each KPI shows a skeleton while loading and "لا توجد بيانات حالياً" when the underlying data is missing or the call fails. KPI cards link to the relevant page when applicable.
+3. **Priority focus** — الشكاوى المتأخرة / المهام التي تحتاج متابعة / العقود التي تقترب من الانتهاء / الملفات التي تحتاج قراراً إدارياً (last one shown as a forward-looking placeholder until a dedicated KPI exists).
+4. **Presentation storyline (7 steps)** — استقبال الشكوى ← تحويلها إلى مهمة ← إسنادها إلى فريق تنفيذي ← متابعة النقاش الداخلي ← تحليل الشكوى بالمساعد الذكي ← متابعة العقود والتنبيهات ← إصدار تقارير وقرارات أسرع. Each step has a "فتح الصفحة" action linking to the relevant route, except step 5 which opens the assistant drawer.
+5. **Decision-support cards (6)** — كشف التأخير / تحديد المسؤولية / توثيق النقاش الداخلي / تحليل الشكاوى / متابعة العقود / تقليل الاعتماد على الاتصالات الورقية والشفوية.
+6. **Assistant CTA footer** — "افتح المساعد الذكي" reuses the existing `<SmartAssistantDrawer>` (no logic duplicated).
+
+**Behaviour added:**
+- Frontend-only. No new API calls were created — the page reuses the existing `getDashboardStats` and `getMessageThreads` endpoints.
+- All sections degrade gracefully to "لا توجد بيانات حالياً" or skeletons when data is missing — no raw exceptions reach the UI.
+- The assistant button on the briefing page opens the existing drawer with no context (general assistant); the per-complaint context flow added in Phase 3 remains unchanged.
+
+**What was intentionally NOT changed:**
+- No Alembic migrations.
+- No backend models / routes / schemas.
+- No internal-messages, internal-bot, complaints, contracts backend.
+- No deploy / docker / nginx / SSL files.
+- No module renames or route remaps.
+- No new large modules.
+- No redesign of the existing dashboard, complaints list, messages page, or contract intelligence page (only the dashboard got a small shortcut button + an error-state banner — both additive).
+
+**Validation:**
+- `npm run build` → ✅ built in 1.08s (0 errors).
+- `npx tsc --noEmit` → no new errors in `src/pages/ExecutiveBriefingPage.tsx`, `src/App.tsx`, `src/components/navigation/nav-config.ts`, or `src/pages/DashboardPage.tsx`. Pre-existing missing-module errors in unused `src/components/ui/*` shadcn helpers are untouched.
+- `rg "ExecutiveBriefing|موجز المحافظ|نسخة عرض تنفيذية|فتح المساعد الذكي" src PROJECT_CONTINUITY.md` → matches in `src/App.tsx`, `src/components/navigation/nav-config.ts`, `src/pages/DashboardPage.tsx`, `src/pages/ExecutiveBriefingPage.tsx`, and this file.
+
+**Remaining risks before the governor demo:**
+- The demo data in the connected backend should include at least: a few complaints in mixed statuses, at least one task, one operational contract near expiry, and one internal-discussion thread linked to a complaint — otherwise the KPI/priority cards will mostly show "لا توجد بيانات حالياً" (which is graceful but visually quiet).
+- Pre-existing TS errors in unused `src/components/ui/*` shadcn helpers remain (their dependencies are not installed). These are silenced by `tsc -b --noCheck` in the build script and do not block the demo, but they should be cleaned up in a future maintenance pass.
+- The "الملفات التي تحتاج قراراً إدارياً" priority card has no real KPI behind it yet; it currently always renders the empty state and links to `/messages`. Replace with a real metric when the corresponding endpoint exists.
+- The `/internal-bot` standalone page has a `Record<InternalBotIntent, string>` map that is missing the new `'context_analysis'` key; the build currently passes only because of `--noCheck`. Consider adding the key in the next pass for type tightness (out of scope for this PR — that page is not part of the governor demo flow).
+- Network failures on the dashboard now surface as a calm Arabic banner instead of a silent empty page; please confirm the same is true for `/complaints`, `/messages`, and `/contract-intelligence` during a dry-run before the live demo.
+
+**Final checklist for presentation readiness:**
+- [x] `/executive-briefing` route reachable from the sidebar ("موجز المحافظ").
+- [x] `/dashboard` exposes a "فتح موجز المحافظ" shortcut.
+- [x] All KPI / priority cards render either real data or graceful Arabic empty/loading states.
+- [x] "افتح المساعد الذكي" reuses the existing `SmartAssistantDrawer` (no duplicate logic).
+- [x] Arabic RTL layout preserved everywhere.
+- [x] Build succeeds.
+- [ ] *Recommended manual dry-run before the demo:* log in as `project_director`, walk through `/dashboard` → `/executive-briefing` → press each storyline button → open the assistant → open one complaint and use "تحليل ذكي للشكوى". Confirm there are no raw error toasts.
+
+**Recommended next step:**
+- Wire a real KPI behind "الملفات التي تحتاج قراراً إدارياً" (e.g. count of message threads with `context_type` set and zero replies in N days) and/or expose a small "tasks overdue" backend counter so the priority section never has to fall back to the empty state.
+
+---
+
 ### Session: 2026-05-01 — Phase 3: Context-aware smart assistant (complaint analysis)
 
 **Task completed:** Extended the existing `/internal-bot/query` endpoint and the `SmartAssistantDrawer` so the assistant can produce a rule-based, Arabic, structured analysis of a single complaint when opened from `ComplaintDetailsPage`.
