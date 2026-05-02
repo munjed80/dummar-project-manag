@@ -212,14 +212,10 @@ export default function ComplaintSubmitPage() {
                   <SelectTrigger>
                     <SelectValue placeholder="اختر نوع الطلب" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="heating_network">طلب صيانة شبكة التدفئة</SelectItem>
+                  <SelectContent className="[&_[data-slot='select-item'][data-highlighted]]:bg-primary/10 [&_[data-slot='select-item'][data-highlighted]]:text-primary">
+                    <SelectItem value="heating_network">صيانة شبكة التدفئة</SelectItem>
+                    <SelectItem value="corruption">شكوى فساد</SelectItem>
                     <SelectItem value="infrastructure">البنية التحتية</SelectItem>
-                    <SelectItem value="cleaning">النظافة</SelectItem>
-                    <SelectItem value="electricity">الكهرباء</SelectItem>
-                    <SelectItem value="water">المياه</SelectItem>
-                    <SelectItem value="roads">الطرق</SelectItem>
-                    <SelectItem value="lighting">الإنارة</SelectItem>
                     <SelectItem value="other">أخرى</SelectItem>
                   </SelectContent>
                 </Select>

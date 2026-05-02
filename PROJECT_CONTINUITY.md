@@ -8,6 +8,65 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-02 — Remove project selector from complaint/task forms; update citizen complaint categories
+
+**Task completed:** Two targeted frontend corrections. No backend, Alembic, migrations, docker/nginx, SSL, or route changes.
+
+**What was done:**
+
+1. **Project selector removed from complaint update form (`src/pages/ComplaintDetailsPage.tsx`)**
+   - Removed `projectId` state (`useState('')`)
+   - Removed `setProjectId(...)` call in the data-fetch `then()` block
+   - Removed the `if (projectId !== ...) { updateData.project_id = ... }` block in `handleStatusUpdate`
+   - Removed the "المشروع المرتبط (اختياري)" `<Select>` div from the update form
+   - Simplified the "تحديث الشكوى" button disabled condition (removed stale `projectId` reference)
+   - **Preserved:** read-only display of existing `complaint.project_id` in the detail info section (line 405); `projects` data fetch still runs to support that display.
+
+2. **Project selector removed from task update form (`src/pages/TaskDetailsPage.tsx`)**
+   - Removed `projectId` state (`useState('')`)
+   - Removed `setProjectId(...)` call in `fetchData`
+   - Removed the `if (projectId !== ...) { updateData.project_id = ... }` block in `handleUpdate`
+   - Removed the "المشروع" `<Select>` div from the update form
+   - Simplified the "تحديث المهمة" button disabled condition (removed stale `projectId` reference)
+   - **Preserved:** read-only display of existing `task.project_id` in the detail info section (line 244); `projects` data fetch still runs to support that display.
+
+3. **Citizen complaint categories updated (`src/pages/ComplaintSubmitPage.tsx`)**
+   - Replaced the 8-option dropdown with the required 4 options only:
+     - `heating_network` → صيانة شبكة التدفئة
+     - `corruption` → شكوى فساد
+     - `infrastructure` → البنية التحتية
+     - `other` → أخرى
+   - Fixed dropdown hover/focus styling: added `className` on `<SelectContent>` to override `data-highlighted` item color from the green accent (`oklch(0.55 0.18 150)`) to navy/blue primary (`oklch(0.30 0.09 245)`) for this specific dropdown only — using Tailwind arbitrary selector `[&_[data-slot='select-item'][data-highlighted]]:bg-primary/10 [&_[data-slot='select-item'][data-highlighted]]:text-primary`.
+   - Staff/admin complaint categories in `ComplaintsListPage.tsx`, `ComplaintDetailsPage.tsx`, `ComplaintTrackPage.tsx`, `ReportsPage.tsx` are **untouched** — no split into `citizenComplaintTypeOptions`/`internalComplaintTypeOptions` was needed since the citizen form uses inline `<SelectItem>` values, not a shared constant.
+
+**Files changed:**
+- `src/pages/ComplaintDetailsPage.tsx` — project selector removed from update form
+- `src/pages/TaskDetailsPage.tsx` — project selector removed from update form
+- `src/pages/ComplaintSubmitPage.tsx` — citizen categories updated; dropdown styled navy/blue
+- `PROJECT_CONTINUITY.md` — this entry
+
+**Files intentionally NOT touched:**
+- `src/pages/ContractDetailsPage.tsx` / `src/pages/ContractsListPage.tsx` — contracts are not in scope
+- `src/pages/ComplaintsListPage.tsx` / `src/pages/TasksListPage.tsx` — `project_id` in list-filter URL params is a filter/query param, not a create/update form field
+- `src/services/api.ts` — `project_id` in API param types is not a form field
+- Backend, Alembic migrations, docker/nginx/SSL
+
+**Build result:** `npm run build` → ✓ 7331 modules transformed, no errors, no warnings.
+
+**Verification (`grep -rn` in src/ + PROJECT_CONTINUITY.md):**
+- `المشروع المرتبط` — appears only in `ContractDetailsPage.tsx` (contracts, out-of-scope) and read-only display in `ComplaintDetailsPage.tsx` (line 405, not a form)
+- `بدون مشروع` — appears only in `ContractDetailsPage.tsx` and `ContractsListPage.tsx` (out-of-scope contracts)
+- `ComplaintDetailsPage.tsx` update form — no `projectId` state, no project `<Select>` in form
+- `TaskDetailsPage.tsx` update form — no `projectId` state, no project `<Select>` in form
+- `ComplaintSubmitPage.tsx` — exactly 4 citizen options (heating_network, corruption, infrastructure, other)
+- `شكوى فساد` — appears in `ComplaintSubmitPage.tsx` only ✓
+
+**Current project state:** Frontend builds clean. Project selector removed from complaint/task update forms. Citizen complaint dropdown shows exactly 4 categories with navy/blue hover styling. Backend untouched (still 595 tests).
+
+**Recommended next step:** Consider adding a `corruption` label mapping to the `typeLabels` object in `ComplaintDetailsPage.tsx` (line 47) and `ComplaintsListPage.tsx`/`ComplaintTrackPage.tsx` so that if a citizen submits with `corruption` type, staff views display "شكوى فساد" instead of a raw key.
+
+---
+
 ### Session: 2026-05-02 — Fix green loading skeleton + safe frontend cleanup
 
 **Task completed:** Frontend-only fix for the bright-green loading skeleton that was flashing on every page for 1–2 seconds, plus a small safe cleanup of stale lint directives. No backend, migrations, docker/nginx, route, or API contract changes.

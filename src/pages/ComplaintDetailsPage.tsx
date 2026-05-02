@@ -86,7 +86,6 @@ export default function ComplaintDetailsPage() {
   const [assignee, setAssignee] = useState('');
   const [responsibleAuthority, setResponsibleAuthority] = useState('');
   const [responsibleTeam, setResponsibleTeam] = useState('');
-  const [projectId, setProjectId] = useState('');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
@@ -125,7 +124,6 @@ export default function ComplaintDetailsPage() {
         setTeams(Array.isArray(teamsData) ? teamsData : []);
         setProjects((projectsData as any).items || []);
         setLinkedTasks((linkedTasksData as any).items || []);
-        setProjectId(complaintData?.project_id ? String(complaintData.project_id) : '');
         const matchedAuthority = responsibleAuthorityOptions.find((opt) => opt.userRoles.includes(complaintData?.assigned_to?.role));
         if (matchedAuthority) {
           setResponsibleAuthority(matchedAuthority.value);
@@ -156,11 +154,6 @@ export default function ComplaintDetailsPage() {
       if (newStatus) updateData.status = newStatus;
       if (notes) updateData.notes = notes;
       if (assignee) updateData.assigned_to_id = Number(assignee);
-      // Project: send only when value differs from persisted complaint, so an
-      // unchanged form does not blank the existing project link.
-      if (projectId !== (complaint?.project_id ? String(complaint.project_id) : '')) {
-        updateData.project_id = projectId ? Number(projectId) : null;
-      }
       await apiService.updateComplaint(Number(id), updateData);
       toast.success('تم تحديث الشكوى بنجاح');
       setNewStatus('');
@@ -519,18 +512,6 @@ export default function ComplaintDetailsPage() {
                   </Select>
                 </div>
               )}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-muted-foreground">المشروع المرتبط (اختياري)</label>
-                <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— بدون مشروع —</SelectItem>
-                    {projects.map((p: any) => (
-                      <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <Textarea
               placeholder="ملاحظات (اختياري)..."
@@ -549,8 +530,7 @@ export default function ComplaintDetailsPage() {
                 }
               }}
               disabled={
-                (!newStatus && !notes && !assignee &&
-                 projectId === (complaint?.project_id ? String(complaint.project_id) : '')) ||
+                (!newStatus && !notes && !assignee) ||
                 updating
               }
             >
