@@ -76,7 +76,7 @@ export default function DashboardPage() {
             <p className="text-muted-foreground text-sm">نظرة عامة على نشاطات إدارة التجمع - مشروع دمر</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white">
+            <Button asChild size="sm">
               <Link to="/executive-briefing">
                 <PaperPlaneTilt size={16} className="ml-1" />
                 فتح موجز المحافظ
