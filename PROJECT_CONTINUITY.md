@@ -108,6 +108,68 @@ The Arabic message itself originated in `src/lib/loadError.ts` and was rendered 
 
 ---
 
+### Session: 2026-05-02 — Unified data presentation system (DataTable / badges / states)
+
+**Task completed:** Introduced a reusable, lightweight data-presentation system that matches the new blue/navy government identity, then refactored every high-priority list page to use it. Frontend-only — no backend, migrations, deploy, route, or API changes.
+
+**What was done:**
+- **New `src/components/data/` primitives** (barrel-exported via `index.ts`):
+  - `StatusBadge` — soft semantic badge with 7 tones (success / info / warning / danger / progress / neutral / accent). Replaces the per-page `bg-*-100 text-*-800` color maps that were duplicated in every list page. Ships a `COMMON_STATUS_TONES` map and `statusToneFor()` helper.
+  - `PriorityBadge` — soft badge that maps `low/medium/high/urgent` → `neutral/info/warning/danger`.
+  - `DataTableShell` — soft white card around a `<Table>` with the platform soft-border token (`#D8E2EF`), subtle `#F5F8FC` header fill, comfortable 44 px header height, soft row separators (`#EEF2F8`) and a gentle `#F8FAFD` hover. Replaces the heavy `border rounded-lg overflow-hidden` divs.
+  - `DataToolbar` — single-row filter shell (search slot, filters slot, optional actions slot) that wraps cleanly on mobile.
+  - `EmptyState` — soft, centered "no data" panel. Default Arabic title `"لا توجد بيانات حالياً"`, optional description, icon and CTA.
+  - `ErrorState` — soft red panel that never leaks raw errors; shows `"إعادة المحاولة"` button when an `onRetry` callback is supplied.
+  - `LoadingSkeleton` — table-shaped or card-shaped skeleton rows that preserve layout footprint and prevent shift.
+  - `PaginationBar` — RTL-aware footer (Prev / Next + "صفحة X من Y" + "عرض A-B من N شكوى"). Renders nothing for ≤1 page so callers can drop the `totalPages > 1` guard.
+  - `MobileEntityCard` — keyboard-accessible card row for mobile data-heavy lists (title + status badge + subtitle + meta).
+
+- **High-priority pages refactored to use the new system:**
+  - `ComplaintsListPage` — soft shell, `StatusBadge`/`PriorityBadge`, retryable `ErrorState`, skeleton loader (table + cards), `MobileEntityCard` mobile view, `PaginationBar`.
+  - `TasksListPage` — same treatment + clean status/priority/source columns; mobile cards show due date + team + project.
+  - `TeamsListPage` — added a proper mobile card view (was previously a squeezed table on phones); soft shell on desktop.
+  - `ContractsListPage` (operational / "manual") — replaced inline badge color maps with `statusTones`, retryable error, soft shell, polished mobile cards, `PaginationBar`.
+  - `InvestmentContractsPage` — replaced inline `bg-*-100` chips with `StatusBadge` (status + expiry-alert), retryable error, skeleton loader (table + cards), proper mobile cards (was desktop-only before), `PaginationBar`. Legacy `STATUS_COLORS` / `EXPIRY_BADGE` exports kept for backwards-compat but tones softened.
+  - `ContractIntelligencePage` — replaced inline `Warning + Spinner` with `ErrorState` + skeleton stat cards; recent-docs table now uses `DataTableShell` + `StatusBadge` and `MobileEntityCard` for mobile.
+  - `UsersListPage` — added mobile card view (was overflowing table on phones), softened role badges to semantic tones (`accent` for project_director, `success` for active, `danger` for disabled).
+
+- **Visual contract enforced everywhere:**
+  - Soft border `#D8E2EF` on cards/tables.
+  - Subtle header `#F5F8FC` fill, muted uppercase header text.
+  - Comfortable row height (`py-3`) and soft `#EEF2F8` row separators (no thick dark borders).
+  - Gentle `#F8FAFD` hover.
+  - Arabic page titles use the navy accent `#0F2A4A`; primary IDs (tracking numbers, contract numbers) use the primary blue `#1D4ED8`.
+  - Gold (`#C8A24A`/accent tone) reserved for executive accents (sidebar rail, KPI cards) and the `project_director` role badge — never for data states.
+
+- **Audits run:**
+  - `rg "DataTable|DataToolbar|StatusBadge|PriorityBadge|MobileEntityCard|EmptyState|LoadingSkeleton|PaginationBar" src` → all 7 refactored pages + the 9 new primitives present.
+  - `rg "border-black|border-slate-950|border-neutral-950|shadow-xl|shadow-2xl|bg-black|bg-slate-950|bg-neutral-950" src` → no matches in any data table or list page. Remaining hits are all intentional and unrelated to data presentation: Radix dialog/sheet/drawer/alert-dialog overlays use `bg-black/50` (standard backdrop), notification/install/sync popovers + chart tooltip use `shadow-xl` (popover elevation), `SmartAssistantDrawer` uses `bg-slate-950` (dark drawer by design).
+
+**Files changed:**
+- New: `src/components/data/{StatusBadge,PriorityBadge,EmptyState,ErrorState,LoadingSkeleton,PaginationBar,DataToolbar,DataTableShell,MobileEntityCard,index}.{tsx,ts}`
+- Refactored: `src/pages/ComplaintsListPage.tsx`, `src/pages/TasksListPage.tsx`, `src/pages/TeamsListPage.tsx`, `src/pages/ContractsListPage.tsx`, `src/pages/InvestmentContractsPage.tsx`, `src/pages/ContractIntelligencePage.tsx`, `src/pages/UsersListPage.tsx`
+- `PROJECT_CONTINUITY.md`
+
+**Commands run:**
+- `npm install` — 268 packages, 0 vulnerabilities.
+- `npm run build` — green (~1.1 s, 0 errors).
+
+**Results:**
+- Build green.
+- All 7 refactored pages now render the same elegant card → soft toolbar → soft table (desktop) / soft mobile cards (mobile) → soft pagination layout.
+- Soft skeleton loaders replace spinners on list pages, preventing layout shift.
+- Error panels are now retryable and never expose raw HTTP/HTML errors (still routed through `describeLoadError`).
+- No business logic, API contract, route, status enum, permission, or filter behavior changed.
+
+**Remaining limitations:**
+- `ViolationsPage`, `LicensesPage` (placeholder), `InspectionTeamsPage` (placeholder), `LocationsListPage`, `ReportsPage`, `InternalMessagesPage`, `IntelligenceReportsPage`, `OperationsMapPage`, and `InvestmentPropertiesPage` were left untouched in this pass. They already use the existing `responsive-table-desktop` / `responsive-cards-mobile` CSS pattern but still carry per-page badge color maps. Migrating them to `StatusBadge` is mechanical and can be done in a follow-up pass without touching backend.
+- Per-row action buttons (edit/delete) inside `InvestmentContractsPage` still use the small `text-destructive` ghost button — left intact because the destructive intent is meaningful and matches the rest of the platform.
+
+**Recommended next step (before the governor demo):**
+Extend the same `StatusBadge` / `DataTableShell` / `MobileEntityCard` migration to `ViolationsPage`, `LocationsListPage` and `InvestmentPropertiesPage`, then walk the demo flow on a real phone to verify the mobile cards on `/complaints`, `/tasks`, `/teams`, `/manual-contracts`, and `/investment-contracts` look polished end-to-end.
+
+---
+
 ### Session: 2026-05-01 — Executive-gold accent wiring
 
 **Task completed:** Wired the executive-gold accent `#C8A24A` from the palette into two high-signal places so the navy/blue identity feels complete.

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -12,9 +11,13 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MagnifyingGlass, Spinner, Warning, Plus } from '@phosphor-icons/react';
+import { MagnifyingGlass, Plus, UsersThree } from '@phosphor-icons/react';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import {
+  DataTableShell, DataToolbar, StatusBadge,
+  EmptyState, ErrorState, LoadingSkeleton, PaginationBar, MobileEntityCard,
+} from '@/components/data';
 
 const typeLabels: Record<string, string> = {
   internal_team: 'فريق داخلي', contractor: 'مقاول', field_crew: 'طاقم ميداني', supervision_unit: 'وحدة إشراف',
@@ -33,7 +36,7 @@ export default function TeamsListPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [activeFilter, setActiveFilter] = useState('all');
   const [page, setPage] = useState(0);
-  const [reloadToken, setReloadToken] = useState(0);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const canCreate = role && ['project_director', 'contracts_manager', 'engineer_supervisor'].includes(role);
 
@@ -51,129 +54,163 @@ export default function TeamsListPage() {
       })
       .catch((err) => setError(describeLoadError(err, 'الفرق').message))
       .finally(() => setLoading(false));
-  }, [typeFilter, activeFilter, search, page, reloadToken]);
+  }, [typeFilter, activeFilter, search, page, reloadTick]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const hasActiveFilters = search.length > 0 || typeFilter !== 'all' || activeFilter !== 'all';
 
   return (
     <Layout>
-      <Card>
+      <Card className="border-[#D8E2EF]">
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-2xl">الفرق التنفيذية</CardTitle>
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <CardTitle className="text-2xl text-[#0F2A4A]">الفرق التنفيذية</CardTitle>
             {canCreate && (
               <Button onClick={() => navigate('/teams/new')}>
-                <Plus size={20} className="ml-1" />
+                <Plus size={18} className="ml-1" />
                 إضافة فريق
               </Button>
             )}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-            <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
-              <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input
-                placeholder="بحث باسم الفريق..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                className="pr-10"
-              />
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(0); }}>
-                <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="النوع" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع الأنواع</SelectItem>
-                  {Object.entries(typeLabels).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={activeFilter} onValueChange={(v) => { setActiveFilter(v); setPage(0); }}>
-                <SelectTrigger className="flex-1 sm:w-[140px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="active">نشط</SelectItem>
-                  <SelectItem value="inactive">غير نشط</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {loading && (
-            <div className="flex justify-center py-8">
-              <Spinner className="animate-spin text-primary" size={32} />
-            </div>
-          )}
+          <DataToolbar
+            search={(
+              <div className="relative">
+                <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input
+                  placeholder="بحث باسم الفريق..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                  className="pr-10"
+                />
+              </div>
+            )}
+            filters={(
+              <>
+                <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(0); }}>
+                  <SelectTrigger className="flex-1 sm:w-[180px]"><SelectValue placeholder="النوع" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">جميع الأنواع</SelectItem>
+                    {Object.entries(typeLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={activeFilter} onValueChange={(v) => { setActiveFilter(v); setPage(0); }}>
+                  <SelectTrigger className="flex-1 sm:w-[140px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    <SelectItem value="active">نشط</SelectItem>
+                    <SelectItem value="inactive">غير نشط</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          />
 
           {error && (
-            <div className="flex flex-col items-center gap-2 text-destructive py-4">
-              <div className="flex items-center gap-2">
-                <Warning size={20} />
-                <span>{error}</span>
+            <ErrorState message={error} onRetry={() => setReloadTick((t) => t + 1)} retrying={loading} />
+          )}
+
+          {loading && !error && (
+            <>
+              <div className="responsive-table-desktop">
+                <DataTableShell>
+                  <LoadingSkeleton rows={5} columns={5} />
+                </DataTableShell>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
-                إعادة المحاولة
-              </Button>
-            </div>
+              <div className="responsive-cards-mobile">
+                <LoadingSkeleton rows={4} variant="cards" />
+              </div>
+            </>
           )}
 
           {!loading && !error && teams.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg mb-2">لا توجد فرق بعد</p>
-              {canCreate && (
-                <Button onClick={() => navigate('/teams/new')} className="mt-4">
-                  إضافة أول فريق
-                </Button>
+            <EmptyState
+              icon={<UsersThree size={40} weight="duotone" />}
+              title={hasActiveFilters ? 'لم يتم العثور على نتائج مطابقة' : 'لا توجد فرق بعد'}
+              action={canCreate && !hasActiveFilters && (
+                <Button onClick={() => navigate('/teams/new')}>إضافة أول فريق</Button>
               )}
-            </div>
+            />
           )}
 
           {!loading && !error && teams.length > 0 && (
             <>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>اسم الفريق</TableHead>
-                      <TableHead>النوع</TableHead>
-                      <TableHead>جهة الاتصال</TableHead>
-                      <TableHead>المهام</TableHead>
-                      <TableHead>الحالة</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {teams.map((team) => (
-                      <TableRow key={team.id} onClick={() => navigate(`/teams/${team.id}`)} className="cursor-pointer hover:bg-muted/50">
-                        <TableCell className="font-semibold">{team.name}</TableCell>
-                        <TableCell>{typeLabels[team.team_type] || team.team_type}</TableCell>
-                        <TableCell>{team.contact_name || '-'}</TableCell>
-                        <TableCell>{team.task_count || 0}</TableCell>
-                        <TableCell>
-                          <Badge className={team.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                            {team.is_active ? 'نشط' : 'غير نشط'}
-                          </Badge>
-                        </TableCell>
+              {/* Desktop table view */}
+              <div className="responsive-table-desktop">
+                <DataTableShell>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-right">اسم الفريق</TableHead>
+                        <TableHead className="text-right">النوع</TableHead>
+                        <TableHead className="text-right">جهة الاتصال</TableHead>
+                        <TableHead className="text-right">المهام</TableHead>
+                        <TableHead className="text-right">الحالة</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {teams.map((team) => (
+                        <TableRow
+                          key={team.id}
+                          onClick={() => navigate(`/teams/${team.id}`)}
+                          className="cursor-pointer"
+                        >
+                          <TableCell className="font-semibold text-[#0F2A4A]">{team.name}</TableCell>
+                          <TableCell>{typeLabels[team.team_type] || team.team_type}</TableCell>
+                          <TableCell>{team.contact_name || '-'}</TableCell>
+                          <TableCell>{team.task_count || 0}</TableCell>
+                          <TableCell>
+                            <StatusBadge tone={team.is_active ? 'success' : 'neutral'}>
+                              {team.is_active ? 'نشط' : 'غير نشط'}
+                            </StatusBadge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </DataTableShell>
               </div>
 
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">
-                  عرض {page * PAGE_SIZE + 1} - {Math.min((page + 1) * PAGE_SIZE, totalCount)} من {totalCount}
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-                    السابق
-                  </Button>
-                  <Button variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}>
-                    التالي
-                  </Button>
-                </div>
+              {/* Mobile card view */}
+              <div className="responsive-cards-mobile space-y-3">
+                {teams.map((team) => (
+                  <MobileEntityCard
+                    key={team.id}
+                    onClick={() => navigate(`/teams/${team.id}`)}
+                    title={team.name}
+                    badge={
+                      <StatusBadge tone={team.is_active ? 'success' : 'neutral'}>
+                        {team.is_active ? 'نشط' : 'غير نشط'}
+                      </StatusBadge>
+                    }
+                    meta={(
+                      <>
+                        <span>{typeLabels[team.team_type] || team.team_type}</span>
+                        {team.contact_name && (
+                          <>
+                            <span aria-hidden>•</span>
+                            <span>{team.contact_name}</span>
+                          </>
+                        )}
+                        <span aria-hidden>•</span>
+                        <span>{team.task_count || 0} مهمة</span>
+                      </>
+                    )}
+                  />
+                ))}
               </div>
+
+              <PaginationBar
+                page={page}
+                totalPages={totalPages}
+                totalCount={totalCount}
+                pageSize={PAGE_SIZE}
+                entityLabel="فريق"
+                onPageChange={setPage}
+              />
             </>
           )}
         </CardContent>
