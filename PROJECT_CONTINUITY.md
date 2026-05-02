@@ -8,6 +8,50 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-02 — Header/sidebar visual consistency & mobile controls polish
+
+**Task completed:** Frontend-only UI polish. Unified header and sidebar navy identity color, fixed RTL close button placement in all Sheet/drawer panels, fixed "فتح موجز المحافظ" button color, and made the logout button visible in the topbar on all screen sizes including mobile. No backend, migrations, docker/nginx, or route changes.
+
+**What was done:**
+
+1. **Color unification (`src/main.css`)** — Changed `--primary` from `oklch(0.48 0.18 260)` (bright blue-purple) to `oklch(0.30 0.09 245)` (dark navy matching sidebar `#123B63`). Also updated `--ring` to the same value. This makes the top header, primary buttons, focus rings, and all `bg-primary` surfaces use the same navy identity color as the sidebar, eliminating the visual mismatch between the bright topbar and the darker navy sidebar/drawer.
+
+2. **RTL close button fix (`src/components/ui/sheet.tsx`)** — Moved the `SheetPrimitive.Close` button from `absolute top-4 right-4` to `absolute top-4 left-4`. In RTL context, `right-4` placed the × button directly above/beside Arabic titles. Now the layout is consistently `[× close on left]  [Arabic title on right]`, which applies globally to: mobile sidebar drawer, smart assistant drawer, notification panel, sync popover, and any future Sheet-based drawer.
+
+3. **Dashboard button color (`src/pages/DashboardPage.tsx`)** — Removed explicit `className="bg-indigo-600 hover:bg-indigo-500 text-white"` from the "فتح موجز المحافظ" `Button` (kept `asChild size="sm"`). The default `Button` variant now inherits the navy primary color, eliminating the purple/indigo mismatch on the dashboard quick-action area.
+
+4. **Logout visible on mobile topbar (`src/components/Layout.tsx`)** — Changed the header logout button from `hidden sm:inline-flex` to `inline-flex` (always visible). The Arabic label `تسجيل الخروج` has `hidden sm:inline` so it only shows on sm+ screens; on xs/mobile the button renders as icon-only (`SignOut` icon). Logout remains accessible from both the topbar icon and the mobile drawer menu. Added `aria-label="تسجيل الخروج"` for accessibility.
+
+**Files changed:**
+- `src/main.css` — `--primary` and `--ring` color updated to navy `oklch(0.30 0.09 245)`
+- `src/components/ui/sheet.tsx` — close button moved from `right-4` to `left-4` for RTL
+- `src/pages/DashboardPage.tsx` — removed `bg-indigo-600` from "فتح موجز المحافظ" button
+- `src/components/Layout.tsx` — logout button always visible (icon-only on mobile)
+- `PROJECT_CONTINUITY.md` — this entry
+
+**Build result:** `npm run build` — ✓ 7331 modules transformed, no errors, no warnings.
+
+**Color unification summary:**
+- Before: header `bg-primary` = bright blue-purple `oklch(0.48 0.18 260)`, sidebar `bg-[#123B63]` = dark navy
+- After: header `bg-primary` = dark navy `oklch(0.30 0.09 245)` ≈ `#123B63`, sidebar unchanged
+
+**Close button placement:**
+- Before: `absolute top-4 right-4` — overlapped Arabic RTL titles in all Sheet panels
+- After: `absolute top-4 left-4` — clean `[×]  [Title]` layout across all drawers
+
+**Logout placement:**
+- Desktop (sm+): icon + "تسجيل الخروج" label in topbar (unchanged)
+- Mobile (xs): SignOut icon visible in topbar at all times; full text in mobile drawer menu
+
+**Mobile behavior notes:**
+- No icon overlap introduced; logout icon is added to the existing right-side icon row
+- The `canSubmitInternalComplaint` new-complaint shortcut remains `hidden sm:inline-flex` (intentionally hidden on xs to avoid crowding)
+- PWA install, sync, smart assistant, and notification controls remain unchanged
+
+**Recommended next step:** Review remaining gold accent borders (`inset ring bg-[#C8A24A]` in Sidebar.tsx active state) and consider limiting gold to executive-level highlights only per the task spec.
+
+---
+
 ### Session: 2026-05-02 — Context-aware PWA install prompt (staff vs citizen)
 
 **Task completed:** Split the single global PWA install control into two context-aware experiences. Staff/admin users get an icon-only install button in the topbar **only after authentication and only on staff routes**. Citizens get a small, polished, dismissible navy/blue install banner on every citizen-portal page (public landing, complaint submit, complaint track, citizen dashboard). Both surfaces use the native `beforeinstallprompt` when available and fall back to Arabic iPhone (Safari → Add to Home Screen) and Android (Chrome → ⋮ → تثبيت التطبيق) instructions. Frontend-only — manifest, service worker, backend, alembic, docker, and nginx untouched.

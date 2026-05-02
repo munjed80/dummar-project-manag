@@ -194,10 +194,11 @@ export function Layout({ children }: LayoutProps) {
             <Button
               variant="ghost"
               onClick={handleLogout}
-              className="hidden rounded-xl px-2 text-primary-foreground hover:bg-primary-foreground/20 sm:inline-flex md:px-3"
+              className="inline-flex rounded-xl px-2 text-primary-foreground hover:bg-primary-foreground/20 md:px-3"
+              aria-label="تسجيل الخروج"
             >
               <SignOut size={18} />
-              <span className="mr-1 text-sm">تسجيل الخروج</span>
+              <span className="mr-1 hidden text-sm sm:inline">تسجيل الخروج</span>
             </Button>
           </div>
         </div>
