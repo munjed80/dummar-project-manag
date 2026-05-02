@@ -33,7 +33,7 @@ export function LoadingSkeleton({
         {Array.from({ length: rows }).map((_, i) => (
           <div
             key={i}
-            className="rounded-lg border border-[#E2EAF4] bg-white p-3"
+            className="rounded-lg border border-[#D8E2EF] bg-white p-3"
           >
             <div className="flex items-center justify-between mb-3">
               <Skeleton className="h-4 w-24" />

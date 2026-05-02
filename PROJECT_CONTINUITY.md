@@ -8,6 +8,55 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-02 — Fix green loading skeleton + safe frontend cleanup
+
+**Task completed:** Frontend-only fix for the bright-green loading skeleton that was flashing on every page for 1–2 seconds, plus a small safe cleanup of stale lint directives. No backend, migrations, docker/nginx, route, or API contract changes.
+
+**Root cause:** `src/components/ui/skeleton.tsx` rendered every placeholder with `bg-accent`. In `src/main.css` the `--accent` token is defined as `oklch(0.55 0.18 150)` (hue 150 = green). Since `<Skeleton>` is consumed by `LoadingSkeleton` (table + card variants), `SidebarMenuSkeleton`, and other primitives, every loading state across the app showed a bright green block — clashing with the navy/blue platform identity.
+
+**What was done:**
+
+1. **Skeleton primitive recoloured (`src/components/ui/skeleton.tsx`)** — Replaced `bg-accent` with the neutral palette `bg-[#E8EEF6]` (light) and `dark:bg-slate-700/40` (dark mode). Added an inline comment forbidding the use of `bg-accent`/green/emerald tokens for loading state. This single change cascades to every skeleton in the app (dashboard, complaints, tasks, teams, contracts, messages, smart-assistant drawer dark variant unchanged at `bg-white/5`, executive briefing already on `bg-slate-200`, sidebar menu skeleton, all card/table loading variants). The `--accent` CSS token itself was intentionally NOT changed because it is also used by many shadcn UI primitives (button, dropdown, menubar, calendar, navigation-menu, etc.) for hover/focus highlights — modifying it would be an out-of-scope visual change.
+2. **LoadingSkeleton card border (`src/components/data/LoadingSkeleton.tsx`)** — Bumped the card border from `#E2EAF4` to the slightly stronger neutral `#D8E2EF` so the card outline matches the spec.
+3. **Removed stale `eslint-disable` directives** —
+   - `src/lib/loadError.ts`: dropped a `// eslint-disable-next-line no-console` that was no longer needed.
+   - `src/pages/InvestmentContractDetailsPage.tsx`: replaced an unused inline `/* eslint-disable-next-line */` (placed after the statement so it disabled nothing) with the correct line-above directive `// eslint-disable-next-line react-hooks/exhaustive-deps`. Behaviour unchanged.
+
+**Audit results (Part 4):**
+
+- `bg-green*` / `text-green-*` / `bg-emerald*` / `text-emerald-*` → all remaining usages are **legitimate status indicators**: resolved/completed/active/healthy/approved/success badges, `CheckCircle` success icons, success counters, smart-assistant context-analysis green “key points” callout (intentional dark-themed success accent), executive-briefing contracts KPI card. None are loading placeholders. No change needed.
+- `animate-pulse` → only three call sites: the patched `Skeleton` primitive, the dark-themed `SmartAssistantDrawer` skeleton (`bg-white/5`, neutral on dark), and `ExecutiveBriefingPage` neutral `bg-slate-200`. All clean.
+- `console.log` → 0 matches in `src`. Nothing to remove.
+- `TODO` / `FIXME` → 1 pre-existing TODO in `ExecutiveBriefingPage.tsx:159` (`// TODO: replace with a real KPI once a dedicated endpoint exists.`). Out of scope; left as-is.
+
+**Files changed:**
+- `src/components/ui/skeleton.tsx` — neutral palette for loading state
+- `src/components/data/LoadingSkeleton.tsx` — card border `#D8E2EF`
+- `src/lib/loadError.ts` — removed unused `eslint-disable`
+- `src/pages/InvestmentContractDetailsPage.tsx` — corrected `eslint-disable` placement
+- `PROJECT_CONTINUITY.md` — this entry
+
+**Files intentionally NOT touched:**
+- `src/main.css` `--accent` token — used app-wide by shadcn primitives (button hover, dropdown/menubar/select focus, calendar today, etc.); changing it would alter many components beyond skeletons.
+- `src/pages/ViolationsPage.tsx` `react-hooks/static-components` errors — pre-existing, structural refactor required, out of scope.
+- `src/services/api.ts:246` `no-useless-assignment` error — pre-existing, in core API client, out of scope.
+- Backend, Alembic migrations, docker-compose, nginx, deploy.sh, SSL, route definitions, API contracts.
+
+**Commands run:**
+- `npm install` → 268 packages, 0 vulnerabilities
+- `npm run build` → ✓ built in 1.26s (passes; bundle sizes unchanged from baseline)
+- `npm run lint` → 27 problems (13 errors, 14 warnings); down from baseline 30 (3 lint warnings fixed). All remaining lint findings are pre-existing and unrelated to skeletons.
+
+**Results:**
+- Loading skeletons across all pages now render neutral slate (`#E8EEF6`) instead of bright green. Mobile card-skeleton variant uses `#D8E2EF` border. RTL layout untouched. Arabic text untouched. No behaviour change.
+- Visual identity (header/topbar, sidebar/mobile drawer, primary buttons, data cards, tables/lists, error/empty states) preserved.
+
+**Current project state:** Frontend builds clean. Loading skeletons consistent with navy/blue identity. Backend untouched (still 595 tests).
+
+**Recommended next step:** If desired, normalize the remaining hardcoded `bg-green-*` status badges across pages to flow through the existing `StatusBadge` component (`src/components/data/StatusBadge.tsx`) for consistency — but this is a separate, scoped refactor and is NOT a bug.
+
+---
+
 ### Session: 2026-05-02 — Header/sidebar visual consistency & mobile controls polish
 
 **Task completed:** Frontend-only UI polish. Unified header and sidebar navy identity color, fixed RTL close button placement in all Sheet/drawer panels, fixed "فتح موجز المحافظ" button color, and made the logout button visible in the topbar on all screen sizes including mobile. No backend, migrations, docker/nginx, or route changes.
