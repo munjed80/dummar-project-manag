@@ -496,9 +496,14 @@ export default function InvestmentContractsPage() {
           )}
 
           {error && (
-            <div className="flex items-center gap-2 text-destructive py-4">
-              <Warning size={20} />
-              <span>{error}</span>
+            <div className="flex flex-col items-center gap-2 text-destructive py-4">
+              <div className="flex items-center gap-2">
+                <Warning size={20} />
+                <span>{error}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchContracts}>
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 

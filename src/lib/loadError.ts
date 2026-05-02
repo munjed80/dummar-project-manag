@@ -63,12 +63,15 @@ export function describeLoadError(err: unknown, entityLabel: string): LoadErrorI
     if (TRANSIENT_GATEWAY_STATUSES.has(err.status)) {
       // Gateway error — typically nginx returning its default text/html 502
       // page when the backend was momentarily unreachable. NEVER include the
-      // body here. Show a clean retry-friendly Arabic message.
+      // body here. Show a clean retry-friendly Arabic message that does NOT
+      // leak the raw HTTP code into the user-facing UI; the structured
+      // diagnostic logged above still preserves status/url/content-type for
+      // developers.
       return {
         status: err.status,
         isAuth: false,
         isTransient: true,
-        message: `الخادم غير متاح مؤقتًا أثناء تحميل ${entityLabel} (HTTP ${err.status}). يرجى إعادة المحاولة بعد لحظات.`,
+        message: 'تعذر تحميل البيانات حالياً. قد تكون الخدمة مشغولة مؤقتاً. يرجى إعادة المحاولة.',
       };
     }
     if (err.status >= 500) {
@@ -88,12 +91,12 @@ export function describeLoadError(err: unknown, entityLabel: string): LoadErrorI
   }
 
   // Non-ApiError: typically a TypeError from fetch (network down, CORS, DNS).
-  // These are also transient from the user's perspective.
-  const msg = err instanceof Error ? err.message : String(err ?? 'unknown error');
+  // These are also transient from the user's perspective. Keep the user-
+  // facing copy clean — the underlying message is logged above for devs.
   return {
     status: null,
     isAuth: false,
     isTransient: true,
-    message: `تعذّر الاتصال بالخادم لتحميل ${entityLabel} (${msg}). يرجى إعادة المحاولة.`,
+    message: 'تعذر تحميل البيانات حالياً. تحقق من الاتصال بالشبكة ثم أعد المحاولة.',
   };
 }

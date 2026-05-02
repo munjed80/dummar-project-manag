@@ -59,6 +59,7 @@ export default function ComplaintsListPage() {
   const [areaFilter, setAreaFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(initialProject);
   const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
 
   // Keep URL in sync when project filter changes so deep links remain shareable.
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function ComplaintsListPage() {
       })
       .catch((err) => setError(describeLoadError(err, 'الشكاوى').message))
       .finally(() => setLoading(false));
-  }, [statusFilter, areaFilter, projectFilter, search, page]);
+  }, [statusFilter, areaFilter, projectFilter, search, page, reloadToken]);
 
   const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name_ar || a.name]));
   const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
@@ -155,6 +156,9 @@ export default function ComplaintsListPage() {
             <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
               <Warning size={32} />
               <p>{error}</p>
+              <Button variant="outline" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 

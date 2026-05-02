@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
+import { describeLoadError } from '@/lib/loadError';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Spinner, ChartBar, MagnifyingGlass, DownloadSimple } from '@phosphor-icons/react';
+import { Spinner, ChartBar, MagnifyingGlass, DownloadSimple, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -101,12 +102,13 @@ export default function ReportsPage() {
   const [detailPage, setDetailPage] = useState(0);
 
   const PAGE_SIZE = 20;
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     apiService.getAreas().then(setAreas).catch(() => {});
   }, []);
 
-  const buildFilterParams = () => {
+  const buildFilterParams = useCallback(() => {
     const params: Record<string, any> = {};
     if (dateFrom) params.date_from = dateFrom;
     if (dateTo) params.date_to = dateTo;
@@ -116,7 +118,7 @@ export default function ReportsPage() {
     if (contractTypeFilter !== 'all') params.contract_type = contractTypeFilter;
     if (priorityFilter !== 'all') params.priority = priorityFilter;
     return params;
-  };
+  }, [dateFrom, dateTo, areaFilter, statusFilter, complaintTypeFilter, contractTypeFilter, priorityFilter]);
 
   const handleCsvDownload = async (entity: 'complaints' | 'tasks' | 'contracts') => {
     setCsvLoading(true);
@@ -139,25 +141,25 @@ export default function ReportsPage() {
     if (activeTab === 'summary') {
       apiService.getReportSummary(params)
         .then(setSummary)
-        .catch(() => setError('فشل تحميل الملخص'))
+        .catch((err) => setError(describeLoadError(err, 'الملخص').message))
         .finally(() => setLoading(false));
     } else if (activeTab === 'complaints') {
       apiService.getReportComplaints({ ...params, search: detailSearch || undefined, skip: detailPage * PAGE_SIZE, limit: PAGE_SIZE })
         .then((d: any) => { setComplaints(d.items); setComplaintsTotal(d.total_count); })
-        .catch(() => setError('فشل تحميل بيانات الشكاوى'))
+        .catch((err) => setError(describeLoadError(err, 'الشكاوى').message))
         .finally(() => setLoading(false));
     } else if (activeTab === 'tasks') {
       apiService.getReportTasks({ ...params, search: detailSearch || undefined, skip: detailPage * PAGE_SIZE, limit: PAGE_SIZE })
         .then((d: any) => { setTasks(d.items); setTasksTotal(d.total_count); })
-        .catch(() => setError('فشل تحميل بيانات المهام'))
+        .catch((err) => setError(describeLoadError(err, 'المهام').message))
         .finally(() => setLoading(false));
     } else if (activeTab === 'contracts') {
       apiService.getReportContracts({ ...params, search: detailSearch || undefined, skip: detailPage * PAGE_SIZE, limit: PAGE_SIZE })
         .then((d: any) => { setContracts(d.items); setContractsTotal(d.total_count); })
-        .catch(() => setError('فشل تحميل بيانات العقود'))
+        .catch((err) => setError(describeLoadError(err, 'العقود').message))
         .finally(() => setLoading(false));
     }
-  }, [activeTab, dateFrom, dateTo, areaFilter, statusFilter, complaintTypeFilter, contractTypeFilter, priorityFilter, detailSearch, detailPage]);
+  }, [activeTab, dateFrom, dateTo, areaFilter, statusFilter, complaintTypeFilter, contractTypeFilter, priorityFilter, detailSearch, detailPage, reloadToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderPagination = (total: number) => {
     const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -262,7 +264,15 @@ export default function ReportsPage() {
                 <TabsTrigger value="contracts">العقود</TabsTrigger>
               </TabsList>
 
-              {error && <div className="text-center py-8 text-destructive">{error}</div>}
+              {error && (
+                <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
+                  <Warning size={32} />
+                  <p>{error}</p>
+                  <Button variant="outline" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
+                    إعادة المحاولة
+                  </Button>
+                </div>
+              )}
 
               {loading ? (
                 <div className="flex justify-center py-12"><Spinner className="animate-spin" size={32} /></div>

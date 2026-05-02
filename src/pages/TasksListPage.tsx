@@ -59,6 +59,7 @@ export default function TasksListPage() {
   const [projectFilter, setProjectFilter] = useState(initialProject);
   const [teamFilter, setTeamFilter] = useState(initialTeam);
   const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -101,7 +102,7 @@ export default function TasksListPage() {
       })
       .catch((err) => setError(describeLoadError(err, 'المهام').message))
       .finally(() => setLoading(false));
-  }, [statusFilter, search, priorityFilter, projectFilter, teamFilter, page]);
+  }, [statusFilter, search, priorityFilter, projectFilter, teamFilter, page, reloadToken]);
 
   const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
   const teamMap = Object.fromEntries(teams.map((t: any) => [t.id, t.name]));
@@ -169,6 +170,9 @@ export default function TasksListPage() {
             <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
               <Warning size={32} />
               <p>{error}</p>
+              <Button variant="outline" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 

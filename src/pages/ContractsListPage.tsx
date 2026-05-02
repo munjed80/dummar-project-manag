@@ -78,6 +78,7 @@ export default function ContractsListPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(initialProject);
   const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createSaving, setCreateSaving] = useState(false);
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
@@ -115,7 +116,7 @@ export default function ContractsListPage() {
       })
       .catch((err) => setError(describeLoadError(err, 'العقود التشغيلية').message))
       .finally(() => setLoading(false));
-  }, [statusFilter, typeFilter, projectFilter, search, page]);
+  }, [statusFilter, typeFilter, projectFilter, search, page, reloadToken]);
 
   const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
 
@@ -242,6 +243,9 @@ export default function ContractsListPage() {
             <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
               <Warning size={32} />
               <p>{error}</p>
+              <Button variant="outline" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 
