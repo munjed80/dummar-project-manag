@@ -8,6 +8,64 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-02 — Context-aware PWA install prompt (staff vs citizen)
+
+**Task completed:** Split the single global PWA install control into two context-aware experiences. Staff/admin users get an icon-only install button in the topbar **only after authentication and only on staff routes**. Citizens get a small, polished, dismissible navy/blue install banner on every citizen-portal page (public landing, complaint submit, complaint track, citizen dashboard). Both surfaces use the native `beforeinstallprompt` when available and fall back to Arabic iPhone (Safari → Add to Home Screen) and Android (Chrome → ⋮ → تثبيت التطبيق) instructions. Frontend-only — manifest, service worker, backend, alembic, docker, and nginx untouched.
+
+**Root cause / problem:**
+Before this change the staff `PwaInstallButton` was rendered inside the shared `Layout` topbar for every authenticated user — including the `citizen` role on `/citizen` (CitizenDashboardPage uses `Layout`). That meant staff install UI leaked into the citizen portal. Public citizen pages (`/`, `/complaints/new`, `/complaints/track`) had **no** install affordance at all even though they are the QR-targeted entry points for residents.
+
+**What was done:**
+- **Staff install control (`src/components/PwaInstallButton.tsx`)** — added authentication / route guard. The button now renders only when:
+  - `isAuthenticated` (from `useAuth`) is true,
+  - `role !== 'citizen'`, and
+  - the current pathname is **not** under `/citizen`, `/complaints/new`, or `/complaints/track`.
+  - Popover help text now uses the spec's Arabic copy: "ثبّت تطبيق إدارة دمر على جهازك للوصول السريع إلى لوحة العمل." plus platform-specific Safari (iOS) and Chrome (Android) fallback instructions. The "متصفحك لا يدعم …" warning copy was replaced with the Android fallback so the message stays helpful, never alarmist. Already-installed pill ("التطبيق مثبت") is also gated by the same role/route check so it never appears on citizen pages.
+- **New `src/components/CitizenInstallBanner.tsx`** — small navy/blue gradient card (`from-[#123B63] to-[#1d568f]`, white text, rounded `xl`, subtle border). Mobile-first, RTL, QR-friendly. Contents: device icon, the spec's Arabic copy "حمّل تطبيق شكاوى المواطنين على هاتفك لتقديم ومتابعة الشكاوى بسهولة.", a primary "تثبيت التطبيق" / "إضافة إلى الشاشة الرئيسية" button (label flips depending on whether the native prompt is available), and an `X` dismiss button. Captures `beforeinstallprompt`, listens to `appinstalled`, and self-hides when `display-mode: standalone` (or iOS `navigator.standalone`) is true. Dismissal persists in `localStorage` under `citizen_install_banner_dismissed_v1`. When no native prompt is available, a single click on the install button reveals an inline help block with the platform-appropriate Arabic instructions (iPhone Safari share-sheet, or Android Chrome ⋮ menu).
+- **`src/components/PublicHeader.tsx` (`PublicShell`)** — mounted `<CitizenInstallBanner />` directly under `<PublicHeader />`. This single insertion covers `PublicLandingPage`, `ComplaintSubmitPage`, and `ComplaintTrackPage` — all three already wrap their content in `PublicShell`.
+- **`src/pages/CitizenDashboardPage.tsx`** — added `<CitizenInstallBanner />` at the top of the page content (inside `Layout`'s body) so the citizen still sees the install nudge after they sign in to the citizen dashboard, while the staff topbar control stays hidden for them.
+
+**Files changed:**
+- `src/components/PwaInstallButton.tsx` — auth/role/route guard + spec Arabic copy + Android fallback in popover.
+- `src/components/CitizenInstallBanner.tsx` — **new** dismissible navy/blue install banner.
+- `src/components/PublicHeader.tsx` — render banner inside `PublicShell`.
+- `src/pages/CitizenDashboardPage.tsx` — render banner at top of citizen dashboard body.
+- `PROJECT_CONTINUITY.md` — this entry.
+
+**PWA metadata audit:**
+`public/manifest.json` already matches the navy identity (`theme_color: "#123B63"`, `background_color: "#F5F8FC"`, `display: standalone`, `start_url: "/"`, `dir: rtl`, `lang: ar`, maskable 192/512 icons). `index.html` `meta theme-color` matches (`#123B63`). No risky rewrite was performed; the project keeps a single global manifest and a single `public/sw.js`. Both are unchanged.
+
+**Behavior matrix after change:**
+| Surface | Install UI shown? |
+| --- | --- |
+| `/` (PublicLandingPage, anonymous) | Citizen install banner (in `PublicShell`) |
+| `/complaints/new` (ComplaintSubmitPage) | Citizen install banner |
+| `/complaints/track` (ComplaintTrackPage) | Citizen install banner |
+| `/login` | Nothing (page has no shell, no banner) |
+| `/citizen` (CitizenDashboardPage, role=citizen) | Citizen install banner; staff topbar button hidden |
+| `/dashboard` and any other staff route (authenticated staff) | Staff topbar `PwaInstallButton` |
+| Same staff route, app already installed | Compact "التطبيق مثبت" pill in topbar |
+
+**iPhone / Android fallback behavior:**
+- **iPhone/iPad** (no `beforeinstallprompt` on iOS Safari) — both surfaces show the spec Arabic instructions: "لتثبيت التطبيق على iPhone: افتح الموقع من Safari، اضغط زر المشاركة، ثم اختر إضافة إلى الشاشة الرئيسية." Staff: shown only when the user clicks the install icon (popover, not a permanent banner). Citizen: shown inline beneath the install button after the user clicks it.
+- **Android with `beforeinstallprompt`** — native Chrome install prompt is triggered directly via `event.prompt()`.
+- **Android without `beforeinstallprompt`** — both surfaces show: "لتثبيت التطبيق على Android: افتح الموقع من Chrome، اضغط القائمة ⋮، ثم اختر إضافة إلى الشاشة الرئيسية أو تثبيت التطبيق."
+
+**Commands run:**
+- `npm install` — 268 packages, 0 vulnerabilities.
+- `npm run build` — green, 1.09s, 0 errors.
+- `npm run lint` — same 13 errors / 15 warnings as before; all pre-existing in unrelated files (`ViolationsPage.tsx`, `api.ts`). No new warnings introduced.
+- `grep "beforeinstallprompt|تثبيت التطبيق|إضافة إلى الشاشة الرئيسية|CitizenInstallBanner|PwaInstallButton" src public index.html` — confirms occurrences live only in `Layout.tsx`, `PublicHeader.tsx`, `CitizenDashboardPage.tsx`, `PwaInstallButton.tsx`, and the new `CitizenInstallBanner.tsx`.
+
+**Limitations:**
+- Repository routes are `/complaints/new`, `/complaints/track`, and `/citizen` (not `/citizen/new-complaint`, `/citizen/track`, `/citizen/complaint/:trackingCode` as the spec hypothetically named them). Per the "do not remap staff routes / do not rename modules" rule, the existing route names were preserved and the install logic targets the actual route paths. There is no standalone "citizen complaint detail" page route; complaint tracking happens via `/complaints/track`, which is already covered.
+- The citizen banner's dismissal is per-browser via `localStorage`. If a citizen clears storage or switches devices it will reappear — intentional, since a fresh device may also need installing.
+- Manifest is still a single global one (per the spec's "If safe, keep it"). A future enhancement could ship a dedicated citizen manifest with `start_url: "/complaints/new"` and a different `name`/`icons`, but that requires service-worker scope coordination and was deliberately skipped.
+
+**Recommended next step:** add lightweight Playwright smoke checks for the citizen banner (visible on `/`, `/complaints/new`, `/complaints/track`, `/citizen` with role=citizen; dismiss persists across reload; hidden on `/login` and any staff route).
+
+---
+
 ### Session: 2026-05-02 — Centralize 502/transient API error UX across all data pages
 
 **Task completed:** Eliminated the technical Arabic error "الخادم غير متاح مؤقتاً أثناء تحميل … (HTTP 502). يرجى إعادة المحاولة بعد لحظات." that was surfacing in many sections (not just teams). Hardened the central API client retry, softened the user-facing copy, added a consistent "إعادة المحاولة" button to every affected list page, and migrated three pages that had ad-hoc error handling onto the shared helper. Frontend-only — no backend, alembic, docker, or nginx changes.

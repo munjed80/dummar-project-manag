@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Plus, MagnifyingGlass, SignIn } from '@phosphor-icons/react';
+import { CitizenInstallBanner } from '@/components/CitizenInstallBanner';
 
 /**
  * Lightweight public header for citizen-facing pages
@@ -60,6 +61,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <PublicHeader />
+      <CitizenInstallBanner />
       <main className="flex-1">{children}</main>
       <footer className="bg-muted py-4 mt-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-xs md:text-sm">

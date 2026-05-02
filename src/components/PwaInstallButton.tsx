@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { DownloadSimple, DeviceMobile, CheckCircle, Info } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -33,11 +35,23 @@ function isStandalone(): boolean {
  *   - ios              → shows Arabic Safari instructions in a popover
  *   - unsupported      → shows a graceful Arabic help message
  */
+/** Routes (citizen portal) where the staff install control must NEVER appear,
+ * even if a citizen-role user somehow lands on a shared shell. */
+const CITIZEN_ROUTE_PREFIXES = ['/citizen', '/complaints/new', '/complaints/track'];
+
+function isCitizenRoute(pathname: string): boolean {
+  return CITIZEN_ROUTE_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 export function PwaInstallButton() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState<boolean>(() => isStandalone());
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { isAuthenticated, role } = useAuth();
+  const { pathname } = useLocation();
 
   const ios = detectIos();
 
@@ -71,6 +85,11 @@ export function PwaInstallButton() {
   }, []);
 
   if (installed) {
+    // Even when installed we keep the staff-only visibility rule so the
+    // "التطبيق مثبت" pill never leaks onto citizen-portal pages.
+    if (!isAuthenticated || role === 'citizen' || isCitizenRoute(pathname)) {
+      return null;
+    }
     return (
       <div
         className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-primary-foreground/25 bg-primary-foreground/10 px-2.5 py-1.5 text-[11px] text-primary-foreground"
@@ -80,6 +99,13 @@ export function PwaInstallButton() {
         <span>التطبيق مثبت</span>
       </div>
     );
+  }
+
+  // Staff-only install control: only authenticated internal staff users on
+  // staff routes ever see this. Citizens and citizen-portal pages get the
+  // dedicated `CitizenInstallBanner` instead (see PublicShell + CitizenDashboard).
+  if (!isAuthenticated || role === 'citizen' || isCitizenRoute(pathname)) {
+    return null;
   }
 
   const platform: Platform = deferredPrompt ? 'installable' : (ios ? 'ios' : 'unsupported');
@@ -125,22 +151,23 @@ export function PwaInstallButton() {
           dir="rtl"
         >
           <div className="px-4 py-3 border-b bg-slate-50">
-            <h3 className="font-bold text-sm">تثبيت التطبيق</h3>
+            <h3 className="font-bold text-sm">تثبيت تطبيق إدارة دمر</h3>
           </div>
           <div className="px-4 py-3 text-sm leading-6 space-y-2">
+            <p className="text-slate-700">
+              ثبّت تطبيق إدارة دمر على جهازك للوصول السريع إلى لوحة العمل.
+            </p>
             {platform === 'ios' ? (
               <p>
                 لتثبيت التطبيق على iPhone: افتح الموقع من Safari، اضغط زر المشاركة،
-                ثم اختر <span className="font-semibold">Add to Home Screen</span>.
+                ثم اختر <span className="font-semibold">إضافة إلى الشاشة الرئيسية</span>.
               </p>
             ) : (
-              <>
-                <p>متصفحك لا يدعم التثبيت التلقائي للتطبيق.</p>
-                <p className="text-slate-500 text-xs">
-                  جرّب فتح الموقع من متصفح Chrome أو Edge على الكمبيوتر، أو من Safari على iPhone،
-                  ثم استخدم خيار "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".
-                </p>
-              </>
+              <p>
+                لتثبيت التطبيق على Android: افتح الموقع من Chrome، اضغط القائمة ⋮،
+                ثم اختر <span className="font-semibold">إضافة إلى الشاشة الرئيسية</span> أو
+                <span className="font-semibold"> تثبيت التطبيق</span>.
+              </p>
             )}
           </div>
         </div>
