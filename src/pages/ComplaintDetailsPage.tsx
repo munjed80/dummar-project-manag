@@ -16,11 +16,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Spinner, ClockCounterClockwise, MapPin, Image, Warning, ListChecks } from '@phosphor-icons/react';
+import { Spinner, ClockCounterClockwise, MapPin, Image, Warning, ListChecks, Robot } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ContextMessagesPanel } from '@/components/messages/ContextMessagesPanel';
+import { SmartAssistantDrawer } from '@/components/SmartAssistantDrawer';
 
 const statusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -97,6 +99,7 @@ export default function ComplaintDetailsPage() {
   const [convertAssignee, setConvertAssignee] = useState('');
   const [convertAuthority, setConvertAuthority] = useState('');
   const [convertTeam, setConvertTeam] = useState('');
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [convertPriority, setConvertPriority] = useState('');
   const [converting, setConverting] = useState(false);
 
@@ -377,6 +380,14 @@ export default function ComplaintDetailsPage() {
                   تحويل إلى مهمة
                 </Button>
               )}
+              <Button
+                onClick={() => setAssistantOpen(true)}
+                variant="outline"
+                className="gap-2 border-sky-500/40 text-sky-700 hover:bg-sky-50"
+              >
+                <Robot size={18} />
+                تحليل ذكي للشكوى
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -607,6 +618,13 @@ export default function ComplaintDetailsPage() {
           </CardContent>
         </Card>
 
+        {/* Internal discussion (Phase 2 — context-linked thread) */}
+        <ContextMessagesPanel
+          contextType="complaint"
+          contextId={complaint.id}
+          contextTitle={complaint.tracking_number ? `شكوى ${complaint.tracking_number}` : `شكوى #${complaint.id}`}
+        />
+
         {/* Activity History */}
         <Card>
           <CardHeader>
@@ -741,6 +759,17 @@ export default function ComplaintDetailsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Phase-3 context-aware smart assistant */}
+      <SmartAssistantDrawer
+        open={assistantOpen}
+        onOpenChange={setAssistantOpen}
+        context={{
+          contextType: 'complaint',
+          contextId: complaint.id,
+          contextTitle: complaint.tracking_number || `#${complaint.id}`,
+        }}
+      />
     </Layout>
   );
 }

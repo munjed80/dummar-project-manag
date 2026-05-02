@@ -37,6 +37,11 @@ class MessageThread(Base):
         nullable=False,
         default=MessageThreadType.DIRECT,
     )
+    # Optional context link for Phase 2 — ties a thread to a specific entity
+    # (e.g. a complaint). Nullable so existing/general threads are unaffected.
+    context_type = Column(String(50), nullable=True, index=True)
+    context_id = Column(Integer, nullable=True, index=True)
+    context_title = Column(String(255), nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(

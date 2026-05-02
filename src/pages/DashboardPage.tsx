@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
-import { ChatCircleDots, ListChecks, FileText, WarningCircle, Plus, ArrowRight, Spinner } from '@phosphor-icons/react';
+import { ChatCircleDots, ListChecks, FileText, WarningCircle, Plus, ArrowRight, Spinner, PaperPlaneTilt } from '@phosphor-icons/react';
 
 const complaintStatusLabels: Record<string, string> = {
   new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
@@ -33,6 +33,7 @@ const taskStatusColors: Record<string, string> = {
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [statsError, setStatsError] = useState(false);
   const { role } = useAuth();
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function DashboardPage() {
         setStats(data);
       } catch (error) {
         console.error('Error fetching stats:', error);
+        setStatsError(true);
       } finally {
         setLoading(false);
       }
@@ -71,7 +73,14 @@ export default function DashboardPage() {
             <h1 className="text-2xl md:text-3xl font-bold mb-1">لوحة التحكم</h1>
             <p className="text-muted-foreground text-sm">نظرة عامة على نشاطات إدارة التجمع - مشروع دمر</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white">
+              <Link to="/executive-briefing">
+                <PaperPlaneTilt size={16} className="ml-1" />
+                فتح موجز المحافظ
+                <ArrowRight size={14} className="mr-1" />
+              </Link>
+            </Button>
             <Button asChild size="sm" variant="outline">
               <Link to="/complaints">
                 <ChatCircleDots size={16} className="ml-1" />
@@ -88,6 +97,15 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
+
+        {statsError && !stats && (
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="py-3 text-sm text-amber-900 flex items-center gap-2">
+              <WarningCircle size={18} className="text-amber-700" />
+              تعذّر تحميل بيانات لوحة القيادة في الوقت الحالي. يُرجى المحاولة لاحقاً.
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-t-2 border-t-[#C8A24A]">
