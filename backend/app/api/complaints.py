@@ -217,6 +217,7 @@ def list_complaints(
 ):
     query = db.query(Complaint)
     query = perms.scope_query(query, db, current_user, Complaint)
+    query = perms.filter_sensitive_complaints(query, current_user)
 
     if status_filter:
         query = query.filter(Complaint.status == status_filter)
@@ -258,6 +259,7 @@ def get_complaints_map_markers(
         Complaint.longitude.isnot(None),
     )
     query = perms.scope_query(query, db, current_user, Complaint)
+    query = perms.filter_sensitive_complaints(query, current_user)
 
     if status_filter:
         query = query.filter(Complaint.status == status_filter)
@@ -302,6 +304,10 @@ def get_complaint(
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
         raise HTTPException(status_code=404, detail="Complaint not found")
+    # Sensitive (corruption) complaints are invisible to non-admin staff —
+    # mirror "not found" so existence is not leaked.
+    if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
+        raise HTTPException(status_code=404, detail="Complaint not found")
     if not perms.authorize(
         db, current_user, perms.Action.READ, perms.ResourceType.COMPLAINT, resource=complaint
     ):
@@ -319,6 +325,8 @@ def update_complaint(
 ):
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
         raise HTTPException(status_code=404, detail="Complaint not found")
     if not perms.authorize(
         db, current_user, perms.Action.UPDATE, perms.ResourceType.COMPLAINT, resource=complaint
@@ -429,6 +437,11 @@ def get_complaint_activities(
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
+        raise HTTPException(status_code=404, detail="Complaint not found")
     activities = db.query(ComplaintActivity).filter(
         ComplaintActivity.complaint_id == complaint_id
     ).order_by(ComplaintActivity.created_at.desc()).all()
@@ -455,6 +468,8 @@ def create_task_from_complaint(
 
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
     if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
         raise HTTPException(status_code=404, detail="Complaint not found")
 
     # Avoid duplicate task creation for the same complaint unless the caller

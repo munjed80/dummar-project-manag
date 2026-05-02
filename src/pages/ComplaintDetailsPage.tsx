@@ -389,7 +389,17 @@ export default function ComplaintDetailsPage() {
               {detail('مقدم الشكوى', complaint.full_name)}
               {detail('رقم الهاتف', complaint.phone)}
               {detail('النوع', (
-                <Badge variant="outline">{typeLabels[complaint.complaint_type] || complaint.complaint_type}</Badge>
+                <span className="inline-flex items-center gap-2">
+                  <Badge variant="outline">{typeLabels[complaint.complaint_type] || complaint.complaint_type}</Badge>
+                  {complaint.complaint_type === 'corruption' && (
+                    <Badge
+                      className="bg-[#0F2A4A]/5 text-[#0F2A4A] border border-[#0F2A4A]/20 hover:bg-[#0F2A4A]/10"
+                      title="شكوى فساد - حساسة، مرئية للإدارة فقط"
+                    >
+                      شكوى فساد
+                    </Badge>
+                  )}
+                </span>
               ))}
               {detail('الأولوية', (
                 <Badge className={priorityColors[complaint.priority] || 'bg-gray-100 text-gray-800'}>

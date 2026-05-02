@@ -207,7 +207,19 @@ export default function ComplaintsListPage() {
                           >
                             <TableCell className="font-mono text-[#0F2A4A] font-medium">{c.tracking_number}</TableCell>
                             <TableCell>{c.full_name}</TableCell>
-                            <TableCell>{typeLabels[c.complaint_type] || c.complaint_type}</TableCell>
+                            <TableCell>
+                              <span className="flex items-center gap-2">
+                                <span>{typeLabels[c.complaint_type] || c.complaint_type}</span>
+                                {c.complaint_type === 'corruption' && (
+                                  <span
+                                    className="inline-flex items-center rounded-md border border-[#0F2A4A]/20 bg-[#0F2A4A]/5 px-2 py-0.5 text-[11px] font-medium text-[#0F2A4A]"
+                                    title="شكوى فساد - حساسة"
+                                  >
+                                    حساسة
+                                  </span>
+                                )}
+                              </span>
+                            </TableCell>
                             <TableCell>
                               <StatusBadge tone={statusTones[c.status] ?? 'neutral'}>
                                 {statusLabels[c.status] || c.status}
@@ -254,6 +266,14 @@ export default function ComplaintsListPage() {
                       meta={(
                         <>
                           <span>{typeLabels[c.complaint_type] || c.complaint_type}</span>
+                          {c.complaint_type === 'corruption' && (
+                            <>
+                              <span aria-hidden>•</span>
+                              <span className="inline-flex items-center rounded-md border border-[#0F2A4A]/20 bg-[#0F2A4A]/5 px-2 py-0.5 text-[11px] font-medium text-[#0F2A4A]">
+                                حساسة
+                              </span>
+                            </>
+                          )}
                           <span aria-hidden>•</span>
                           <PriorityBadge
                             priority={c.priority}

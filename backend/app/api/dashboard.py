@@ -10,6 +10,7 @@ from app.models.investment_contract import InvestmentContract, InvestmentContrac
 from app.models.user import User
 from app.schemas.dashboard import DashboardStats, RecentActivity
 from app.api.deps import get_current_user, get_current_internal_user
+from app.core import permissions as perms
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -19,9 +20,11 @@ def get_dashboard_stats(
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
-    # Complaints: single GROUP BY instead of per-status queries
+    # Complaints: single GROUP BY instead of per-status queries.
+    # Sensitive (corruption) complaints are excluded for non-admin users.
+    complaint_base = perms.filter_sensitive_complaints(db.query(Complaint), current_user)
     complaint_counts = dict(
-        db.query(Complaint.status, func.count(Complaint.id))
+        complaint_base.with_entities(Complaint.status, func.count(Complaint.id))
         .group_by(Complaint.status)
         .all()
     )
@@ -125,7 +128,12 @@ def get_recent_activity(
     current_user: User = Depends(get_current_internal_user),
     db: Session = Depends(get_db)
 ):
-    recent_complaints = db.query(Complaint).order_by(Complaint.created_at.desc()).limit(5).all()
+    recent_complaints = (
+        perms.filter_sensitive_complaints(db.query(Complaint), current_user)
+        .order_by(Complaint.created_at.desc())
+        .limit(5)
+        .all()
+    )
     recent_tasks = db.query(Task).order_by(Task.created_at.desc()).limit(5).all()
     recent_contracts = db.query(Contract).order_by(Contract.created_at.desc()).limit(5).all()
     

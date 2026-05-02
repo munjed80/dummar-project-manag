@@ -14,6 +14,7 @@ class ComplaintType(str, enum.Enum):
     ROADS = "roads"
     LIGHTING = "lighting"
     HEATING_NETWORK = "heating_network"
+    CORRUPTION = "corruption"
     OTHER = "other"
 
 

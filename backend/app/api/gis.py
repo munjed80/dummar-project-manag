@@ -19,6 +19,7 @@ from app.models.project import Project, ProjectStatus
 from app.models.location import Area, Location, LocationStatus
 from app.models.user import User, UserRole
 from app.api.deps import get_current_internal_user
+from app.core import permissions as perms
 from app.services.location_service import infer_location_from_address
 
 router = APIRouter(prefix="/gis", tags=["gis"])
@@ -113,6 +114,7 @@ def get_operations_map(
     # ── Complaints ──
     if entity_type is None or entity_type == "complaint":
         q = db.query(Complaint).options(joinedload(Complaint.location))
+        q = perms.filter_sensitive_complaints(q, current_user)
         if status_filter:
             q = q.filter(Complaint.status == status_filter)
         if area_id:

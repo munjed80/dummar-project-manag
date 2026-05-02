@@ -14,6 +14,7 @@ from app.models.contract import Contract, ContractType, ContractStatus
 from app.models.location import Area
 from app.models.user import User
 from app.api.deps import get_current_user, get_current_internal_user
+from app.core import permissions as perms
 from app.schemas.report import (
     ReportSummary,
     ComplaintSummary,
@@ -53,6 +54,7 @@ def get_report_summary(
 ):
     # --- Complaints ---
     c_query = db.query(Complaint)
+    c_query = perms.filter_sensitive_complaints(c_query, current_user)
     c_query = _apply_date_filter(c_query, Complaint, date_from, date_to)
     if area_id:
         c_query = c_query.filter(Complaint.area_id == area_id)
@@ -184,6 +186,7 @@ def get_complaints_report(
     db: Session = Depends(get_db),
 ):
     query = db.query(Complaint)
+    query = perms.filter_sensitive_complaints(query, current_user)
     query = _apply_date_filter(query, Complaint, date_from, date_to)
 
     if complaint_type:
@@ -416,6 +419,7 @@ def export_complaints_csv(
     query = _complaint_query_with_filters(
         db, date_from, date_to, complaint_type, status, area_id, priority, search
     )
+    query = perms.filter_sensitive_complaints(query, current_user)
     items = query.order_by(Complaint.created_at.desc()).all()
 
     # Resolve area names

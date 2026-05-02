@@ -6,6 +6,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_internal_user
+from app.core import permissions as perms
 from app.core.database import get_db
 from app.models.complaint import Complaint, ComplaintPriority, ComplaintStatus
 from app.models.contract import Contract
@@ -324,6 +325,8 @@ def run_internal_bot_query(
                 db.query(Complaint).filter(Complaint.id == payload.context_id).first()
             )
             if complaint is None:
+                raise HTTPException(status_code=404, detail="الشكوى غير موجودة.")
+            if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
                 raise HTTPException(status_code=404, detail="الشكوى غير موجودة.")
             response = _build_complaint_analysis(db, complaint)
         else:  # pragma: no cover — guarded by SUPPORTED_CONTEXT_TYPES

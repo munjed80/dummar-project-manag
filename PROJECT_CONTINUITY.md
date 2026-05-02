@@ -8,6 +8,87 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-02 — Restrict CORRUPTION (شكوى فساد) complaint visibility to admins
+
+**Task completed:** Backend-enforced visibility restriction for citizen-submitted "شكوى فساد" complaints, plus a discreet admin badge in the UI. The previous session had added the `corruption` value to the citizen dropdown but the backend `ComplaintType` enum did not include it, and no scoping was in place — non-admin staff would have seen these sensitive complaints in lists, dashboards, search, reports, and detail pages.
+
+**What was done:**
+
+1. **Backend enum + migration**
+   - Added `CORRUPTION = "corruption"` to `app/models/complaint.py:ComplaintType`.
+   - New migration `backend/alembic/versions/024_add_corruption_complaint_type.py` — `ALTER TYPE complainttype ADD VALUE IF NOT EXISTS 'CORRUPTION'`. Postgres-only; SQLite tests rebuild from metadata so the migration is a no-op there. Mirrors the pattern from migration `014_add_heating_complaint_type.py`. Migration was **absolutely necessary** because the citizen form was already submitting `corruption` and would otherwise fail enum validation.
+
+2. **Permission helpers (`backend/app/core/permissions.py`)**
+   - `SENSITIVE_COMPLAINT_VIEW_ROLES = {UserRole.PROJECT_DIRECTOR}` — only the project_director (admin / governor-level) can view CORRUPTION complaints.
+   - `can_view_sensitive_complaints(user) -> bool`
+   - `filter_sensitive_complaints(query, user) -> Query` — adds `WHERE complaint_type != 'corruption'` for non-admins; passthrough for admins.
+   - `is_sensitive_complaint(complaint) -> bool` — used at detail/get endpoints to mirror "404 not found" so existence is not leaked.
+
+3. **Filter applied to every Complaint query exposed to internal staff**
+   - `app/api/complaints.py` — `list_complaints`, `get_complaints_map_markers`, `get_complaint`, `update_complaint`, `get_complaint_activities`, `create_task_from_complaint`. Get/update/activities/create-task return **404** for non-admin users instead of 403, matching how the codebase signals "exists elsewhere or out of scope".
+   - `app/api/dashboard.py` — `/dashboard/stats` complaint counts and `/dashboard/recent-activity` recent_complaints.
+   - `app/api/reports.py` — `/reports/summary`, `/reports/complaints` list, and `/reports/complaints/csv` export.
+   - `app/api/locations.py` — 7 sites: list filter `has_open_complaints` subquery, `/locations/tree` complaint_counts, location dossier counts (open + total), `/locations/{id}/complaints` listing, `/locations/{id}/activity` recent_complaints, location-stats per-location counts (2 functions × 2 counts), location-detail map markers, geo-dashboard hotspot counts and recent_complaints.
+   - `app/api/gis.py` — `/gis/operations-map` complaint markers.
+   - `app/api/internal_bot.py` — `/internal-bot/query` context analysis returns 404 for non-admins on a CORRUPTION complaint.
+   - `app/api/internal_messages.py` — `/internal-messages/context/complaint/{id}` returns 404 for non-admins.
+
+4. **Public endpoints intentionally NOT filtered** (per spec)
+   - `POST /complaints/track` — citizen public tracking by tracking_number+phone still works for the submitter on their own corruption complaint.
+   - `GET /complaints/citizen/my-complaints` — citizens see their own submissions (matched by phone).
+
+5. **Frontend UI badge**
+   - `src/pages/ComplaintsListPage.tsx` — discreet navy/blue "حساسة" badge inline next to the type label in both desktop table row and mobile entity card meta row when `complaint_type === 'corruption'`. No bright accent; uses `border-[#0F2A4A]/20` + `bg-[#0F2A4A]/5` + `text-[#0F2A4A]` to match navy identity.
+   - `src/pages/ComplaintDetailsPage.tsx` — same discreet "شكوى فساد" badge displayed alongside the type Badge in the detail header. Title attribute explains "حساسة، مرئية للإدارة فقط".
+
+6. **Backend test suite**
+   - New file `backend/tests/test_complaint_corruption_visibility.py` (17 tests):
+     - List: director sees corruption; complaints_officer/engineer do not; search does not leak.
+     - Detail: director can GET; officer gets 404 on get/update/activities/create-task.
+     - Tracking: citizen with own tracking_number+phone can still track their corruption complaint.
+     - Dashboard: stats and recent_activity correctly exclude/include based on role.
+     - Reports: summary, /reports/complaints list, and CSV export all filter correctly.
+
+**Files changed:**
+- `backend/app/models/complaint.py` — added `CORRUPTION` enum value
+- `backend/alembic/versions/024_add_corruption_complaint_type.py` — new (PG-only ALTER TYPE)
+- `backend/app/core/permissions.py` — sensitive-complaint helpers
+- `backend/app/api/complaints.py` — list/map/get/update/activities/create-task filtering + 404 for non-admins
+- `backend/app/api/dashboard.py` — stats + recent_activity filtering
+- `backend/app/api/reports.py` — summary, list, CSV filtering
+- `backend/app/api/locations.py` — 7 query sites
+- `backend/app/api/gis.py` — operations map filtering
+- `backend/app/api/internal_bot.py` — context analysis 404 for non-admins
+- `backend/app/api/internal_messages.py` — context-thread 404 for non-admins
+- `backend/tests/test_complaint_corruption_visibility.py` — 17 new tests
+- `src/pages/ComplaintsListPage.tsx` — "حساسة" badge in table + card
+- `src/pages/ComplaintDetailsPage.tsx` — "شكوى فساد" badge near type
+- `PROJECT_CONTINUITY.md` — this entry
+
+**Citizen dropdown options:** unchanged (still 4: heating_network, corruption, infrastructure, other), as required.
+
+**Commands run:**
+- `cd backend && python -m pytest tests/ -q` → **612 passed** in 4:51 (was 595; +17 new tests, 0 regressions).
+- `cd backend && python -m pytest tests/test_complaint_corruption_visibility.py -q` → **17 passed** in 8.5s.
+- `npm run build` → ✓ built in 1.18s, no errors.
+
+**Verification (`rg`):**
+- `corruption` in backend: model enum, permissions helpers, migration 024, 17 test references — all expected.
+- `شكوى فساد` in frontend: `ComplaintsListPage.tsx` (label + tooltip), `ComplaintDetailsPage.tsx` (label + badge + tooltip), `ComplaintSubmitPage.tsx` (citizen dropdown), `ComplaintTrackPage.tsx` (label), `ReportsPage.tsx` (label) — all correct.
+- `CORRUPTION` (uppercase) only inside `ComplaintType` enum and migration — correct.
+
+**Files intentionally NOT touched:**
+- Citizen complaint dropdown options in `ComplaintSubmitPage.tsx` — per spec.
+- Public tracking and "my-complaints" endpoints — per spec, citizens see their own.
+- `app/scripts/seed_data.py`, `app/api/internal_bot.py` `_build_complaint_analysis` rule weights, `app/api/notifications.py` — none of these need changes.
+- Docker, nginx, SSL, deploy.
+
+**Current project state:** Backend enforces CORRUPTION complaint visibility — only `project_director` sees them in lists, search, detail, dashboard counts, recent activity, reports, CSV export, location dossiers, geo-dashboard, operations map, internal-bot context, and internal-messages context-threads. Non-admin staff get filtered lists and 404 on direct access. Citizens still track their own corruption complaints via the public endpoint. Frontend shows a discreet navy "شكوى فساد" / "حساسة" badge for admins. **612 backend tests passing**, frontend build clean.
+
+**Recommended next step:** Consider whether the backend should also block `field_team` and `contractor_user` from being assigned a corruption complaint as a task (currently they could not even read it, but a director could in principle assign one and the field_team would receive a 403 only on read). If desired, harden `complaints/{id}/create-task` to refuse assigning CORRUPTION tasks to roles that cannot read CORRUPTION complaints.
+
+---
+
 ### Session: 2026-05-02 — Remove project selector from complaint/task forms; update citizen complaint categories
 
 **Task completed:** Two targeted frontend corrections. No backend, Alembic, migrations, docker/nginx, SSL, or route changes.

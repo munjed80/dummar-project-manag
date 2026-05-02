@@ -242,9 +242,12 @@ def get_or_create_context_thread(
     # Validate the referenced entity exists. Currently only complaint is wired.
     if context_type == "complaint":
         from app.models.complaint import Complaint  # local import avoids cycle
+        from app.core import permissions as perms
 
         complaint = db.query(Complaint).filter(Complaint.id == context_id).first()
         if complaint is None:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+        if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
             raise HTTPException(status_code=404, detail="Complaint not found")
 
     existing = (
