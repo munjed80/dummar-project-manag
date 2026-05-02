@@ -60,7 +60,7 @@ export function PaginationBar({
           disabled={page === 0}
           onClick={() => onPageChange(page - 1)}
         >
-          <CaretRight size={14} className="ml-1" />
+          <CaretRight size={14} className="ml-1" aria-hidden="true" />
           السابق
         </Button>
         <Button
@@ -71,7 +71,7 @@ export function PaginationBar({
           onClick={() => onPageChange(page + 1)}
         >
           التالي
-          <CaretLeft size={14} className="mr-1" />
+          <CaretLeft size={14} className="mr-1" aria-hidden="true" />
         </Button>
       </div>
 

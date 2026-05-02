@@ -23,7 +23,13 @@ export function LoadingSkeleton({
 }: LoadingSkeletonProps) {
   if (variant === 'cards') {
     return (
-      <div className="space-y-3" data-slot="loading-skeleton-cards">
+      <div
+        className="space-y-3"
+        data-slot="loading-skeleton-cards"
+        role="status"
+        aria-busy="true"
+        aria-label="جارٍ التحميل"
+      >
         {Array.from({ length: rows }).map((_, i) => (
           <div
             key={i}
@@ -42,7 +48,13 @@ export function LoadingSkeleton({
   }
 
   return (
-    <div className="space-y-2 px-2 py-1.5" data-slot="loading-skeleton-table">
+    <div
+      className="space-y-2 px-2 py-1.5"
+      data-slot="loading-skeleton-table"
+      role="status"
+      aria-busy="true"
+      aria-label="جارٍ التحميل"
+    >
       {/* header line */}
       <div className="flex gap-3 pb-2">
         {Array.from({ length: columns }).map((_, c) => (
