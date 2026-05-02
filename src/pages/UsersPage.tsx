@@ -20,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MagnifyingGlass, Spinner, UserPlus, PencilSimple, UserMinus, Key } from '@phosphor-icons/react';
+import { MagnifyingGlass, Spinner, UserPlus, PencilSimple, UserMinus, Key, Warning } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { describeLoadError } from '@/lib/loadError';
@@ -275,7 +275,13 @@ export default function UsersPage() {
           </div>
 
           {error && (
-            <div className="text-center py-8 text-destructive">{error}</div>
+            <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
+              <Warning size={32} />
+              <p>{error}</p>
+              <Button variant="outline" size="sm" onClick={fetchUsers}>
+                إعادة المحاولة
+              </Button>
+            </div>
           )}
 
           {loading ? (

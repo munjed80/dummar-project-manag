@@ -330,9 +330,20 @@ export default function InternalMessagesPage() {
         </div>
 
         {error && (
-          <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="mb-3 flex flex-wrap items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
             <Warning size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
+            <span className="flex-1">{error}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-300 bg-white text-red-800 hover:bg-red-100"
+              onClick={() => {
+                if (selectedThreadId) loadThread(selectedThreadId);
+                else loadThreads();
+              }}
+            >
+              إعادة المحاولة
+            </Button>
           </div>
         )}
 

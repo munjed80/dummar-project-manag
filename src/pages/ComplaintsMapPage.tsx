@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { MapView } from '@/components/MapView';
 import type { MapMarker, AreaPolygon } from '@/components/MapView';
 import { apiService } from '@/services/api';
+import { describeLoadError } from '@/lib/loadError';
 import { GeoSubNav } from '@/components/GeoSubNav';
-import { MapPin, Funnel } from '@phosphor-icons/react';
+import { MapPin, Funnel, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
@@ -59,51 +61,56 @@ function ComplaintsMapPage() {
   });
   const [showZones, setShowZones] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBoundaries = async () => {
       try {
         const data = await apiService.getAreaBoundaries();
         setPolygons(data);
-      } catch {
+      } catch (err) {
+        if (import.meta.env?.DEV) console.warn('[load:area-boundaries]', err);
         setPolygons([]);
       }
     };
     fetchBoundaries();
   }, []);
 
+  const fetchMarkers = useCallback(async () => {
+    try {
+      setLoading(true);
+      setMapError(null);
+      const params: Record<string, any> = {};
+      if (statusFilter) params.status_filter = statusFilter;
+      if (entityTypeFilter) params.entity_type = entityTypeFilter;
+      const data = await apiService.getOperationsMapMarkers(params);
+      const mapped: MapMarker[] = (data.markers || []).map((m: any) => ({
+        id: m.id,
+        latitude: m.latitude,
+        longitude: m.longitude,
+        title: m.title || '',
+        status: m.status,
+        entity_type: m.entity_type,
+        reference: m.reference,
+        priority: m.priority,
+        location_accuracy: m.location_accuracy,
+        confidence: m.confidence,
+        match_reason: m.match_reason,
+      }));
+      setMarkers(mapped);
+      setItemsWithoutCoordinates(data.items_without_coordinates || []);
+    } catch (err) {
+      setMapError(describeLoadError(err, 'خريطة العمليات').message);
+      setMarkers([]);
+      setItemsWithoutCoordinates([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, entityTypeFilter]);
+
   useEffect(() => {
-    const fetchMarkers = async () => {
-      try {
-        setLoading(true);
-        const params: Record<string, any> = {};
-        if (statusFilter) params.status_filter = statusFilter;
-        if (entityTypeFilter) params.entity_type = entityTypeFilter;
-        const data = await apiService.getOperationsMapMarkers(params);
-        const mapped: MapMarker[] = (data.markers || []).map((m: any) => ({
-          id: m.id,
-          latitude: m.latitude,
-          longitude: m.longitude,
-          title: m.title || '',
-          status: m.status,
-          entity_type: m.entity_type,
-          reference: m.reference,
-          priority: m.priority,
-          location_accuracy: m.location_accuracy,
-          confidence: m.confidence,
-          match_reason: m.match_reason,
-        }));
-        setMarkers(mapped);
-        setItemsWithoutCoordinates(data.items_without_coordinates || []);
-      } catch {
-        setMarkers([]);
-        setItemsWithoutCoordinates([]);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchMarkers();
-  }, [statusFilter, entityTypeFilter, refreshKey]);
+  }, [fetchMarkers, refreshKey]);
 
   const canCorrectLocation = !!role && ['project_director', 'contracts_manager', 'engineer_supervisor', 'complaints_officer', 'area_supervisor'].includes(role);
 
@@ -251,6 +258,18 @@ function ComplaintsMapPage() {
             </div>
           </CardContent>
         </Card>
+
+        {mapError && (
+          <Card className="border-destructive/40">
+            <CardContent className="py-6 text-center text-destructive flex flex-col items-center gap-2">
+              <Warning size={28} />
+              <p className="text-sm">{mapError}</p>
+              <Button variant="outline" size="sm" onClick={() => setRefreshKey((k) => k + 1)}>
+                إعادة المحاولة
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-24">

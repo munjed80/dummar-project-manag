@@ -8,6 +8,48 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-02 — Centralize 502/transient API error UX across all data pages
+
+**Task completed:** Eliminated the technical Arabic error "الخادم غير متاح مؤقتاً أثناء تحميل … (HTTP 502). يرجى إعادة المحاولة بعد لحظات." that was surfacing in many sections (not just teams). Hardened the central API client retry, softened the user-facing copy, added a consistent "إعادة المحاولة" button to every affected list page, and migrated three pages that had ad-hoc error handling onto the shared helper. Frontend-only — no backend, alembic, docker, or nginx changes.
+
+**Root cause:**
+The Arabic message itself originated in `src/lib/loadError.ts` and was rendered by every page that imported `describeLoadError`. When nginx returned a transient `502` (backend worker recycle / brief gateway hiccup) the central `fetchWithRetry` only attempted **one** quick retry (400 ms), so multiple sections (Tasks, Teams, Complaints, Projects, Contracts, Investment*, Users, Internal Messages, Violations, Smart Assistant) displayed the technical message at once. Pages with ad-hoc error handling (Dashboard, Reports, Operations Map) compounded the problem with their own raw `'فشل تحميل…'` strings and no retry button. The endpoints themselves all exist on the backend — the failure is purely upstream gateway timing.
+
+**What was done:**
+- **Central retry helper hardened** (`src/services/api.ts`): two-step backoff `[500ms, 1500ms]` (was a single 400ms attempt) for GET requests on 502/503/504 and on network errors. Non-GET requests still pass through unchanged (no double-write risk). Diagnostic console line now includes the attempt index so devs can see retry counts in DevTools.
+- **User-facing message softened** (`src/lib/loadError.ts`): the 502/503/504 branch now returns the requested clean Arabic copy `"تعذر تحميل البيانات حالياً. قد تكون الخدمة مشغولة مؤقتاً. يرجى إعادة المحاولة."` (no HTTP code, no entity name leaked into the visible string). Network-error fallback similarly softened. The original status, URL, content-type and detail are still logged via `[load:…]` and `[api-diagnostic]` so developers retain full visibility.
+- **Retry buttons added** to every list page that uses `describeLoadError` and previously had no retry affordance: TasksListPage, TeamsListPage, ComplaintsListPage, ProjectsListPage, ContractsListPage, InvestmentContractsPage, InvestmentPropertiesPage, UsersPage, ViolationsPage, InternalMessagesPage. Pages that already had a callback (`fetchContracts`, `fetchProperties`, `fetchUsers`, `fetchViolations`, `loadThreads/loadThread`) reuse it; the rest gained a `reloadToken` state included in the effect deps.
+- **Ad-hoc pages migrated to the central helper + retry button:** DashboardPage (was a boolean `statsError` with hard-coded copy), ReportsPage (four `'فشل تحميل …'` strings), ComplaintsMapPage (silently swallowed errors with `setMarkers([])`).
+
+**Files changed:**
+- `src/services/api.ts` — two-step retry backoff `[500, 1500]` ms with attempt counter in diagnostics.
+- `src/lib/loadError.ts` — clean Arabic copy for transient/network branches; technical detail kept in dev console only.
+- `src/pages/TasksListPage.tsx`, `TeamsListPage.tsx`, `ComplaintsListPage.tsx`, `ProjectsListPage.tsx`, `ContractsListPage.tsx`, `InvestmentContractsPage.tsx`, `InvestmentPropertiesPage.tsx`, `UsersPage.tsx`, `ViolationsPage.tsx`, `InternalMessagesPage.tsx` — added "إعادة المحاولة" button (some via `reloadToken`, some via existing `fetch*` callback).
+- `src/pages/DashboardPage.tsx`, `ReportsPage.tsx`, `ComplaintsMapPage.tsx` — migrated to `describeLoadError` + retry button.
+- `PROJECT_CONTINUITY.md` — this entry.
+
+**Backend:** not touched. Audited the affected endpoints (`/dashboard/stats`, `/reports/*`, `/operations-map/markers`, `/teams/`, `/tasks/`, `/complaints/`, `/projects/`, `/contracts/`, `/investment-contracts/`, `/investment-properties/`, `/users/`, `/violations/`, `/internal-messages/threads`) — all routes exist and respond JSON. The 502 was always nginx → backend gateway timing, not a missing route or backend exception.
+
+**Commands run:**
+- `npm install` — 268 packages, 0 vulnerabilities.
+- `npm run build` — green, 1.16s, 0 errors.
+- `npm run lint` — 13 errors / 15 warnings (all pre-existing in `ViolationsPage.tsx` `Row` sub-component and elsewhere; baseline before changes was 13 errors / **16** warnings — net **-1 warning** from this change).
+- `grep "الخادم غير متاح مؤقت|HTTP 502" src backend` — no matches (string fully removed from user-facing surfaces).
+
+**Behavior after fix:**
+- Transient 502/503/504 on a GET is now retried at 500 ms then 1500 ms before the user ever sees an error. In practice this masks the vast majority of single-blip gateway recycles.
+- If all three attempts fail, every affected page renders a compact card with `Warning` icon, the soft Arabic copy, and an "إعادة المحاولة" button that re-runs the failed load.
+- HTML 502 bodies from nginx are still discarded by `readErrorBody` and never rendered into the UI; only the dev-tools `[api-diagnostic]` line carries `endpoint/method/status/contentType/attempt`.
+- RTL Arabic UI preserved everywhere; all variable, file, and component names remain in English.
+
+**Remaining risks / out of scope:**
+- Detail pages (`TaskDetailsPage`, `ComplaintDetailsPage`, `ProjectDetailsPage`, `TeamDetailsPage`, `ContractDetailsPage`, `InvestmentContractDetailsPage`, `InvestmentPropertyDetailsPage`, `DocumentReviewPage`, `DuplicateReviewPage`, `ProcessingQueuePage`, `GeoDashboardPage`, `SettingsPage`, `UsersListPage`, `LocationDetailPage`, `LocationReportsPage`, `IntelligenceReportsPage`) still use ad-hoc `'فشل تحميل …'` strings. They never showed the 502 message (they swallow detail entirely), so they were intentionally left alone per the minimal-change rule. A follow-up pass could migrate them to `describeLoadError` for consistency.
+- The retry helper is intentionally GET-only. Non-idempotent writes (POST/PUT/DELETE/PATCH) on a transient 502 still bubble the error to the caller — correct behavior to avoid double-creates.
+
+**Recommended next step:** if 502s persist after this UX fix, investigate the nginx ↔ backend gateway timing in `nginx.conf` / `nginx-ssl.conf` (the dynamic upstream resolver pattern is already correct — see prior memory) and consider increasing `proxy_read_timeout` on the backend location.
+
+---
+
 ### Session: 2026-05-02 — Unified data presentation system (DataTable / badges / states)
 
 **Task completed:** Introduced a reusable, lightweight data-presentation system that matches the new blue/navy government identity, then refactored every high-priority list page to use it. Frontend-only — no backend, migrations, deploy, route, or API changes.
