@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { describeLoadError } from '@/lib/loadError';
 import { ChatCircleDots, ListChecks, FileText, WarningCircle, Plus, ArrowRight, Spinner, PaperPlaneTilt } from '@phosphor-icons/react';
 
 const complaintStatusLabels: Record<string, string> = {
@@ -33,24 +34,25 @@ const taskStatusColors: Record<string, string> = {
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [statsError, setStatsError] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const { role } = useAuth();
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const data = await apiService.getDashboardStats();
-        setStats(data);
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-        setStatsError(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStats();
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    setStatsError(null);
+    try {
+      const data = await apiService.getDashboardStats();
+      setStats(data);
+    } catch (error) {
+      setStatsError(describeLoadError(error, 'لوحة التحكم').message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -100,9 +102,14 @@ export default function DashboardPage() {
 
         {statsError && !stats && (
           <Card className="border-amber-300 bg-amber-50">
-            <CardContent className="py-3 text-sm text-amber-900 flex items-center gap-2">
-              <WarningCircle size={18} className="text-amber-700" />
-              تعذّر تحميل بيانات لوحة القيادة في الوقت الحالي. يُرجى المحاولة لاحقاً.
+            <CardContent className="py-3 text-sm text-amber-900 flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-2 flex-1">
+                <WarningCircle size={18} className="text-amber-700" />
+                <span>{statsError}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchStats} className="self-start sm:self-auto">
+                إعادة المحاولة
+              </Button>
             </CardContent>
           </Card>
         )}

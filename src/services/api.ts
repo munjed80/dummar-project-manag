@@ -310,16 +310,20 @@ async function throwApiError(response: Response, fallbackMessage: string): Promi
 // ── Transient-error retry helper ──────────────────────────────────────────
 //
 // Many "intermittent 502 Bad Gateway" reports in production are a single
-// upstream blip (worker recycle, brief connection gap). A targeted 1x retry
-// with a short backoff masks the vast majority of these without changing
+// upstream blip (worker recycle, brief connection gap). A targeted retry
+// with short backoff masks the vast majority of these without changing
 // any UX. We only retry:
 //   * GET requests (idempotent)
 //   * status 502/503/504 (gateway-side transient failures)
 //   * network errors (TypeError thrown by fetch when the connection drops)
 // We NEVER retry 4xx (the request itself is the problem) or non-GET
 // methods (could double-create resources).
+//
+// Backoff schedule for retried GETs: 500 ms, then 1500 ms (max 2 retries
+// = 3 total attempts). After that we surface the error so the UI can show
+// its retry button.
 const TRANSIENT_STATUSES = new Set([502, 503, 504]);
-const RETRY_BACKOFF_MS = 400;
+const RETRY_BACKOFF_MS = [500, 1500];
 const inFlightGetRequests = new Map<string, Promise<Response>>();
 
 function shouldRetry(method: string, statusOrNull: number | null): boolean {
@@ -340,33 +344,42 @@ async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<R
   const dedupeKey = `${method}:${url}:${authHeader}`;
 
   const run = async (): Promise<Response> => {
-    try {
-      const response = await fetch(input, init);
-      if (!response.ok && response.status >= 500) {
-        console.error('[api-diagnostic]', {
-          endpoint: response.url,
-          method,
-          status: response.status,
-          contentType: response.headers.get('content-type') ?? 'unknown',
-        });
-      }
-      if (!response.ok && shouldRetry(method, response.status)) {
-        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
-        try {
-          const retry = await fetch(input, init);
-          return retry;
-        } catch {
-          return response;
+    let lastResponse: Response | null = null;
+    let lastError: unknown = null;
+    // Attempt 0 = original; attempts 1..N = retries.
+    const totalAttempts = 1 + RETRY_BACKOFF_MS.length;
+    for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      try {
+        const response = await fetch(input, init);
+        if (!response.ok && response.status >= 500) {
+          console.error('[api-diagnostic]', {
+            endpoint: response.url,
+            method,
+            status: response.status,
+            contentType: response.headers.get('content-type') ?? 'unknown',
+            attempt,
+          });
         }
+        lastResponse = response;
+        if (!response.ok && shouldRetry(method, response.status) && attempt < RETRY_BACKOFF_MS.length) {
+          await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+          continue;
+        }
+        return response;
+      } catch (err) {
+        lastError = err;
+        if (shouldRetry(method, null) && attempt < RETRY_BACKOFF_MS.length) {
+          await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+          continue;
+        }
+        if (lastResponse) return lastResponse;
+        throw err;
       }
-      return response;
-    } catch (err) {
-      if (shouldRetry(method, null)) {
-        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
-        return fetch(input, init);
-      }
-      throw err;
     }
+    // Exhausted retries — return the last response (still 5xx) so callers
+    // produce a structured ApiError instead of a TypeError.
+    if (lastResponse) return lastResponse;
+    throw lastError ?? new Error('fetchWithRetry: unknown failure');
   };
 
   if (method !== 'GET') return run();

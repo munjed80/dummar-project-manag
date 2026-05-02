@@ -40,6 +40,7 @@ export default function ProjectsListPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const canCreate = role && ['project_director', 'contracts_manager', 'engineer_supervisor'].includes(role);
 
@@ -56,7 +57,7 @@ export default function ProjectsListPage() {
       })
       .catch((err) => setError(describeLoadError(err, 'المشاريع').message))
       .finally(() => setLoading(false));
-  }, [statusFilter, search, page]);
+  }, [statusFilter, search, page, reloadToken]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -105,9 +106,14 @@ export default function ProjectsListPage() {
           )}
 
           {error && (
-            <div className="flex items-center gap-2 text-destructive py-4">
-              <Warning size={20} />
-              <span>{error}</span>
+            <div className="flex flex-col items-center gap-2 text-destructive py-4">
+              <div className="flex items-center gap-2">
+                <Warning size={20} />
+                <span>{error}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 
