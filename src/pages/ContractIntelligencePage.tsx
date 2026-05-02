@@ -4,16 +4,19 @@ import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Spinner, Warning, UploadSimple, FileText, Queue, FileCsv,
+  Spinner, UploadSimple, FileText, Queue, FileCsv,
   ShieldWarning, CopySimple, Eye, CheckCircle, XCircle, Clock,
 } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import {
+  DataTableShell, StatusBadge, EmptyState, ErrorState, LoadingSkeleton,
+  MobileEntityCard, type StatusTone,
+} from '@/components/data';
 
 const statusLabels: Record<string, string> = {
   pending: 'قيد الانتظار',
@@ -24,13 +27,13 @@ const statusLabels: Record<string, string> = {
   failed: 'فشل',
 };
 
-const statusColors: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-800',
-  processing: 'bg-blue-100 text-blue-800',
-  review: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  failed: 'bg-red-100 text-red-800',
+const statusTones: Record<string, StatusTone> = {
+  pending: 'neutral',
+  processing: 'progress',
+  review: 'warning',
+  approved: 'success',
+  rejected: 'danger',
+  failed: 'danger',
 };
 
 const RECENT_LIMIT = 10;
@@ -132,18 +135,22 @@ export default function ContractIntelligencePage() {
         </div>
 
         {error && (
-          <div className="text-center py-8 text-destructive flex flex-col items-center gap-2">
-            <Warning size={32} />
-            <p>{error}</p>
-            <Button variant="outline" size="sm" onClick={fetchData}>إعادة المحاولة</Button>
-          </div>
+          <ErrorState message={error} onRetry={fetchData} retrying={loading} />
         )}
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Spinner className="animate-spin" size={32} />
+        {loading && !error ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i} className="border-[#D8E2EF]">
+                  <CardContent className="py-6">
+                    <LoadingSkeleton rows={1} columns={2} />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        ) : (
+        ) : !error && (
           <>
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -214,9 +221,9 @@ export default function ContractIntelligencePage() {
             </Card>
 
             {/* Recent Documents */}
-            <Card>
+            <Card className="border-[#D8E2EF]">
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>آخر المستندات</CardTitle>
+                <CardTitle className="text-[#0F2A4A]">آخر المستندات</CardTitle>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/contract-intelligence/queue')}>
                   عرض الكل
                 </Button>
@@ -224,75 +231,79 @@ export default function ContractIntelligencePage() {
               <CardContent>
                 {/* Desktop table */}
                 <div className="responsive-table-desktop">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">اسم الملف</TableHead>
-                        <TableHead className="text-right">الحالة</TableHead>
-                        <TableHead className="text-right">تاريخ الرفع</TableHead>
-                        <TableHead className="text-right">إجراء</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {recentDocs.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                            لا توجد مستندات بعد
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        recentDocs.map((doc) => (
-                          <TableRow key={doc.id}>
-                            <TableCell className="font-medium max-w-[200px] truncate">
-                              {doc.original_filename || doc.filename || '-'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={statusColors[doc.status] || 'bg-gray-100 text-gray-800'}>
-                                {statusLabels[doc.status] || doc.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {doc.created_at ? format(new Date(doc.created_at), 'yyyy/MM/dd') : '-'}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => navigate(`/contract-intelligence/queue?doc=${doc.id}`)}
-                              >
-                                <Eye size={16} />
-                              </Button>
-                            </TableCell>
+                  {recentDocs.length === 0 ? (
+                    <EmptyState
+                      icon={<FileText size={40} weight="duotone" />}
+                      title="لا توجد مستندات بعد"
+                    />
+                  ) : (
+                    <DataTableShell>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right">اسم الملف</TableHead>
+                            <TableHead className="text-right">الحالة</TableHead>
+                            <TableHead className="text-right">تاريخ الرفع</TableHead>
+                            <TableHead className="text-right">إجراء</TableHead>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {recentDocs.map((doc) => (
+                            <TableRow key={doc.id}>
+                              <TableCell className="font-medium max-w-[260px] truncate text-[#0F2A4A]">
+                                {doc.original_filename || doc.filename || '-'}
+                              </TableCell>
+                              <TableCell>
+                                <StatusBadge tone={statusTones[doc.status] ?? 'neutral'}>
+                                  {statusLabels[doc.status] || doc.status}
+                                </StatusBadge>
+                              </TableCell>
+                              <TableCell>
+                                {doc.created_at ? format(new Date(doc.created_at), 'yyyy/MM/dd') : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => navigate(`/contract-intelligence/queue?doc=${doc.id}`)}
+                                >
+                                  <Eye size={16} />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </DataTableShell>
+                  )}
                 </div>
 
                 {/* Mobile card view */}
                 <div className="responsive-cards-mobile space-y-3">
                   {recentDocs.length === 0 ? (
-                    <p className="text-center py-8 text-muted-foreground">لا توجد مستندات بعد</p>
+                    <EmptyState
+                      icon={<FileText size={40} weight="duotone" />}
+                      title="لا توجد مستندات بعد"
+                    />
                   ) : (
                     recentDocs.map((doc) => (
-                      <div
+                      <MobileEntityCard
                         key={doc.id}
-                        className="border rounded-lg p-3 cursor-pointer hover:bg-muted/50 transition-colors"
                         onClick={() => navigate(`/contract-intelligence/queue?doc=${doc.id}`)}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium truncate max-w-[200px]">
+                        title={
+                          <span className="truncate inline-block max-w-[220px] align-middle">
                             {doc.original_filename || doc.filename || '-'}
                           </span>
-                          <Badge className={statusColors[doc.status] || 'bg-gray-100 text-gray-800'}>
+                        }
+                        badge={
+                          <StatusBadge tone={statusTones[doc.status] ?? 'neutral'}>
                             {statusLabels[doc.status] || doc.status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {doc.created_at ? format(new Date(doc.created_at), 'yyyy/MM/dd') : '-'}
-                        </p>
-                      </div>
+                          </StatusBadge>
+                        }
+                        meta={(
+                          <span>{doc.created_at ? format(new Date(doc.created_at), 'yyyy/MM/dd') : '-'}</span>
+                        )}
+                      />
                     ))
                   )}
                 </div>

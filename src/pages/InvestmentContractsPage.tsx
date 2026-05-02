@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -17,11 +16,16 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import { MagnifyingGlass, Spinner, Warning, Plus, FileText, PencilSimple, Trash } from '@phosphor-icons/react';
+import { MagnifyingGlass, Spinner, Plus, FileText, PencilSimple, Trash } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
 import { FileUpload } from '@/components/FileUpload';
+import {
+  DataTableShell, DataToolbar, StatusBadge,
+  EmptyState, ErrorState, LoadingSkeleton, PaginationBar, MobileEntityCard,
+  type StatusTone,
+} from '@/components/data';
 
 // ── Lookups ───────────────────────────────────────────────────────────────
 
@@ -40,19 +44,34 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'ملغى',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  active: 'bg-green-100 text-green-800',
-  near_expiry: 'bg-yellow-100 text-yellow-800',
-  expired: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
+const STATUS_TONES: Record<string, StatusTone> = {
+  active: 'success',
+  near_expiry: 'warning',
+  expired: 'danger',
+  cancelled: 'neutral',
 };
 
 // Map computed expiry_alert bucket to a small in-row badge.
+const EXPIRY_TONES: Record<string, { label: string; tone: StatusTone }> = {
+  expired: { label: 'منتهي', tone: 'danger' },
+  '30': { label: 'يقل عن 30 يوم', tone: 'danger' },
+  '60': { label: 'يقل عن 60 يوم', tone: 'warning' },
+  '90': { label: 'يقل عن 90 يوم', tone: 'warning' },
+};
+
+// Legacy alias kept for backwards-compat with existing exports.
+const STATUS_COLORS: Record<string, string> = {
+  active: 'bg-emerald-50 text-emerald-700',
+  near_expiry: 'bg-amber-50 text-amber-700',
+  expired: 'bg-red-50 text-red-700',
+  cancelled: 'bg-slate-100 text-slate-700',
+};
+
 const EXPIRY_BADGE: Record<string, { label: string; cls: string }> = {
-  expired: { label: 'منتهي', cls: 'bg-red-100 text-red-800' },
-  '30': { label: 'يقل عن 30 يوم', cls: 'bg-red-100 text-red-800' },
-  '60': { label: 'يقل عن 60 يوم', cls: 'bg-orange-100 text-orange-800' },
-  '90': { label: 'يقل عن 90 يوم', cls: 'bg-yellow-100 text-yellow-800' },
+  expired: { label: 'منتهي', cls: 'bg-red-50 text-red-700' },
+  '30': { label: 'يقل عن 30 يوم', cls: 'bg-red-50 text-red-700' },
+  '60': { label: 'يقل عن 60 يوم', cls: 'bg-amber-50 text-amber-700' },
+  '90': { label: 'يقل عن 90 يوم', cls: 'bg-amber-50 text-amber-700' },
 };
 
 const PAGE_SIZE = 15;
@@ -428,26 +447,26 @@ export default function InvestmentContractsPage() {
 
   return (
     <Layout>
-      <Card>
+      <Card className="border-[#D8E2EF]">
         <CardHeader>
           <div className="flex justify-between items-center flex-wrap gap-2">
             <div className="space-y-2">
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <FileText size={28} />
+              <CardTitle className="text-2xl flex items-center gap-2 text-[#0F2A4A]">
+                <FileText size={26} weight="duotone" />
                 العقود الاستثمارية
               </CardTitle>
               <div className="flex gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={() => navigate('/contract-intelligence')}>
+                <Button variant="outline" size="sm" className="border-[#D8E2EF]" onClick={() => navigate('/contract-intelligence')}>
                   تحليل عقد استثماري
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => navigate('/contract-intelligence/queue')}>
+                <Button variant="outline" size="sm" className="border-[#D8E2EF]" onClick={() => navigate('/contract-intelligence/queue')}>
                   استيراد من مركز ذكاء العقود
                 </Button>
               </div>
             </div>
             {canManage && (
               <Button onClick={handleCreate} disabled={properties.length === 0}>
-                <Plus size={20} className="ml-1" />
+                <Plus size={18} className="ml-1" />
                 إضافة عقد جديد
               </Button>
             )}
@@ -455,146 +474,194 @@ export default function InvestmentContractsPage() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-            <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
-              <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input
-                placeholder="بحث برقم العقد، اسم المستثمر، أو الملاحظات..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(0); }}
-                className="pr-10"
-              />
-            </div>
+          <DataToolbar
+            search={(
+              <div className="relative">
+                <MagnifyingGlass className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input
+                  placeholder="بحث برقم العقد، اسم المستثمر، أو الملاحظات..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setPage(0); }}
+                  className="pr-10"
+                />
+              </div>
+            )}
+            filters={(
+              <>
+                <Select value={propertyFilter} onValueChange={v => { setPropertyFilter(v); setPage(0); }}>
+                  <SelectTrigger className="flex-1 sm:w-[200px]"><SelectValue placeholder="العقار" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">جميع الأصول</SelectItem>
+                    {properties.map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>{p.address}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-            <div className="flex gap-2 flex-wrap">
-              <Select value={propertyFilter} onValueChange={v => { setPropertyFilter(v); setPage(0); }}>
-                <SelectTrigger className="w-[200px]"><SelectValue placeholder="العقار" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع الأصول</SelectItem>
-                  {properties.map(p => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.address}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(0); }}>
-                <SelectTrigger className="w-[160px]"><SelectValue placeholder="حالة العقد" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع الحالات</SelectItem>
-                  {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {loading && (
-            <div className="flex justify-center py-8">
-              <Spinner className="animate-spin text-primary" size={32} />
-            </div>
-          )}
+                <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(0); }}>
+                  <SelectTrigger className="flex-1 sm:w-[170px]"><SelectValue placeholder="حالة العقد" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">جميع الحالات</SelectItem>
+                    {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          />
 
           {error && (
-            <div className="flex items-center gap-2 text-destructive py-4">
-              <Warning size={20} />
-              <span>{error}</span>
-            </div>
+            <ErrorState message={error} onRetry={fetchContracts} retrying={loading} />
+          )}
+
+          {loading && !error && (
+            <>
+              <div className="responsive-table-desktop">
+                <DataTableShell>
+                  <LoadingSkeleton rows={5} columns={canManage ? 8 : 7} />
+                </DataTableShell>
+              </div>
+              <div className="responsive-cards-mobile">
+                <LoadingSkeleton rows={4} variant="cards" />
+              </div>
+            </>
           )}
 
           {!loading && !error && contracts.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <FileText size={48} className="mx-auto mb-4 opacity-30" />
-              <p className="text-lg mb-2">لا توجد عقود استثمارية بعد</p>
-              {canManage && properties.length > 0 && (
-                <Button onClick={handleCreate} className="mt-4">إضافة أول عقد</Button>
-              )}
-              {properties.length === 0 && (
-                <p className="text-sm">يجب إضافة عقار أولاً قبل إنشاء عقد.</p>
-              )}
-            </div>
+            <EmptyState
+              icon={<FileText size={40} weight="duotone" />}
+              title={search || propertyFilter !== 'all' || statusFilter !== 'all'
+                ? 'لم يتم العثور على نتائج مطابقة'
+                : 'لا توجد عقود استثمارية بعد'}
+              description={properties.length === 0 ? 'يجب إضافة عقار أولاً قبل إنشاء عقد.' : undefined}
+              action={canManage && properties.length > 0 && !(search || propertyFilter !== 'all' || statusFilter !== 'all') ? (
+                <Button onClick={handleCreate}>إضافة أول عقد</Button>
+              ) : undefined}
+            />
           )}
 
           {!loading && !error && contracts.length > 0 && (
             <>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>رقم العقد</TableHead>
-                      <TableHead>العقار المرتبط</TableHead>
-                      <TableHead>اسم المستثمر</TableHead>
-                      <TableHead>تاريخ النهاية</TableHead>
-                      <TableHead>قيمة العقد</TableHead>
-                      <TableHead>حالة العقد</TableHead>
-                      <TableHead>تنبيه الانتهاء</TableHead>
-                      {canManage && <TableHead className="text-center">الإجراءات</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {contracts.map(c => {
-                      const alert = c.expiry_alert as keyof typeof EXPIRY_BADGE | null;
-                      return (
-                        <TableRow
-                          key={c.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => navigate(`/investment-contracts/${c.id}`)}
-                        >
-                          <TableCell className="font-medium">{c.contract_number}</TableCell>
-                          <TableCell>{propertyAddress(c.property_id)}</TableCell>
-                          <TableCell>{c.investor_name}</TableCell>
-                          <TableCell>{c.end_date}</TableCell>
-                          <TableCell>{Number(c.contract_value).toLocaleString('ar')}</TableCell>
-                          <TableCell>
-                            <Badge className={STATUS_COLORS[c.status] || 'bg-gray-100'}>
-                              {STATUS_LABELS[c.status] || c.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {alert && EXPIRY_BADGE[alert] ? (
-                              <Badge className={EXPIRY_BADGE[alert].cls}>
-                                {EXPIRY_BADGE[alert].label}
-                              </Badge>
-                            ) : '-'}
-                          </TableCell>
-                          {canManage && (
-                            <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                              <div className="flex justify-center gap-1">
-                                <Button variant="ghost" size="sm" onClick={() => handleEdit(c)} title="تعديل">
-                                  <PencilSimple size={16} />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => handleDelete(c)}
-                                  title="حذف"
-                                >
-                                  <Trash size={16} />
-                                </Button>
-                              </div>
+              {/* Desktop table view */}
+              <div className="responsive-table-desktop">
+                <DataTableShell>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-right">رقم العقد</TableHead>
+                        <TableHead className="text-right">العقار المرتبط</TableHead>
+                        <TableHead className="text-right">اسم المستثمر</TableHead>
+                        <TableHead className="text-right">تاريخ النهاية</TableHead>
+                        <TableHead className="text-right">قيمة العقد</TableHead>
+                        <TableHead className="text-right">حالة العقد</TableHead>
+                        <TableHead className="text-right">تنبيه الانتهاء</TableHead>
+                        {canManage && <TableHead className="text-center">الإجراءات</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {contracts.map(c => {
+                        const alert = c.expiry_alert as keyof typeof EXPIRY_TONES | null;
+                        return (
+                          <TableRow
+                            key={c.id}
+                            className="cursor-pointer"
+                            onClick={() => navigate(`/investment-contracts/${c.id}`)}
+                          >
+                            <TableCell className="font-medium text-[#0F2A4A]">{c.contract_number}</TableCell>
+                            <TableCell>{propertyAddress(c.property_id)}</TableCell>
+                            <TableCell>{c.investor_name}</TableCell>
+                            <TableCell>{c.end_date}</TableCell>
+                            <TableCell>{Number(c.contract_value).toLocaleString('ar')}</TableCell>
+                            <TableCell>
+                              <StatusBadge tone={STATUS_TONES[c.status] ?? 'neutral'}>
+                                {STATUS_LABELS[c.status] || c.status}
+                              </StatusBadge>
                             </TableCell>
-                          )}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                            <TableCell>
+                              {alert && EXPIRY_TONES[alert] ? (
+                                <StatusBadge tone={EXPIRY_TONES[alert].tone}>
+                                  {EXPIRY_TONES[alert].label}
+                                </StatusBadge>
+                              ) : '-'}
+                            </TableCell>
+                            {canManage && (
+                              <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-center gap-1">
+                                  <Button variant="ghost" size="sm" onClick={() => handleEdit(c)} title="تعديل">
+                                    <PencilSimple size={16} />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => handleDelete(c)}
+                                    title="حذف"
+                                  >
+                                    <Trash size={16} />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </DataTableShell>
               </div>
 
-              {totalPages > 1 && (
-                <div className="flex justify-between items-center pt-2">
-                  <Button variant="outline" disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
-                    السابق
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    صفحة {page + 1} من {totalPages}
-                  </span>
-                  <Button variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
-                    التالي
-                  </Button>
-                </div>
-              )}
+              {/* Mobile card view */}
+              <div className="responsive-cards-mobile space-y-3">
+                {contracts.map(c => {
+                  const alert = c.expiry_alert as keyof typeof EXPIRY_TONES | null;
+                  return (
+                    <MobileEntityCard
+                      key={c.id}
+                      onClick={() => navigate(`/investment-contracts/${c.id}`)}
+                      title={<span className="font-mono text-[#1D4ED8]">{c.contract_number}</span>}
+                      badge={
+                        <StatusBadge tone={STATUS_TONES[c.status] ?? 'neutral'}>
+                          {STATUS_LABELS[c.status] || c.status}
+                        </StatusBadge>
+                      }
+                      subtitle={c.investor_name}
+                      meta={(
+                        <>
+                          <span>{INVESTMENT_TYPE_LABELS[c.investment_type] || c.investment_type}</span>
+                          <span aria-hidden>•</span>
+                          <span>{propertyAddress(c.property_id)}</span>
+                          <span aria-hidden>•</span>
+                          <span>{Number(c.contract_value).toLocaleString('ar')}</span>
+                          {c.end_date && (
+                            <>
+                              <span aria-hidden>•</span>
+                              <span>ينتهي: {c.end_date}</span>
+                            </>
+                          )}
+                          {alert && EXPIRY_TONES[alert] && (
+                            <>
+                              <span aria-hidden>•</span>
+                              <StatusBadge tone={EXPIRY_TONES[alert].tone}>
+                                {EXPIRY_TONES[alert].label}
+                              </StatusBadge>
+                            </>
+                          )}
+                        </>
+                      )}
+                    />
+                  );
+                })}
+              </div>
+
+              <PaginationBar
+                page={page}
+                totalPages={totalPages}
+                totalCount={totalCount}
+                pageSize={PAGE_SIZE}
+                entityLabel="عقد"
+                onPageChange={setPage}
+              />
             </>
           )}
         </CardContent>
