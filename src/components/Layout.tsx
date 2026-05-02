@@ -6,7 +6,8 @@ import { List, Plus, SignOut } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
-import { OfflineSyncBanner } from '@/components/OfflineSyncBanner';
+import { SyncStatusButton } from '@/components/SyncStatusButton';
+import { PwaInstallButton } from '@/components/PwaInstallButton';
 import type { UserRole } from '@/hooks/useAuth';
 import { SidebarNav } from '@/components/navigation/Sidebar';
 import { SmartAssistantButton } from '@/components/navigation/SmartAssistantButton';
@@ -130,7 +131,7 @@ export function Layout({ children }: LayoutProps) {
               </SheetTrigger>
               <SheetContent
                 side="right"
-                className="w-full max-w-none border-0 bg-slate-950 p-0 text-slate-100 sm:max-w-sm"
+                className="w-full max-w-none border-0 bg-[#123B63] p-0 text-slate-100 sm:max-w-sm"
                 dir="rtl"
               >
                 <SheetHeader className="border-b border-white/10 px-5 py-4">
@@ -188,6 +189,8 @@ export function Layout({ children }: LayoutProps) {
             )}
             <NotificationBell />
             {canUseSmartAssistant && <SmartAssistantButton />}
+            <SyncStatusButton />
+            <PwaInstallButton />
             <Button
               variant="ghost"
               onClick={handleLogout}
@@ -200,13 +203,11 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </header>
 
-      <OfflineSyncBanner />
-
       <div className="mx-auto flex w-full">
         {/* Desktop sidebar (RTL: visually on the right edge of the viewport) */}
         {effectiveRole && navEntries.length > 0 && (
           <aside
-            className="sticky top-[var(--app-header-h,57px)] hidden h-[calc(100vh-57px)] w-64 shrink-0 border-l border-white/10 bg-slate-950 text-slate-100 lg:block"
+            className="sticky top-[var(--app-header-h,57px)] hidden h-[calc(100vh-57px)] w-64 shrink-0 border-l border-white/10 bg-[#123B63] text-slate-100 lg:block"
           >
             <SidebarNav
               entries={navEntries}

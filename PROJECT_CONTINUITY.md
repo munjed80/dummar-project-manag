@@ -8,6 +8,84 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-01 — Executive-gold accent wiring
+
+**Task completed:** Wired the executive-gold accent `#C8A24A` from the palette into two high-signal places so the navy/blue identity feels complete.
+
+**What was done:**
+- **Sidebar active rail:** changed the 3-px right rail next to active items in `src/components/navigation/Sidebar.tsx` from `bg-sky-400` to `bg-[#C8A24A]`. The active item icon/text stays sky for legibility on navy; the gold rail provides the elegant "you-are-here" marker the spec asked for.
+- **Dashboard KPI cards:** in `src/pages/DashboardPage.tsx`, added a 2-px gold top border (`border-t-2 border-t-[#C8A24A]`) to all four top-row KPI cards (إجمالي الشكاوى، إجمالي المهام، العقود النشطة، عقود قرب الانتهاء). The first three card icons also moved from generic `text-accent` to `text-[#C8A24A]` so the gold reads as a deliberate accent, not a fluke. The fourth card keeps its red `WarningCircle` icon because that's a true alert state.
+
+Status indicators (progress bars, status badges, expiry alert tiles) were intentionally left on their existing semantic colors — gold is reserved for executive/identity accents, not data states.
+
+**Files changed:**
+- `src/components/navigation/Sidebar.tsx`
+- `src/pages/DashboardPage.tsx`
+- `PROJECT_CONTINUITY.md`
+
+**Build:** `npm run build` — green (1.06s, 0 errors).
+
+**Recommended next step:** awaiting user to specify which functional feature to tackle next (no specific feature was named in the prompt).
+
+---
+
+### Session: 2026-05-01 — Visual identity, sync status UI, PWA install polish
+
+**Task completed:** Aligned the platform on a single navy/blue government-dashboard identity, replaced the yellow full-width sync banner with a compact topbar control, and polished the PWA install experience (iOS instructions + graceful fallback). Frontend-only.
+
+**What was done:**
+- **Sidebar identity:** replaced `bg-slate-950` (near-black) with sidebar navy `#123B63` in `src/components/Layout.tsx` (desktop sidebar + mobile sheet) and `src/components/navigation/Sidebar.tsx`. Header (`bg-primary`) and sidebar now share the same blue family. Active-item rail (sky-300/400) unchanged — it pops cleanly on navy.
+- **Theme tokens:** lifted `--primary` saturation/hue in `src/main.css` to land closer to `#1D4ED8`, soft app `--background` near `#F5F8FC`, and slightly cleaner `--border`. No structural CSS rename — only token values changed, so all existing `bg-primary` / `bg-background` / `border-border` usages benefit automatically.
+- **Sync status redesign:** removed the always-visible yellow `OfflineSyncBanner` and added `src/components/SyncStatusButton.tsx` — a topbar icon (sits between Smart Assistant and the new install button) that opens a 288px popover with: حالة المزامنة، آخر تحديث، العناصر المعلقة، وضع الاتصال، و زر "مزامنة الآن". Visual states: green (synced), spinning sky icon (syncing), gray (offline), amber dot (pending items), red dot (real sync error). No backing logic changed — it subscribes to the existing `offlineSyncManager` and calls `syncNow()`.
+- **PWA install polish:** removed the floating `InstallPrompt` toast and added `src/components/PwaInstallButton.tsx` in the topbar:
+  - if `beforeinstallprompt` fires → opens native install dialog,
+  - if already installed (display-mode standalone or iOS `navigator.standalone`) → shows "التطبيق مثبت" pill and disables itself,
+  - on iPhone/iPad → opens a popover with Arabic Safari instructions ("افتح الموقع من Safari، اضغط زر المشاركة، ثم اختر Add to Home Screen"),
+  - otherwise → shows a graceful Arabic help message instead of failing silently.
+  Also listens to the `appinstalled` event so the button hides immediately after install.
+- **PWA manifest** (`public/manifest.json`): added `scope: "/"`, set `theme_color: "#123B63"` (sidebar navy) and `background_color: "#F5F8FC"` (soft app bg) to match the new identity. Icons (192 + 512) untouched.
+- **`<meta name="theme-color">`** in `index.html` updated to `#123B63` so the mobile address bar matches the sidebar/header.
+
+**Files changed:**
+- `src/components/Layout.tsx` *(navy sidebar, banner removed, sync + install buttons added)*
+- `src/components/navigation/Sidebar.tsx` *(navy background)*
+- `src/components/SyncStatusButton.tsx` *(new — compact topbar sync control)*
+- `src/components/PwaInstallButton.tsx` *(new — replaces floating InstallPrompt)*
+- `src/components/OfflineSyncBanner.tsx` *(deleted)*
+- `src/components/InstallPrompt.tsx` *(deleted)*
+- `src/App.tsx` *(InstallPrompt import + render removed)*
+- `src/main.css` *(refined --primary / --background / --border tokens)*
+- `public/manifest.json` *(scope, navy theme_color, soft background_color)*
+- `index.html` *(theme-color meta updated to navy)*
+- `PROJECT_CONTINUITY.md` *(this entry)*
+
+**Mobile behavior:**
+- Sheet drawer keeps working — its background was switched to `bg-[#123B63]` in the same file.
+- Topbar gained two new icon buttons (sync, install). All buttons use the existing `p-2` icon style and stay within the existing `gap-1.5 md:gap-2` flex row, so the topbar still fits on the smallest supported widths. The install button uses `hidden sm:inline-flex` only for the "installed" pill state; the icon itself stays visible on mobile.
+
+**Build:** `npm run build` — green (1.11s, 0 errors).
+
+**Validation grep:** the requested search still reports occurrences of `bg-amber-*` / `bg-yellow-*` / `bg-black/*` across pages, but they are intentional and outside the scope of this polish:
+- `src/components/ui/{sheet,dialog,drawer,alert-dialog}.tsx` — `bg-black/50` is the standard shadcn-ui modal overlay backdrop (semi-transparent dim).
+- Page-level `bg-amber-*` / `bg-yellow-*` (Dashboard, Tasks, Contracts, Violations, ContractIntelligence, etc.) are **status indicators** for warning/expiring/in-progress states (e.g. expiring investment contracts, pending review). Repainting those would change business meaning, not visual identity, and was not requested.
+- `SyncStatusButton.tsx` itself uses one `bg-amber-400` dot — this is the intentional "pending items" indicator described in the spec.
+- No remaining `bg-slate-950` / `bg-black` (full surface) outside the modal overlays above.
+
+**Visual identity changes:** sidebar moved from near-black to navy `#123B63`; header + sidebar now read as one system; CSS tokens shifted toward the requested palette without renaming any utility class.
+
+**Sync status changes:** yellow page-level banner removed; replaced by a compact icon-only topbar control with a status popover and "مزامنة الآن" action. Existing sync logic in `offlineSyncManager` is untouched.
+
+**PWA install changes:** new topbar button with native install / iOS instructions / unsupported-browser help; manifest theme/background and `<meta theme-color>` aligned with the new navy; service-worker registration in `main.tsx` left untouched per the "no risky SW changes" rule.
+
+**Remaining risks / limitations:**
+- `lastSyncedAt` in `SyncStatusButton` is captured client-side from the `syncing → idle` transition; it is not persisted across page reloads. Adequate for the polish scope; can be moved into `offlineSyncManager` later if desired.
+- Status badge wording uses simple Arabic strings; can be promoted to the i18n layer when one is introduced.
+- The amber/yellow status colors elsewhere in the app are kept on purpose (warning semantics). A future pass could harmonize them with the executive gold accent `#C8A24A` from the palette.
+
+**Recommended next step:** wire the executive gold accent `#C8A24A` into one or two high-signal places (e.g. KPI highlights on the dashboard and the active sidebar rail) so the palette feels complete, then move on to the next functional feature.
+
+---
+
 ### Session: 2026-05-01 — Phase 4: Executive Governor Briefing / Demo Readiness
 
 **Task completed:** Added a polished, frontend-only "موجز المحافظ" presentation page intended as a 7–10 minute governor-level walkthrough of the platform. No backend, migrations, deploy, or module changes.

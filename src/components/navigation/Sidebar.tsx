@@ -93,7 +93,7 @@ function LeafLink({
       {active && (
         <span
           aria-hidden
-          className="absolute inset-y-1 right-0 w-[3px] rounded-l-full bg-sky-400"
+          className="absolute inset-y-1 right-0 w-[3px] rounded-l-full bg-[#C8A24A]"
         />
       )}
       <Icon
@@ -221,7 +221,7 @@ export function SidebarNav({ entries, pathname, badges, onNavigate, compact }: S
       aria-label="القائمة الرئيسية"
       className={cn(
         'flex h-full flex-col text-slate-100',
-        compact ? '' : 'bg-slate-950',
+        compact ? '' : 'bg-[#123B63]',
       )}
     >
       <div className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:thin]">
