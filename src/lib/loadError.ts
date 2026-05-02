@@ -33,7 +33,6 @@ const TRANSIENT_GATEWAY_STATUSES = new Set([502, 503, 504]);
 export function describeLoadError(err: unknown, entityLabel: string): LoadErrorInfo {
   // Always log the raw error in dev so the operator sees the real cause.
   if (import.meta.env?.DEV) {
-    // eslint-disable-next-line no-console
     console.error(`[load:${entityLabel}]`, err);
   }
 
