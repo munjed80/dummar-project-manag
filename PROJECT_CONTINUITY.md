@@ -36,34 +36,42 @@ This file is updated after every agent session. It serves as the single source o
      - `corruption` → شكوى فساد
      - `infrastructure` → البنية التحتية
      - `other` → أخرى
-   - Fixed dropdown hover/focus styling: added `className` on `<SelectContent>` to override `data-highlighted` item color from the green accent (`oklch(0.55 0.18 150)`) to navy/blue primary (`oklch(0.30 0.09 245)`) for this specific dropdown only — using Tailwind arbitrary selector `[&_[data-slot='select-item'][data-highlighted]]:bg-primary/10 [&_[data-slot='select-item'][data-highlighted]]:text-primary`.
-   - Staff/admin complaint categories in `ComplaintsListPage.tsx`, `ComplaintDetailsPage.tsx`, `ComplaintTrackPage.tsx`, `ReportsPage.tsx` are **untouched** — no split into `citizenComplaintTypeOptions`/`internalComplaintTypeOptions` was needed since the citizen form uses inline `<SelectItem>` values, not a shared constant.
+   - Fixed dropdown hover/focus styling: wrapped the `<Select>` in a `<div style={{'--accent': 'var(--primary)', '--accent-foreground': 'var(--primary-foreground)'}}>`  to override the CSS custom properties locally, so `focus:bg-accent` in `SelectItem` resolves to navy/blue primary instead of the green accent for this specific dropdown. This is scoped to the wrapper div and does not affect other selects on the page.
+
+4. **`corruption` label added to all staff/admin complaint type label maps**
+   - `src/pages/ComplaintDetailsPage.tsx` typeLabels — `corruption: 'شكوى فساد'`
+   - `src/pages/ComplaintsListPage.tsx` typeLabels — `corruption: 'شكوى فساد'`
+   - `src/pages/ComplaintTrackPage.tsx` typeLabels — `corruption: 'شكوى فساد'`
+   - `src/pages/ReportsPage.tsx` complaintTypeLabels — `corruption: 'شكوى فساد'`
+   - Also normalised `heating_network` label from `'طلب صيانة شبكة التدفئة'` to `'صيانة شبكة التدفئة'` across all four maps to match the citizen form label.
+   - Staff/admin complaint category **dropdowns** (create/update forms) are **untouched** — no split into `citizenComplaintTypeOptions`/`internalComplaintTypeOptions` was needed since the citizen form uses inline `<SelectItem>` values, not a shared constant.
 
 **Files changed:**
-- `src/pages/ComplaintDetailsPage.tsx` — project selector removed from update form
+- `src/pages/ComplaintDetailsPage.tsx` — project selector removed from update form; `corruption` label added; `heating_network` label normalised
 - `src/pages/TaskDetailsPage.tsx` — project selector removed from update form
-- `src/pages/ComplaintSubmitPage.tsx` — citizen categories updated; dropdown styled navy/blue
+- `src/pages/ComplaintSubmitPage.tsx` — citizen categories updated to 4; dropdown styled navy/blue via CSS var override
+- `src/pages/ComplaintsListPage.tsx` — `corruption` label added; `heating_network` label normalised
+- `src/pages/ComplaintTrackPage.tsx` — `corruption` label added; `heating_network` label normalised
+- `src/pages/ReportsPage.tsx` — `corruption` label added; `heating_network` label normalised
 - `PROJECT_CONTINUITY.md` — this entry
 
 **Files intentionally NOT touched:**
 - `src/pages/ContractDetailsPage.tsx` / `src/pages/ContractsListPage.tsx` — contracts are not in scope
-- `src/pages/ComplaintsListPage.tsx` / `src/pages/TasksListPage.tsx` — `project_id` in list-filter URL params is a filter/query param, not a create/update form field
+- `src/pages/TasksListPage.tsx` — `project_id` in list-filter URL params is a filter/query param, not a create/update form field
 - `src/services/api.ts` — `project_id` in API param types is not a form field
 - Backend, Alembic migrations, docker/nginx/SSL
 
 **Build result:** `npm run build` → ✓ 7331 modules transformed, no errors, no warnings.
 
-**Verification (`grep -rn` in src/ + PROJECT_CONTINUITY.md):**
-- `المشروع المرتبط` — appears only in `ContractDetailsPage.tsx` (contracts, out-of-scope) and read-only display in `ComplaintDetailsPage.tsx` (line 405, not a form)
+**Verification:**
+- `المشروع المرتبط` — appears only in `ContractDetailsPage.tsx` (out-of-scope contracts) and read-only display in `ComplaintDetailsPage.tsx` (not a form field)
 - `بدون مشروع` — appears only in `ContractDetailsPage.tsx` and `ContractsListPage.tsx` (out-of-scope contracts)
 - `ComplaintDetailsPage.tsx` update form — no `projectId` state, no project `<Select>` in form
 - `TaskDetailsPage.tsx` update form — no `projectId` state, no project `<Select>` in form
 - `ComplaintSubmitPage.tsx` — exactly 4 citizen options (heating_network, corruption, infrastructure, other)
-- `شكوى فساد` — appears in `ComplaintSubmitPage.tsx` only ✓
+- `شكوى فساد` — appears in `ComplaintSubmitPage.tsx` (form) and all 4 typeLabels maps ✓
 
-**Current project state:** Frontend builds clean. Project selector removed from complaint/task update forms. Citizen complaint dropdown shows exactly 4 categories with navy/blue hover styling. Backend untouched (still 595 tests).
-
-**Recommended next step:** Consider adding a `corruption` label mapping to the `typeLabels` object in `ComplaintDetailsPage.tsx` (line 47) and `ComplaintsListPage.tsx`/`ComplaintTrackPage.tsx` so that if a citizen submits with `corruption` type, staff views display "شكوى فساد" instead of a raw key.
+**Current project state:** Frontend builds clean. Project selector removed from complaint/task update forms. Citizen complaint dropdown shows exactly 4 categories with navy/blue hover styling. `corruption` type displays correctly in all staff views. Backend untouched (still 595 tests).
 
 ---
 

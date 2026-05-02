@@ -47,7 +47,7 @@ const priorityColors: Record<string, string> = {
 const typeLabels: Record<string, string> = {
   infrastructure: 'البنية التحتية', cleaning: 'النظافة', electricity: 'الكهرباء',
   water: 'المياه', roads: 'الطرق', lighting: 'الإنارة',
-  heating_network: 'طلب صيانة شبكة التدفئة', other: 'أخرى',
+  heating_network: 'صيانة شبكة التدفئة', corruption: 'شكوى فساد', other: 'أخرى',
 };
 
 const responsibleAuthorityOptions = [
