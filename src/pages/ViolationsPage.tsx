@@ -528,14 +528,17 @@ interface DetailDialogProps {
   violation: Violation | null;
 }
 
-function ViolationDetailDialog({ open, onOpenChange, violation }: DetailDialogProps) {
-  if (!violation) return null;
-  const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
     <div className="flex justify-between gap-4 py-1.5 border-b border-border/50 last:border-0">
       <span className="text-muted-foreground text-sm">{label}</span>
       <span className="text-sm font-medium text-right">{value ?? '-'}</span>
     </div>
   );
+}
+
+function ViolationDetailDialog({ open, onOpenChange, violation }: DetailDialogProps) {
+  if (!violation) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -547,14 +550,14 @@ function ViolationDetailDialog({ open, onOpenChange, violation }: DetailDialogPr
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-1 py-2">
-          <Row label="العنوان" value={violation.title} />
-          <Row
+          <DetailRow label="العنوان" value={violation.title} />
+          <DetailRow
             label="النوع"
             value={
               <Badge variant="outline">{TYPE_LABELS[violation.violation_type]}</Badge>
             }
           />
-          <Row
+          <DetailRow
             label="درجة الخطورة"
             value={
               <Badge className={SEVERITY_COLORS[violation.severity]}>
@@ -562,7 +565,7 @@ function ViolationDetailDialog({ open, onOpenChange, violation }: DetailDialogPr
               </Badge>
             }
           />
-          <Row
+          <DetailRow
             label="الحالة"
             value={
               <Badge className={STATUS_COLORS[violation.status]}>
@@ -570,13 +573,13 @@ function ViolationDetailDialog({ open, onOpenChange, violation }: DetailDialogPr
               </Badge>
             }
           />
-          <Row label="الموقع" value={violation.location_text} />
-          <Row label="المرجع القانوني" value={violation.legal_reference} />
-          <Row
+          <DetailRow label="الموقع" value={violation.location_text} />
+          <DetailRow label="المرجع القانوني" value={violation.legal_reference} />
+          <DetailRow
             label="قيمة الغرامة"
             value={violation.fine_amount ? Number(violation.fine_amount).toLocaleString('ar') : '-'}
           />
-          <Row
+          <DetailRow
             label="الموعد النهائي"
             value={
               violation.deadline_date
@@ -584,13 +587,13 @@ function ViolationDetailDialog({ open, onOpenChange, violation }: DetailDialogPr
                 : '-'
             }
           />
-          <Row label="معرّف البلدية" value={violation.municipality_id} />
-          <Row label="معرّف الحي" value={violation.district_id} />
-          <Row
+          <DetailRow label="معرّف البلدية" value={violation.municipality_id} />
+          <DetailRow label="معرّف الحي" value={violation.district_id} />
+          <DetailRow
             label="تاريخ الإنشاء"
             value={new Date(violation.created_at).toLocaleDateString('ar')}
           />
-          <Row
+          <DetailRow
             label="تاريخ الحل"
             value={
               violation.resolved_at

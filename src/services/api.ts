@@ -243,7 +243,7 @@ function looksLikeHtml(contentType: string | null, text: string): boolean {
  */
 async function readErrorBody(response: Response): Promise<{ detail: string | null; body: unknown }> {
   const contentType = response.headers.get('content-type');
-  let text = '';
+  let text: string;
   try {
     text = await response.text();
   } catch {
