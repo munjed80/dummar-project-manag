@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -28,6 +28,8 @@ import {
   ShieldWarning,
   CheckCircle,
   Link as LinkIcon,
+  PaperPlaneRight,
+  Stop,
 } from '@phosphor-icons/react';
 import {
   apiService,
@@ -373,8 +375,9 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
       )}
 
       {response.data.length === 0 && (
-        <div className="text-center py-6 text-sm text-slate-500">
-          لا توجد سجلات مطابقة.
+        <div className="text-center py-6 text-sm text-slate-400">
+          <p>لا توجد بيانات متاحة لهذا الاستعلام في الوقت الحالي.</p>
+          <p className="text-xs text-slate-600 mt-1">تأكد من وجود سجلات في النظام أو جرّب استعلاماً مختلفاً.</p>
         </div>
       )}
     </div>
@@ -409,40 +412,65 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
   // Track which context we've already auto-run for to avoid re-firing.
   const [autoRanFor, setAutoRanFor] = useState<string | null>(null);
 
+  // Prevent duplicate concurrent submissions and stale-response overwrites.
+  const loadingRef = useRef(false);
+  const requestIdRef = useRef(0);
+
   const runQuery = async (opts: {
     intent?: InternalBotIntent;
     question?: string;
     useContext?: boolean;
   }) => {
-    const useContext = opts.useContext && context;
+    // Prevent duplicate submissions while loading.
+    if (loadingRef.current) return;
+
+    const useCtx = opts.useContext && context;
     const q = opts.question?.trim() || question.trim() || undefined;
     const intent = opts.intent;
-    if (!useContext && !intent && !q) {
+    if (!useCtx && !intent && !q) {
       setError('اكتب سؤالاً أو اختر استعلاماً سريعاً.');
       return;
     }
+
+    // Stamp this request; any earlier in-flight response will be discarded.
+    const myId = ++requestIdRef.current;
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
-    setResponse(null);
+    // Intentionally do NOT clear `response` here so the previous answer
+    // stays visible while the new query loads.
     try {
       const res = await apiService.queryInternalBot(
-        useContext
+        useCtx
           ? {
               context_type: context!.contextType,
               context_id: context!.contextId,
             }
           : { intent, question: q },
       );
+      // Discard stale responses (e.g. user hit Stop or sent a second query).
+      if (requestIdRef.current !== myId) return;
       setResponse(res);
     } catch (e) {
+      if (requestIdRef.current !== myId) return;
       if (e instanceof ApiError) {
         setError(e.detail || e.message || 'تعذّر تنفيذ الاستعلام');
       } else {
         setError(describeLoadError(e, 'المساعد الذكي').message);
       }
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === myId) {
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
+  };
+
+  /** Stop the current query and discard its response. */
+  const handleStop = () => {
+    requestIdRef.current++;
+    setLoading(false);
+    loadingRef.current = false;
   };
 
   // Auto-run the contextual analysis the first time the drawer is opened
@@ -462,7 +490,12 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
   };
 
   const handleSend = () => {
-    void runQuery({ question: question.trim() || undefined });
+    const q = question.trim();
+    if (!q) {
+      setError('اكتب سؤالاً أولاً.');
+      return;
+    }
+    void runQuery({ question: q });
   };
 
   const promptsForTab: QuickPrompt[] =
@@ -590,33 +623,43 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 سؤال مخصص
               </p>
-              <Textarea
-                dir="rtl"
-                rows={3}
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
+              <div className="flex items-end gap-2">
+                <Textarea
+                  dir="rtl"
+                  rows={3}
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!loading) handleSend();
+                    }
+                  }}
+                  placeholder="مثال: كم عدد الشكاوى المفتوحة هذا الشهر؟"
+                  disabled={loading}
+                  className="flex-1 resize-none border-white/15 bg-white/5 text-slate-200 placeholder:text-slate-600 focus:border-sky-500 focus:ring-sky-500/20 text-sm"
+                />
+                {/* Circular send/stop button */}
+                <button
+                  type="button"
+                  title={loading ? 'إيقاف' : 'إرسال'}
+                  onClick={loading ? handleStop : handleSend}
+                  disabled={!loading && !question.trim()}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
+                    loading
+                      ? 'bg-red-600 hover:bg-red-500 text-white'
+                      : 'bg-sky-600 hover:bg-sky-500 text-white'
+                  }`}
+                >
+                  {loading
+                    ? <Stop size={16} weight="fill" />
+                    : <PaperPlaneRight size={16} weight="fill" />
                   }
-                }}
-                placeholder="مثال: كم عدد الشكاوى المفتوحة هذا الشهر؟"
-                disabled={loading}
-                className="resize-none border-white/15 bg-white/5 text-slate-200 placeholder:text-slate-600 focus:border-sky-500 focus:ring-sky-500/20 text-sm"
-              />
-              <Button
-                onClick={handleSend}
-                disabled={loading || !question.trim()}
-                className="w-full gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium"
-              >
-                {loading ? (
-                  <Spinner size={15} className="animate-spin" />
-                ) : (
-                  <Robot size={15} />
-                )}
-                {loading ? 'جاري التحليل...' : 'إرسال السؤال'}
-              </Button>
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-600">
+                Enter للإرسال · Shift+Enter لسطر جديد
+              </p>
             </div>
           )}
 
@@ -642,28 +685,42 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300">
-              <Warning size={14} className="mt-0.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Loading skeleton */}
-          {loading && (
-            <div className="space-y-3 animate-pulse">
-              <div className="h-24 rounded-lg bg-white/5" />
-              <div className="grid grid-cols-2 gap-2">
-                <div className="h-16 rounded-lg bg-white/5" />
-                <div className="h-16 rounded-lg bg-white/5" />
+            <div className="flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300">
+              <div className="flex items-start gap-2">
+                <Warning size={14} className="mt-0.5 shrink-0" />
+                <span className="flex-1">{error}</span>
               </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setError(null);
+                  void runQuery({ question: question.trim() || undefined });
+                }}
+                className="self-start gap-1.5 text-[11px] text-red-300 hover:text-red-100 hover:bg-red-900/30 h-auto py-1 px-2"
+              >
+                <ArrowClockwise size={12} />
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 
-          {/* Results */}
-          {!loading && response && (
-            response.intent === 'context_analysis'
-              ? <ContextAnalysisPanel response={response} />
-              : <ResultPanel response={response} />
+          {/* Thinking indicator */}
+          {loading && (
+            <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-950/30 px-3 py-2.5 text-xs text-sky-400">
+              <Spinner size={12} className="animate-spin shrink-0" />
+              <span className="animate-pulse">يفكر النظام...</span>
+            </div>
+          )}
+
+          {/* Results — kept visible while loading (above the thinking bar) */}
+          {response && (
+            <div className={loading ? 'opacity-50 pointer-events-none' : undefined}>
+              {response.intent === 'context_analysis'
+                ? <ContextAnalysisPanel response={response} />
+                : <ResultPanel response={response} />
+              }
+            </div>
           )}
 
           {/* Empty state */}

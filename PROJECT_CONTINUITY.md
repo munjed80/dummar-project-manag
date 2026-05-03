@@ -8,6 +8,64 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-03 — Smart Assistant & Internal Messages UX overhaul
+
+**Task:** Improve Smart Assistant and Internal Messages reliability and UX (frontend-focused).
+
+**Root cause of Smart Assistant delayed / empty responses:**
+1. **No loading guard** — `runQuery` did not check whether a request was already in-flight. Rapid clicks (or Enter key) fired multiple concurrent POST requests; the first to resolve set a (possibly stale or empty) response, then a later one could overwrite it, making it appear the first click "did nothing."
+2. **Response cleared immediately** — `setResponse(null)` at the start of every query erased the previous answer before the new one arrived. If the query took a moment, the user saw a blank panel (thinking there was no answer) and sometimes submitted again.
+3. **No stale-response protection** — without a request ID or AbortController pattern, an out-of-order response could overwrite a newer correct one.
+
+**Changes made:**
+
+#### `src/components/SmartAssistantDrawer.tsx`
+- Added `useRef` for `loadingRef` (sync guard) and `requestIdRef` (stale-response protection).
+- `runQuery` now early-returns if `loadingRef.current` is true → one click/Enter = exactly one request.
+- `requestIdRef` is incremented on each call; responses that arrive after a newer request was started are silently discarded.
+- Previous response is kept visible (with 50% opacity) while a new query loads, so the user always sees context.
+- Replaced the rectangular "إرسال السؤال" button with a circular send/stop button:
+  - **Not loading:** circular sky-blue button with filled `PaperPlaneRight` icon.
+  - **While loading:** circular red button with filled `Stop` (square) icon — calls `handleStop()` which invalidates the in-flight request and clears loading state.
+- Added a "يفكر النظام..." thinking indicator row (spinner + pulsing text) shown above the (dimmed) previous result while loading.
+- Replaced loading skeleton with the thinking row (no more blank skeleton that confused users into thinking the response had failed).
+- Improved empty-data Arabic message: "لا توجد بيانات متاحة لهذا الاستعلام في الوقت الحالي." + hint to try a different query.
+- Error state now includes an "إعادة المحاولة" retry button.
+- `handleSend` now validates the question is non-empty and shows a clear Arabic error if not, before calling `runQuery`.
+- Enter submits, Shift+Enter creates a new line — existing behavior confirmed and preserved.
+- Added helper hint text below textarea: "Enter للإرسال · Shift+Enter لسطر جديد".
+
+#### `src/pages/InternalMessagesPage.tsx`
+- **Mobile-responsive layout:** thread list panel now uses `w-full md:w-72` with `hidden md:flex` / `flex` toggling via a new `mobileShowThread` boolean state. On mobile, selecting a thread shows the conversation full-width; a "رجوع" (back) button in the thread header (visible only on `<md`) returns to the thread list.
+- **Optimistic message append:** `handleSend` now appends an optimistic `MessageItem` (with a temporary negative id) to `messages` immediately on send, then replaces it with the server-confirmed message. On failure, rolls back the optimistic entry and restores the draft. This eliminates the full-reload flash that made the UI feel slow.
+- Thread list still refreshes after send (to update unread counts and last-message previews) — but this happens in the background without blocking the UI.
+
+**Files changed:**
+- `src/components/SmartAssistantDrawer.tsx` — loading guard, stale-response protection, circular send/stop button, thinking indicator, empty-response message, retry button.
+- `src/pages/InternalMessagesPage.tsx` — mobile-responsive layout, optimistic send, back button.
+- `PROJECT_CONTINUITY.md` — this entry.
+
+**Files intentionally NOT touched:**
+- `backend/` — no backend bug confirmed; no migrations, Alembic, DB, or business-logic changes.
+- `src/components/messages/ContextMessagesPanel.tsx` — already correct (optimistic append already implemented, proper error/loading states, correct RTL alignment).
+- `deploy.sh`, `docker-compose.yml`, `nginx.conf`, `nginx-ssl.conf`, `ssl-setup.sh`.
+- No module renames, route remappings.
+
+**Commands run:**
+- `npm install` → dependencies installed.
+- `npm run build` → ✓ built in 984ms, no errors.
+- Backend not changed → backend tests not re-run (last known: 612 passed).
+
+**Validation (`rg`):**
+- Key symbols confirmed present in expected files: `SmartAssistant`, `InternalMessages`, `sendMessage`, `recommended_actions`, `thread`, `internal-bot` across `src/` and `backend/`.
+- `AbortController` not used (request-ID pattern used instead — simpler, no API service changes needed).
+
+**Current project state:** Build clean. Smart Assistant prevents duplicate submissions, shows thinking state, keeps previous answer visible while loading, has circular send/stop button. Internal Messages has mobile-friendly layout and optimistic message sending. Backend unchanged (612 tests still green from prior session).
+
+**Recommended next step:** Consider (a) adding AbortController support in `apiService.queryInternalBot` to actually cancel HTTP requests on stop, (b) adding a polling/WebSocket mechanism to Internal Messages for real-time updates, (c) fixing the pre-existing `react-hooks/exhaustive-deps` warnings.
+
+---
+
 ### Session: 2026-05-03 — Pre-governor-demo cleanup & error audit
 
 **Task:** Safe full-project cleanup before the governor demo. Find and fix visible bugs, broken pages, lint errors, and unsafe React patterns — without adding features, touching migrations/Alembic, deploy.sh, docker/nginx/SSL, renaming modules, or remapping routes.
