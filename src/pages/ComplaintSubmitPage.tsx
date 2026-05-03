@@ -206,20 +206,16 @@ export default function ComplaintSubmitPage() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2" style={{'--accent': 'var(--primary)', '--accent-foreground': 'var(--primary-foreground)'} as React.CSSProperties}>
                 <Label htmlFor="complaintType">نوع الطلب *</Label>
                 <Select value={complaintType} onValueChange={setComplaintType}>
                   <SelectTrigger>
                     <SelectValue placeholder="اختر نوع الطلب" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="heating_network">طلب صيانة شبكة التدفئة</SelectItem>
+                    <SelectItem value="heating_network">صيانة شبكة التدفئة</SelectItem>
+                    <SelectItem value="corruption">شكوى فساد</SelectItem>
                     <SelectItem value="infrastructure">البنية التحتية</SelectItem>
-                    <SelectItem value="cleaning">النظافة</SelectItem>
-                    <SelectItem value="electricity">الكهرباء</SelectItem>
-                    <SelectItem value="water">المياه</SelectItem>
-                    <SelectItem value="roads">الطرق</SelectItem>
-                    <SelectItem value="lighting">الإنارة</SelectItem>
                     <SelectItem value="other">أخرى</SelectItem>
                   </SelectContent>
                 </Select>

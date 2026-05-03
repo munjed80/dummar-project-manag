@@ -325,6 +325,51 @@ def scope_query(
 
 
 # ---------------------------------------------------------------------------
+# Sensitive complaint visibility (CORRUPTION)
+# ---------------------------------------------------------------------------
+# Citizen-submitted "شكوى فساد" (corruption) complaints are restricted to
+# admin-level / high-privilege staff. Backend filtering is the source of
+# truth — frontend hiding alone is not enough.
+# ---------------------------------------------------------------------------
+
+# Roles that may view CORRUPTION complaints. PROJECT_DIRECTOR is the
+# highest-privilege role in this codebase (admin / governor-level).
+SENSITIVE_COMPLAINT_VIEW_ROLES: Set[UserRole] = {
+    UserRole.PROJECT_DIRECTOR,
+}
+
+
+def can_view_sensitive_complaints(user: Optional[User]) -> bool:
+    """Return True iff the user may see CORRUPTION-typed complaints."""
+    if user is None or not user.is_active:
+        return False
+    return user.role in SENSITIVE_COMPLAINT_VIEW_ROLES
+
+
+def filter_sensitive_complaints(query: Query, user: Optional[User]) -> Query:
+    """Hide CORRUPTION complaints from users without sensitive-view rights.
+
+    Use on any query over the Complaint model that is exposed to internal
+    staff. Citizen public-tracking and "my complaints" endpoints do NOT use
+    this filter because the citizen owns the row.
+    """
+    if can_view_sensitive_complaints(user):
+        return query
+    # Local import to avoid a circular import (models import permissions
+    # via the API layer indirectly).
+    from app.models.complaint import Complaint, ComplaintType
+
+    return query.filter(Complaint.complaint_type != ComplaintType.CORRUPTION)
+
+
+def is_sensitive_complaint(complaint: object) -> bool:
+    """Return True if the given Complaint instance is a CORRUPTION complaint."""
+    from app.models.complaint import ComplaintType
+
+    return getattr(complaint, "complaint_type", None) == ComplaintType.CORRUPTION
+
+
+# ---------------------------------------------------------------------------
 # Helpers used by /auth/me
 # ---------------------------------------------------------------------------
 

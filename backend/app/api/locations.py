@@ -44,6 +44,7 @@ from app.schemas.location import (
     StreetCreate, StreetResponse,
 )
 from app.api.deps import get_current_internal_user, require_role
+from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_location_event
 
@@ -154,12 +155,10 @@ def list_locations(
 
     # Operational filters (subquery-based)
     if has_open_complaints:
-        subq = (
-            db.query(Complaint.location_id)
-            .filter(Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]))
-            .distinct()
-            .subquery()
-        )
+        complaint_subq_base = perms.filter_sensitive_complaints(
+            db.query(Complaint.location_id), current_user
+        ).filter(Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]))
+        subq = complaint_subq_base.distinct().subquery()
         query = query.filter(Location.id.in_(db.query(subq)))
 
     if has_active_tasks:
@@ -195,7 +194,9 @@ def get_location_tree(
 
     # Pre-compute counts
     complaint_counts = dict(
-        db.query(Complaint.location_id, func.count(Complaint.id))
+        perms.filter_sensitive_complaints(
+            db.query(Complaint.location_id, func.count(Complaint.id)), current_user
+        )
         .filter(Complaint.location_id.isnot(None))
         .group_by(Complaint.location_id)
         .all()
@@ -281,10 +282,12 @@ def get_location_detail(
     all_ids = [location_id] + descendant_ids
 
     # Complaints
-    complaint_count = db.query(func.count(Complaint.id)).filter(
-        Complaint.location_id.in_(all_ids)
-    ).scalar() or 0
-    open_complaint_count = db.query(func.count(Complaint.id)).filter(
+    complaint_count = perms.filter_sensitive_complaints(
+        db.query(func.count(Complaint.id)), current_user
+    ).filter(Complaint.location_id.in_(all_ids)).scalar() or 0
+    open_complaint_count = perms.filter_sensitive_complaints(
+        db.query(func.count(Complaint.id)), current_user
+    ).filter(
         Complaint.location_id.in_(all_ids),
         Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]),
     ).scalar() or 0
@@ -352,6 +355,7 @@ def get_location_complaints(
 
     all_ids = [location_id] + _get_descendant_ids(db, location_id)
     query = db.query(Complaint).filter(Complaint.location_id.in_(all_ids))
+    query = perms.filter_sensitive_complaints(query, current_user)
     if status_filter:
         query = query.filter(Complaint.status == status_filter)
 
@@ -477,8 +481,10 @@ def get_location_activity(
 
     # Recent complaints
     recent_complaints = (
-        db.query(Complaint)
-        .filter(Complaint.location_id.in_(all_ids))
+        perms.filter_sensitive_complaints(
+            db.query(Complaint).filter(Complaint.location_id.in_(all_ids)),
+            current_user,
+        )
         .order_by(Complaint.created_at.desc())
         .limit(limit)
         .all()
@@ -612,8 +618,12 @@ def get_all_location_stats(
     result = []
 
     for loc in locations:
-        cc = db.query(func.count(Complaint.id)).filter(Complaint.location_id == loc.id).scalar() or 0
-        occ = db.query(func.count(Complaint.id)).filter(
+        cc = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(Complaint.location_id == loc.id).scalar() or 0
+        occ = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(
             Complaint.location_id == loc.id,
             Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]),
         ).scalar() or 0
@@ -677,8 +687,12 @@ def get_location_report_summary(
     # Compute stats for each location
     stats_list = []
     for loc in all_locations:
-        cc = db.query(func.count(Complaint.id)).filter(Complaint.location_id == loc.id).scalar() or 0
-        occ = db.query(func.count(Complaint.id)).filter(
+        cc = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(Complaint.location_id == loc.id).scalar() or 0
+        occ = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(
             Complaint.location_id == loc.id,
             Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]),
         ).scalar() or 0
@@ -870,8 +884,12 @@ def export_location_report_csv(
         lt = loc.location_type.value if hasattr(loc.location_type, 'value') else str(loc.location_type)
         st = loc.status.value if hasattr(loc.status, 'value') else str(loc.status)
 
-        cc = db.query(func.count(Complaint.id)).filter(Complaint.location_id == loc.id).scalar() or 0
-        occ = db.query(func.count(Complaint.id)).filter(
+        cc = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(Complaint.location_id == loc.id).scalar() or 0
+        occ = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(
             Complaint.location_id == loc.id,
             Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]),
         ).scalar() or 0
@@ -970,11 +988,13 @@ def get_location_map_data(
 
     # Complaints with coordinates
     complaints = (
-        db.query(Complaint)
-        .filter(
-            Complaint.location_id.in_(all_ids),
-            Complaint.latitude.isnot(None),
-            Complaint.longitude.isnot(None),
+        perms.filter_sensitive_complaints(
+            db.query(Complaint).filter(
+                Complaint.location_id.in_(all_ids),
+                Complaint.latitude.isnot(None),
+                Complaint.longitude.isnot(None),
+            ),
+            current_user,
         )
         .order_by(Complaint.created_at.desc())
         .limit(50)
@@ -1123,7 +1143,9 @@ def get_geo_dashboard(
         lt = loc.location_type.value if hasattr(loc.location_type, 'value') else str(loc.location_type)
         st = loc.status.value if hasattr(loc.status, 'value') else str(loc.status)
 
-        occ = db.query(func.count(Complaint.id)).filter(
+        occ = perms.filter_sensitive_complaints(
+            db.query(func.count(Complaint.id)), current_user
+        ).filter(
             Complaint.location_id == loc.id,
             Complaint.status.in_([s.value for s in _OPEN_COMPLAINT_STATUSES]),
         ).scalar() or 0
@@ -1174,10 +1196,12 @@ def get_geo_dashboard(
 
     # Recent geo-located complaints (last 50)
     recent_complaints = (
-        db.query(Complaint)
-        .filter(
-            Complaint.latitude.isnot(None),
-            Complaint.longitude.isnot(None),
+        perms.filter_sensitive_complaints(
+            db.query(Complaint).filter(
+                Complaint.latitude.isnot(None),
+                Complaint.longitude.isnot(None),
+            ),
+            current_user,
         )
         .order_by(Complaint.created_at.desc())
         .limit(50)

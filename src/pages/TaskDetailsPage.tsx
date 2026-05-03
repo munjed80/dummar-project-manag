@@ -66,7 +66,6 @@ export default function TaskDetailsPage() {
   const [newStatus, setNewStatus] = useState('');
   const [assignee, setAssignee] = useState('');
   const [teamId, setTeamId] = useState('');
-  const [projectId, setProjectId] = useState('');
   const [notes, setNotes] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -95,7 +94,6 @@ export default function TaskDetailsPage() {
         // Pre-fill selectors from current task values so the user sees current
         // assignment without needing to re-pick.
         setTeamId(taskData?.team_id ? String(taskData.team_id) : '');
-        setProjectId(taskData?.project_id ? String(taskData.project_id) : '');
         // Fetch the linked complaint (if any) so we can render its tracking
         // number instead of a bare numeric id — gives operators a citizen-
         // facing identifier on the task page.
@@ -125,9 +123,6 @@ export default function TaskDetailsPage() {
       // so an unchanged form does not blank existing values.
       if (teamId !== (task?.team_id ? String(task.team_id) : '')) {
         updateData.team_id = teamId ? Number(teamId) : null;
-      }
-      if (projectId !== (task?.project_id ? String(task.project_id) : '')) {
-        updateData.project_id = projectId ? Number(projectId) : null;
       }
       const result = await apiService.updateTask(Number(id), updateData, { afterRepairPhotos: afterRepairFiles });
       if (result?.queued) {
@@ -441,18 +436,6 @@ export default function TaskDetailsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">المشروع</label>
-                <Select value={projectId || '__none__'} onValueChange={(v) => setProjectId(v === '__none__' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="بدون مشروع" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— بدون مشروع —</SelectItem>
-                    {projects.map((p: any) => (
-                      <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <Textarea
               placeholder="ملاحظات..."
@@ -483,8 +466,7 @@ export default function TaskDetailsPage() {
               }}
               disabled={
                 !newStatus && !notes && !assignee && afterRepairFiles.length === 0 &&
-                teamId === (task?.team_id ? String(task.team_id) : '') &&
-                projectId === (task?.project_id ? String(task.project_id) : '') ||
+                teamId === (task?.team_id ? String(task.team_id) : '') ||
                 updating
               }
             >
