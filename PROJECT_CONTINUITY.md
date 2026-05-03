@@ -8,6 +8,60 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-03 — Pre-governor-demo cleanup & error audit
+
+**Task:** Safe full-project cleanup before the governor demo. Find and fix visible bugs, broken pages, lint errors, and unsafe React patterns — without adding features, touching migrations/Alembic, deploy.sh, docker/nginx/SSL, renaming modules, or remapping routes.
+
+**Audit findings (overall: codebase is in good shape):**
+
+1. **Build:** `npm run build` passes (✓ built in 1.65s, no errors).
+2. **Lint baseline:** 13 errors + 14 warnings.
+3. **Routing & menu links:** all `NAV_ENTRIES` paths in `src/components/navigation/nav-config.ts` map to live `<Route>` entries in `src/App.tsx`. Route names are intentionally preserved (`/investment-properties` labelled "الأصول", `/complaints-map` labelled "خريطة العمليات", `/complaints/new` and `/complaints/track` for citizens). Per the rules ("do not remap routes"), these were not renamed.
+4. **Sensitive corruption complaints:** already comprehensively gated backend-side per session 2026-05-02 (612 backend tests). Frontend label "شكوى فساد" appears in `ComplaintSubmitPage` (citizen dropdown), `ComplaintTrackPage` (citizen view of own complaint — allowed), `ReportsPage` / `ComplaintsListPage` / `ComplaintDetailsPage` (only as a label-map entry; backend filters the data so non-admins never see those records). No change needed.
+5. **Loading skeletons:** `src/components/ui/skeleton.tsx` already uses neutral navy `bg-[#E8EEF6]` (no green/emerald). Other green/emerald usages are intentional success/active status badges and do not violate the navy/blue identity rule.
+6. **API error handling:** `src/services/api.ts` already strips raw HTML from upstream 502/503/504 pages (`looksLikeHtml`) so the UI never renders raw markup. Pages use the existing loading/empty/error patterns; no broken pages observed in audit.
+7. **`console.log` / `TODO` / `FIXME` / `HTTP 502` / `الخادم غير متاح` searches:** only legitimate references found (one `TODO` in `ExecutiveBriefingPage.tsx` line 159 documents a future KPI endpoint — left as-is, not a bug).
+
+**Real bugs fixed:**
+
+1. **`src/pages/ViolationsPage.tsx` — component-inside-component bug (13 lint errors).** `ViolationDetailDialog` defined an inner `Row` component **inside** its render body. Per React semantics this re-creates the component on every render, destroying any internal state and causing the entire detail-row subtree to remount each time the dialog re-renders. Extracted to a top-level `DetailRow` component above `ViolationDetailDialog` and updated all 12 call sites (`<Row …/>` → `<DetailRow …/>`). No behavior change for the user, but eliminates the unnecessary remount and resolves all 13 `react-hooks/static-components` errors.
+
+2. **`src/services/api.ts` — `no-useless-assignment` lint error.** The `text = ''` initializer in `readErrorBody` was never observed (the only path that didn't reassign `text` returned early in the `catch`). Changed `let text = ''` to `let text: string` to make the dataflow explicit and silence the lint rule. No behavior change.
+
+**Files changed:**
+- `src/pages/ViolationsPage.tsx` — extracted `DetailRow` to module scope; renamed 12 JSX call sites.
+- `src/services/api.ts` — removed dead initializer in `readErrorBody`.
+- `PROJECT_CONTINUITY.md` — this entry.
+
+**Files intentionally NOT touched (per rules):**
+- `backend/` (no confirmed backend bug → no migrations / Alembic changes / DB structure changes / business-logic changes).
+- `deploy.sh`, `docker-compose.yml`, `nginx.conf`, `nginx-ssl.conf`, `ssl-setup.sh`.
+- Any module / file renames, route remappings.
+
+**Commands run:**
+- `npm install` → 268 packages.
+- `npm run build` → ✓ built in 1.65s, no errors.
+- `npm run lint` → **0 errors**, 14 warnings remain (5× `react-hooks/exhaustive-deps` + 9× `react-refresh/only-export-components` — all pre-existing in shadcn UI primitives or intentional `fetchData` patterns; not introduced by this change).
+- Backend not changed, so backend tests not re-run (last known: 612 passed).
+
+**Verification (`rg`):**
+- `TODO|FIXME` in `src/`: only `ExecutiveBriefingPage.tsx:159` (documented future KPI) — not a bug.
+- `console.log` in `src/`: only one comment reference in `api.ts` — no actual `console.log` calls.
+- `bg-green|emerald` in `src/`: all status-badge / success-state usages or skeleton comment.
+- `الخادم غير متاح|HTTP 502` in `src/`: 0 matches (no leaked raw upstream messages).
+- `شكوى فساد` in `src/`: 5 expected files (citizen form, track, list, details, reports labels) — backend filters data per role.
+
+**Remaining risks / known issues before demo (none blocking):**
+- 5× `react-hooks/exhaustive-deps` warnings on `fetchData` in detail pages — pre-existing pattern; safe (each page declares `fetchData` once and intentionally re-fetches only on id change). Not changed to avoid introducing infinite-loop risk.
+- 9× `react-refresh/only-export-components` warnings on shadcn UI primitives (badge / button / form / sheet / sidebar / sonner / toggle) and `AuthContext.tsx` — these are upstream shadcn patterns; do not affect production build, only Vite HMR speed in dev.
+- Route paths use existing names (e.g. `/complaints/new` instead of `/citizen/new-complaint`, `/investment-properties` instead of `/assets`, `/complaints-map` instead of `/operations-map`). Spec listed aspirational citizen-friendly URLs but rules forbid remapping; menu links use the real paths and resolve correctly.
+
+**Current project state:** Demo-ready. Clean lint (0 errors), green build, 612 backend tests still green from prior session, no console errors expected on the audited pages.
+
+**Recommended next step:** Demo. Post-demo, consider (a) fixing the 5× `useEffect` `fetchData` warnings by wrapping in `useCallback`, (b) splitting shadcn primitive constants into separate files to silence the 9× `react-refresh` warnings, (c) deciding whether the spec's citizen-friendly URL aliases (`/citizen/new-complaint`, `/citizen/track`, `/assets`, `/operations-map`) should be added as aliases to the existing routes.
+
+---
+
 ### Session: 2026-05-02 — Restrict CORRUPTION (شكوى فساد) complaint visibility to admins
 
 **Task completed:** Backend-enforced visibility restriction for citizen-submitted "شكوى فساد" complaints, plus a discreet admin badge in the UI. The previous session had added the `corruption` value to the citizen dropdown but the backend `ComplaintType` enum did not include it, and no scoping was in place — non-admin staff would have seen these sensitive complaints in lists, dashboards, search, reports, and detail pages.
