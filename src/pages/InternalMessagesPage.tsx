@@ -204,7 +204,7 @@ export default function InternalMessagesPage() {
   }, [currentUser?.id]);
 
   const handleSend = async () => {
-    if (!selectedThreadId) return;
+    if (!selectedThreadId || sending) return;
     const body = draft.trim();
     if (!body) return;
     // Optimistic: append immediately so user sees the message without a reload flash.

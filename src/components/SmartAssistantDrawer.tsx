@@ -485,6 +485,7 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
   }, [open, context?.contextType, context?.contextId]);
 
   const handlePrompt = (p: QuickPrompt) => {
+    if (loading) return;
     setQuestion(p.question);
     void runQuery({ intent: p.intent, question: p.question });
   };

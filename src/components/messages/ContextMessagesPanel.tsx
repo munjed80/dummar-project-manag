@@ -90,7 +90,7 @@ export function ContextMessagesPanel({
   }, [messages]);
 
   const handleSend = async () => {
-    if (!thread) return;
+    if (!thread || sending) return;
     const body = draft.trim();
     if (!body) return;
     setSending(true);
@@ -154,7 +154,7 @@ export function ContextMessagesPanel({
                     return (
                       <div
                         key={m.id}
-                        className={`flex ${isMine ? 'justify-start' : 'justify-end'}`}
+                        className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
                           className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${

@@ -113,6 +113,7 @@ export default function InternalBotPage() {
   };
 
   const handlePreset = (preset: Preset) => {
+    if (loading) return;
     setIntent(preset.intent);
     setQuestion(preset.question);
     void runQuery({ intent: preset.intent, question: preset.question });
