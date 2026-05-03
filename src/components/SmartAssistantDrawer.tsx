@@ -28,8 +28,8 @@ import {
   ShieldWarning,
   CheckCircle,
   Link as LinkIcon,
-  PaperPlaneTilt,
-  StopCircle,
+  PaperPlaneRight,
+  Stop,
 } from '@phosphor-icons/react';
 import {
   apiService,
@@ -375,8 +375,9 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
       )}
 
       {response.data.length === 0 && (
-        <div className="text-center py-6 text-sm text-slate-500">
-          لا توجد سجلات مطابقة.
+        <div className="text-center py-6 text-sm text-slate-400">
+          <p>لا توجد بيانات متاحة لهذا الاستعلام في الوقت الحالي.</p>
+          <p className="text-xs text-slate-600 mt-1">تأكد من وجود سجلات في النظام أو جرّب استعلاماً مختلفاً.</p>
         </div>
       )}
     </div>
@@ -410,60 +411,66 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
   const [response, setResponse] = useState<InternalBotResponse | null>(null);
   // Track which context we've already auto-run for to avoid re-firing.
   const [autoRanFor, setAutoRanFor] = useState<string | null>(null);
-  // AbortController ref for cancelling in-flight requests
-  const abortRef = useRef<AbortController | null>(null);
 
-  const stopRequest = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setLoading(false);
-  };
+  // Prevent duplicate concurrent submissions and stale-response overwrites.
+  const loadingRef = useRef(false);
+  const requestIdRef = useRef(0);
 
   const runQuery = async (opts: {
     intent?: InternalBotIntent;
     question?: string;
     useContext?: boolean;
   }) => {
-    // Prevent duplicate in-flight requests
-    if (loading) return;
-    const useContext = opts.useContext && context;
+    // Prevent duplicate submissions while loading.
+    if (loadingRef.current) return;
+
+    const useCtx = opts.useContext && context;
     const q = opts.question?.trim() || question.trim() || undefined;
     const intent = opts.intent;
-    if (!useContext && !intent && !q) {
+    if (!useCtx && !intent && !q) {
       setError('اكتب سؤالاً أو اختر استعلاماً سريعاً.');
       return;
     }
-    // Cancel any previous request
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+
+    // Stamp this request; any earlier in-flight response will be discarded.
+    const myId = ++requestIdRef.current;
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
-    // Do NOT clear response — keep previous answer visible while loading
+    // Intentionally do NOT clear `response` here so the previous answer
+    // stays visible while the new query loads.
     try {
       const res = await apiService.queryInternalBot(
-        useContext
+        useCtx
           ? {
               context_type: context!.contextType,
               context_id: context!.contextId,
             }
           : { intent, question: q },
       );
-      if (controller.signal.aborted) return;
+      // Discard stale responses (e.g. user hit Stop or sent a second query).
+      if (requestIdRef.current !== myId) return;
       setResponse(res);
     } catch (e) {
-      if (controller.signal.aborted) return;
+      if (requestIdRef.current !== myId) return;
       if (e instanceof ApiError) {
         setError(e.detail || e.message || 'تعذّر تنفيذ الاستعلام');
       } else {
         setError(describeLoadError(e, 'المساعد الذكي').message);
       }
     } finally {
-      if (!controller.signal.aborted) {
+      if (requestIdRef.current === myId) {
         setLoading(false);
-        abortRef.current = null;
+        loadingRef.current = false;
       }
     }
+  };
+
+  /** Stop the current query and discard its response. */
+  const handleStop = () => {
+    requestIdRef.current++;
+    setLoading(false);
+    loadingRef.current = false;
   };
 
   // Auto-run the contextual analysis the first time the drawer is opened
@@ -484,8 +491,12 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
   };
 
   const handleSend = () => {
-    if (loading) return;
-    void runQuery({ question: question.trim() || undefined });
+    const q = question.trim();
+    if (!q) {
+      setError('اكتب سؤالاً أولاً.');
+      return;
+    }
+    void runQuery({ question: q });
   };
 
   const promptsForTab: QuickPrompt[] =
@@ -560,20 +571,17 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
                 </span>
               </div>
               <Button
-                onClick={loading ? stopRequest : () => void runQuery({ useContext: true })}
+                onClick={() => void runQuery({ useContext: true })}
+                disabled={loading}
                 size="sm"
-                className={`w-full gap-2 font-medium ${
-                  loading
-                    ? 'bg-red-600 hover:bg-red-500 text-white'
-                    : 'bg-sky-600 hover:bg-sky-500 text-white'
-                }`}
+                className="w-full gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium"
               >
                 {loading ? (
-                  <StopCircle size={14} weight="fill" />
+                  <Spinner size={14} className="animate-spin" />
                 ) : (
                   <Robot size={14} />
                 )}
-                {loading ? 'إيقاف' : 'حلّل هذه الشكوى'}
+                حلّل هذه الشكوى
               </Button>
             </div>
           )}
@@ -632,45 +640,44 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
                   disabled={loading}
                   className="flex-1 resize-none border-white/15 bg-white/5 text-slate-200 placeholder:text-slate-600 focus:border-sky-500 focus:ring-sky-500/20 text-sm"
                 />
-                {/* Circular send / stop button */}
-                <Button
-                  onClick={loading ? stopRequest : handleSend}
+                {/* Circular send/stop button */}
+                <button
+                  type="button"
+                  title={loading ? 'إيقاف' : 'إرسال'}
+                  onClick={loading ? handleStop : handleSend}
                   disabled={!loading && !question.trim()}
-                  size="icon"
-                  className={`h-10 w-10 shrink-0 rounded-full font-medium transition-colors ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
                     loading
                       ? 'bg-red-600 hover:bg-red-500 text-white'
                       : 'bg-sky-600 hover:bg-sky-500 text-white'
                   }`}
-                  title={loading ? 'إيقاف' : 'إرسال'}
                 >
-                  {loading ? (
-                    <StopCircle size={18} weight="fill" />
-                  ) : (
-                    <PaperPlaneTilt size={18} weight="fill" />
-                  )}
-                </Button>
+                  {loading
+                    ? <Stop size={16} weight="fill" />
+                    : <PaperPlaneRight size={16} weight="fill" />
+                  }
+                </button>
               </div>
+              <p className="text-[10px] text-slate-600">
+                Enter للإرسال · Shift+Enter لسطر جديد
+              </p>
             </div>
           )}
 
           {/* For daily/suggest tabs — show a run-all button */}
           {activeTab !== 'ask' && (
             <Button
-              onClick={loading ? stopRequest : () => handlePrompt(promptsForTab[0])}
-              className={`w-full gap-2 font-medium ${
-                loading
-                  ? 'bg-red-600 hover:bg-red-500 text-white'
-                  : 'bg-sky-600 hover:bg-sky-500 text-white'
-              }`}
+              onClick={() => handlePrompt(promptsForTab[0])}
+              disabled={loading}
+              className="w-full gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium"
             >
               {loading ? (
-                <StopCircle size={15} weight="fill" />
+                <Spinner size={15} className="animate-spin" />
               ) : (
                 <ArrowClockwise size={15} />
               )}
               {loading
-                ? 'إيقاف'
+                ? 'جاري التحليل...'
                 : activeTab === 'daily'
                   ? 'تحديث ملخص اليوم'
                   : 'توليد اقتراحات'}
@@ -679,30 +686,45 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300">
-              <Warning size={14} className="mt-0.5 shrink-0" />
-              <span>{error}</span>
+            <div className="flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300">
+              <div className="flex items-start gap-2">
+                <Warning size={14} className="mt-0.5 shrink-0" />
+                <span className="flex-1">{error}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setError(null);
+                  void runQuery({ question: question.trim() || undefined });
+                }}
+                className="self-start gap-1.5 text-[11px] text-red-300 hover:text-red-100 hover:bg-red-900/30 h-auto py-1 px-2"
+              >
+                <ArrowClockwise size={12} />
+                إعادة المحاولة
+              </Button>
             </div>
           )}
 
-          {/* Thinking state — shown above the previous response while loading */}
+          {/* Thinking indicator */}
           {loading && (
-            <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-950/20 px-3 py-2 text-xs text-sky-300 animate-pulse">
-              <Spinner size={13} className="animate-spin shrink-0" />
-              <span>جاري التحليل...</span>
+            <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-950/30 px-3 py-2.5 text-xs text-sky-400">
+              <Spinner size={12} className="animate-spin shrink-0" />
+              <span className="animate-pulse">يفكر النظام...</span>
             </div>
           )}
 
-          {/* Results — visible even while loading a new query */}
+          {/* Results — kept visible while loading (above the thinking bar) */}
           {response && (
-            <div className={loading ? 'opacity-60 pointer-events-none transition-opacity' : ''}>
+            <div className={loading ? 'opacity-50 pointer-events-none' : undefined}>
               {response.intent === 'context_analysis'
                 ? <ContextAnalysisPanel response={response} />
-                : <ResultPanel response={response} />}
+                : <ResultPanel response={response} />
+              }
             </div>
           )}
 
-          {/* Empty state — only when not loading and no response */}
+          {/* Empty state */}
           {!loading && !response && !error && (
             <div className="flex flex-col items-center justify-center py-10 text-slate-600">
               <Robot size={40} className="mb-3 opacity-30" />

@@ -93,9 +93,9 @@ export default function InternalMessagesPage() {
   const [draft, setDraft] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [threadSearch, setThreadSearch] = useState('');
+  const [mobileShowThread, setMobileShowThread] = useState(false);
 
-  // New thread dialog state
+  const [threadSearch, setThreadSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -103,6 +103,8 @@ export default function InternalMessagesPage() {
   const [userSearch, setUserSearch] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Counter for generating unique negative temporary IDs for optimistic messages.
+  const optimisticIdCounterRef = useRef(0);
 
   const userMap = useMemo(() => {
     const map = new Map<number, User>();
@@ -205,13 +207,27 @@ export default function InternalMessagesPage() {
     if (!selectedThreadId || sending) return;
     const body = draft.trim();
     if (!body) return;
+    // Optimistic: append immediately so user sees the message without a reload flash.
+    const optimisticMsg: MessageItem = {
+      id: --optimisticIdCounterRef.current, // unique negative id, never collides with server ids
+      thread_id: selectedThreadId,
+      sender_user_id: currentUser?.id ?? 0,
+      body,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setDraft('');
     setSending(true);
     try {
-      await apiService.sendMessage(selectedThreadId, { body });
-      setDraft('');
-      await loadThread(selectedThreadId);
-      await loadThreads(selectedThreadId);
+      const sent = await apiService.sendMessage(selectedThreadId, { body });
+      // Replace optimistic entry with the real one from the server.
+      setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? sent : m)));
+      // Refresh thread list (unread counts, last message preview).
+      void loadThreads(selectedThreadId);
     } catch (e) {
+      // Roll back the optimistic message on failure.
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      setDraft(body);
       const msg = e instanceof ApiError ? (e.detail || e.message) : 'تعذّر إرسال الرسالة';
       toast.error(msg);
     } finally {
@@ -349,8 +365,11 @@ export default function InternalMessagesPage() {
 
         {/* Main layout: thread list + conversation */}
         <div className="flex flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
-          {/* ── Thread list panel ── */}
-          <div className="flex w-72 shrink-0 flex-col border-l border-border bg-muted/30">
+          {/* ── Thread list panel (hidden on mobile when a thread is selected) ── */}
+          <div className={[
+            'flex w-full shrink-0 flex-col border-l border-border bg-muted/30 md:w-72',
+            mobileShowThread ? 'hidden md:flex' : 'flex',
+          ].join(' ')}>
             {/* Search */}
             <div className="border-b border-border p-3">
               <div className="relative">
@@ -392,7 +411,10 @@ export default function InternalMessagesPage() {
                       <li key={t.id}>
                         <button
                           type="button"
-                          onClick={() => setSelectedThreadId(t.id)}
+                          onClick={() => {
+                            setSelectedThreadId(t.id);
+                            setMobileShowThread(true);
+                          }}
                           className={`w-full px-3 py-3 text-right transition-colors ${
                             isActive
                               ? 'bg-sky-500/10 border-r-2 border-sky-500'
@@ -452,12 +474,24 @@ export default function InternalMessagesPage() {
             </div>
           </div>
 
-          {/* ── Conversation panel ── */}
-          <div className="flex flex-1 flex-col overflow-hidden bg-background">
+          {/* ── Conversation panel (full-width on mobile when a thread is selected) ── */}
+          <div className={[
+            'flex flex-col overflow-hidden bg-background',
+            mobileShowThread ? 'w-full' : 'hidden md:flex md:flex-1',
+          ].join(' ')}>
             {selectedThread ? (
               <>
                 {/* Thread header */}
                 <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+                  {/* Mobile: back button */}
+                  <button
+                    type="button"
+                    onClick={() => setMobileShowThread(false)}
+                    className="md:hidden flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted transition-colors"
+                    title="رجوع"
+                  >
+                    <ArrowClockwise size={16} className="rotate-180" />
+                  </button>
                   <div>
                     {selectedThread.thread_type === 'group' ? (
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
