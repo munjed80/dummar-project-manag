@@ -8,7 +8,62 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
-### Session: 2026-05-03 — Pre-governor-demo cleanup & error audit
+### Session: 2026-05-03 — Mobile UI fixes, Smart Assistant reliability, Internal Messages fixes
+
+**Task:** Fix remaining mobile UI issues: sidebar close button, loading skeleton flashes, Smart Assistant duplicate-request prevention + send/stop button, Internal Messages alignment and double-send guard.
+
+**What was done:**
+
+1. **Mobile sidebar close button (`src/components/Layout.tsx`)**
+   - Added `X` icon button on the **left** side of the `SheetHeader` in the mobile drawer.
+   - Arabic title remains right-aligned (RTL). Clicking X calls `setMobileOpen(false)`.
+   - Added `X` to phosphor-icons import list.
+
+2. **Smart Assistant duplicate-request prevention + send/stop button (`src/components/SmartAssistantDrawer.tsx`)**
+   - Added `useRef<AbortController>` to track and cancel in-flight requests.
+   - `runQuery` now returns early if `loading === true` (prevents duplicate calls).
+   - Removed `setResponse(null)` at the start of `runQuery` — previous answer stays visible while a new query loads (shown dimmed with `opacity-60`).
+   - Added a compact "جاري التحليل..." thinking bar (pulsing) above the old response while loading.
+   - "إرسال السؤال" button replaced with a **circular send/stop** button: sky-blue `PaperPlaneTilt` when idle → red `StopCircle` when loading. Clicking while loading calls `stopRequest()` which aborts the fetch and resets `loading`.
+   - `handlePrompt` and `handleSend` now guard `if (loading) return`.
+   - Enter key now also guards `if (!loading)`.
+   - The daily/suggest tab run-all button and "حلّل هذه الشكوى" button similarly switch to stop mode during loading.
+   - Imported `PaperPlaneTilt`, `StopCircle`, `useRef` (added `useRef` to React imports).
+
+3. **InternalBotPage duplicate-request prevention (`src/pages/InternalBotPage.tsx`)**
+   - `handlePreset` now guards `if (loading) return` before calling `runQuery`.
+
+4. **ContextMessagesPanel alignment fix + double-send guard (`src/components/messages/ContextMessagesPanel.tsx`)**
+   - **Fixed inverted alignment bug**: `isMine ? 'justify-start' : 'justify-end'` → `isMine ? 'justify-end' : 'justify-start'`. Own messages now appear on the right in RTL, others on the left.
+   - `handleSend` now guards `if (!thread || sending) return` to prevent double-send.
+
+5. **InternalMessagesPage double-send guard (`src/pages/InternalMessagesPage.tsx`)**
+   - `handleSend` now guards `if (!selectedThreadId || sending) return`.
+
+**Files changed:**
+- `src/components/Layout.tsx`
+- `src/components/SmartAssistantDrawer.tsx`
+- `src/pages/InternalBotPage.tsx`
+- `src/components/messages/ContextMessagesPanel.tsx`
+- `src/pages/InternalMessagesPage.tsx`
+- `PROJECT_CONTINUITY.md` — this entry.
+
+**Commands run:**
+- `npm install` — dependencies already present.
+- `npm run build` → ✓ built in 1.12s, no errors.
+
+**Remaining risks:**
+- Loading skeleton flash on first page visit is inherent (no client-side data cache); can be improved later with React Query or SWR.
+- `react-hooks/exhaustive-deps` and `react-refresh/only-export-components` warnings remain (pre-existing, not introduced here).
+- Backend tests unchanged (612 still expected green from prior session).
+
+**Current project state:** Build clean, all mobile UI and assistant fixes applied.
+
+**Recommended next step:** Test the mobile sidebar close button and Smart Assistant stop button in the browser. Consider adding a persistent data-cache layer (React Query) to eliminate first-visit skeleton flashes.
+
+---
+
+
 
 **Task:** Safe full-project cleanup before the governor demo. Find and fix visible bugs, broken pages, lint errors, and unsafe React patterns — without adding features, touching migrations/Alembic, deploy.sh, docker/nginx/SSL, renaming modules, or remapping routes.
 

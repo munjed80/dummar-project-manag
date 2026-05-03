@@ -202,7 +202,7 @@ export default function InternalMessagesPage() {
   }, [currentUser?.id]);
 
   const handleSend = async () => {
-    if (!selectedThreadId) return;
+    if (!selectedThreadId || sending) return;
     const body = draft.trim();
     if (!body) return;
     setSending(true);

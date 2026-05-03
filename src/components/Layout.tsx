@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { List, Plus, SignOut } from '@phosphor-icons/react';
+import { List, Plus, SignOut, X } from '@phosphor-icons/react';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -135,9 +135,21 @@ export function Layout({ children }: LayoutProps) {
                 dir="rtl"
               >
                 <SheetHeader className="border-b border-white/10 px-5 py-4">
-                  <SheetTitle className="text-right text-base text-white">
-                    إدارة التجمع - مشروع دمر
-                  </SheetTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Close button on the left (start in RTL) */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setMobileOpen(false)}
+                      className="shrink-0 rounded-xl text-white hover:bg-white/15"
+                      aria-label="إغلاق القائمة"
+                    >
+                      <X size={20} />
+                    </Button>
+                    <SheetTitle className="flex-1 text-right text-base text-white">
+                      إدارة التجمع - مشروع دمر
+                    </SheetTitle>
+                  </div>
                 </SheetHeader>
                 <div className="flex h-[calc(100vh-64px)] flex-col">
                   <SidebarNav
