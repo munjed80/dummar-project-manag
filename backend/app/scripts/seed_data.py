@@ -543,6 +543,31 @@ def seed_tasks(db: Session):
     print(f"✓ Created {len(tasks_data)} tasks")
 
 
+# Fixed contract numbers used by the legacy demo seed below. Kept in a
+# constant so the cleanup helper script (scripts/cleanup_legacy_demo_contracts.py)
+# can identify exactly which rows are safe to remove. Do NOT reuse these
+# contract numbers for real production contracts.
+LEGACY_DEMO_CONTRACT_NUMBERS = (
+    "CNT-2024-001",
+    "CNT-2024-002",
+    "CNT-2024-003",
+    "CNT-2024-004",
+    "CNT-2024-005",
+)
+
+
+def _seed_demo_contracts_enabled() -> bool:
+    """Return True only when the operator explicitly opts into seeding the
+    legacy demo contracts.
+
+    Triggered by env var SEED_DEMO_CONTRACTS=1/true/yes/on. Defaults to False
+    so production / governor-demo runs of `python -m app.scripts.seed_data`
+    do NOT pollute the dashboard / reports with the legacy CNT-2024-* rows.
+    """
+    val = os.environ.get("SEED_DEMO_CONTRACTS", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
 def seed_contracts(db: Session):
     print("Seeding contracts...")
     users = db.query(User).filter(User.role.in_([UserRole.PROJECT_DIRECTOR, UserRole.CONTRACTS_MANAGER])).all()
@@ -665,7 +690,13 @@ def main():
         seed_buildings(db)
         seed_complaints(db)
         seed_tasks(db)
-        seed_contracts(db)
+        if _seed_demo_contracts_enabled():
+            seed_contracts(db)
+        else:
+            print(
+                "Skipping legacy demo contracts (set SEED_DEMO_CONTRACTS=1 to "
+                "re-enable the CNT-2024-* sample rows)."
+            )
 
         # Check for insecure default passwords
         check_default_passwords(db)

@@ -8,6 +8,66 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-04 — Audit & Cleanup of Legacy/Demo Contract Data
+
+**Task:** Audit dashboard / reports for old, demo, or mock contract data. Make contract counts reflect only the real modules (manual contracts, investment contracts, contract intelligence). No destructive DB migrations, no schema changes, no route renames.
+
+**What was done — old / legacy contract sources found:**
+
+| # | Source | Type | Files |
+|---|---|---|---|
+| 1 | `seed_contracts()` inserted 5 hard-coded sample rows (CNT-2024-001 … CNT-2024-005) on every `python -m app.scripts.seed_data` run. These rows showed up in `/dashboard/stats`, `/dashboard/recent-activity`, `/reports/summary`, `/reports/contracts` because both endpoints read from the real `contracts` table. | **Backend seed script (NOT a separate "legacy" model)** | `backend/app/scripts/seed_data.py` |
+| 2 | Reports → Contracts tab + Summary tab showed an unhelpful "لا توجد بيانات" when totals were 0 instead of the requested clean message. | Frontend empty-state copy | `src/pages/ReportsPage.tsx` |
+| 3 | Frontend search for static demo arrays / `mockData` / `sampleContracts` / hardcoded `CNT-2024-*` strings → **none found** outside the seed script. Dashboard, ContractsListPage, ManualContractsPage, ContractIntelligencePage, InvestmentContractsPage, IntelligenceReportsPage, ExecutiveBriefingPage all read from real API endpoints. | n/a | — |
+
+**Was data frontend mock, backend seed, or endpoint issue?** → 100% **backend seed**. Dashboard / reports endpoints are correct (they use the real `Contract` model — which is also what powers /manual-contracts → /contracts). Once the seed inserts are gone the numbers naturally reflect reality.
+
+**Files changed:**
+- `backend/app/scripts/seed_data.py`
+  - Added `LEGACY_DEMO_CONTRACT_NUMBERS` constant (the 5 fixed contract numbers).
+  - Added `_seed_demo_contracts_enabled()` — reads `SEED_DEMO_CONTRACTS=1/true/yes/on`.
+  - `main()` now **skips** `seed_contracts(db)` unless that env var is set, and prints an explanation. The function itself is preserved so the legacy dev workflow (`SEED_DEMO_CONTRACTS=1 python -m app.scripts.seed_data`) keeps working when explicitly opted into.
+- `scripts/cleanup_legacy_demo_contracts.py` (NEW, top-level)
+  - Standalone operator script, **dry-run by default** — only prints what it would delete. Requires `--apply` to actually delete.
+  - Targets a fixed allow-list (`LEGACY_DEMO_CONTRACT_NUMBERS` imported from the seed module). Will never touch any other contract row.
+  - Also removes the matching `contract_approvals` rows so referential integrity is preserved.
+  - Asserts each candidate row's `contract_number` is in the allow-list before deleting (defence-in-depth).
+- `src/pages/ReportsPage.tsx`
+  - Summary tab: when complaints + tasks + contracts totals are all 0, show the clean Arabic empty state **"لا توجد بيانات تقارير حالياً"** instead of empty cards.
+  - Contracts tab table empty row: changed copy to **"لا توجد بيانات تقارير حالياً"** to match.
+- `PROJECT_CONTINUITY.md`: this entry.
+
+**Cleanup script added?** → ✅ Yes — `scripts/cleanup_legacy_demo_contracts.py`. Default behaviour is **dry-run**.
+
+**Destructive DB deletion performed automatically?** → ❌ No. No migrations were created, no tables dropped, no automatic deletion runs. The cleanup script must be invoked manually by an operator with `--apply`.
+
+**Dashboard / reports behaviour after cleanup:**
+- `/dashboard`: the contract cards (`active_contracts`, `total_contracts`, `contracts_nearing_expiry`, recent contracts list) read from `/dashboard/stats` and `/dashboard/recent-activity`. With the demo seed disabled, fresh databases will show **0** and the existing "لا توجد بيانات" empty card under "آخر العقود". Investment-contract expiry buckets unchanged.
+- `/reports`: Summary tab displays "لا توجد بيانات تقارير حالياً" when no complaints / tasks / contracts exist; Contracts tab shows the same message in its table empty row. Tabs and totals continue to reflect real data when present.
+- `/manual-contracts` (wrapper) → `/contracts` (ContractsListPage): unchanged, already shows real `EmptyState` from the data table shell when no rows exist.
+- `/investment-contracts`: unchanged — already 100% real.
+- `/contract-intelligence`: unchanged — already 100% real (queue + dashboard endpoints).
+
+**Operator runbook for existing databases that already contain the demo rows:**
+
+```bash
+# 1. Inspect what will be removed (no DB writes):
+python scripts/cleanup_legacy_demo_contracts.py
+
+# 2. After confirming the listed rows are the legacy CNT-2024-001..005 only:
+python scripts/cleanup_legacy_demo_contracts.py --apply
+```
+
+**Validation:**
+- `npm run build` → ✅ built in 1.19s, no errors.
+- `cd backend && python -m pytest tests/ -q` → ✅ **612 passed** in 292.30s. No tests touch `seed_contracts`, so disabling the auto-call did not regress anything.
+- Frontend / backend audit (`grep -rEc "demo|mock|sample|seed|contracts|contractCount|العقود|تقارير|reports|dashboard" src backend scripts PROJECT_CONTINUITY.md`) → all remaining hits are legitimate references to the real modules; the only file that still contains the literal demo `CNT-2024-*` strings is `backend/app/scripts/seed_data.py` (intentional — needed for the cleanup allow-list and the opt-in dev seed) and the new `scripts/cleanup_legacy_demo_contracts.py` (allow-list logic + docstring).
+
+**Recommended next step:**
+Operators of any existing database that was previously seeded should run `python scripts/cleanup_legacy_demo_contracts.py` (dry-run) to confirm the 5 legacy rows, then re-run with `--apply`. Fresh databases need no action — the seed script no longer inserts demo contracts unless explicitly opted into via `SEED_DEMO_CONTRACTS=1`.
+
+---
+
 ### Session: 2026-05-04 — Verification of TanStack Query Loading Solution
 
 **Task:** Audit the just-implemented TanStack Query / cached-data UX, verify governor-demo critical pages, and migrate any remaining critical page that still uses legacy full-page loading.
