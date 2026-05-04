@@ -482,17 +482,18 @@ export default function ComplaintDetailsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">الحالة الجديدة</label>
-                <Select value={newStatus} onValueChange={setNewStatus}>
-                  <SelectTrigger><SelectValue placeholder="اختر الحالة" /></SelectTrigger>
-                  <SelectContent>
-                    {(VALID_NEXT_STATUSES[complaint.status] || []).map(({ value: k, label: v }) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                    {(VALID_NEXT_STATUSES[complaint.status] || []).length === 0 && (
-                      <SelectItem value="__none__" disabled>لا توجد انتقالات متاحة</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                {(VALID_NEXT_STATUSES[complaint.status] || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">الشكوى في حالة نهائية — لا توجد انتقالات متاحة</p>
+                ) : (
+                  <Select value={newStatus} onValueChange={setNewStatus}>
+                    <SelectTrigger><SelectValue placeholder="اختر الحالة" /></SelectTrigger>
+                    <SelectContent>
+                      {(VALID_NEXT_STATUSES[complaint.status] || []).map(({ value: k, label: v }) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">الجهة المسؤولة</label>

@@ -20,6 +20,19 @@ const complaintStatusColors: Record<string, string> = {
   resolved: 'bg-green-500', rejected: 'bg-red-500',
 };
 
+// The three internal backend values that all map to قيد المعالجة.
+const IN_PROCESSING_STATUSES = ['new', 'under_review', 'assigned'] as const;
+
+/** Merge raw backend status counts into the four simplified display buckets. */
+function simplifyComplaintStatusCounts(raw: Record<string, number>): Record<string, number> {
+  return {
+    new: IN_PROCESSING_STATUSES.reduce((sum, s) => sum + (raw[s] || 0), 0),
+    in_progress: raw.in_progress || 0,
+    resolved: raw.resolved || 0,
+    rejected: raw.rejected || 0,
+  };
+}
+
 const taskStatusLabels: Record<string, string> = {
   pending: 'معلقة', assigned: 'مُعينة', in_progress: 'قيد التنفيذ',
   completed: 'مكتملة', cancelled: 'ملغاة',
@@ -212,13 +225,7 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {stats && (() => {
                   const raw = stats.complaints_by_status as Record<string, number>;
-                  // Merge new + under_review + assigned into قيد المعالجة
-                  const simplified: Record<string, number> = {
-                    new: (raw.new || 0) + (raw.under_review || 0) + (raw.assigned || 0),
-                    in_progress: raw.in_progress || 0,
-                    resolved: raw.resolved || 0,
-                    rejected: raw.rejected || 0,
-                  };
+                  const simplified = simplifyComplaintStatusCounts(raw);
                   return Object.entries(simplified).map(([status, count]) => {
                     const pct = totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0;
                     return (
