@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { CitizenInstallBanner } from '@/components/CitizenInstallBanner';
@@ -7,6 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
+import { RefreshingIndicator, StaleDataNotice } from '@/components/data';
 import { ChatCircleDots, Clock, CheckCircle, Warning, ArrowRight, Plus } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -45,29 +49,30 @@ const typeLabels: Record<string, string> = {
 
 function CitizenDashboardPage() {
   const { user } = useAuth();
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
 
-  useEffect(() => {
-    const fetchComplaints = async () => {
-      try {
-        setLoading(true);
-        const params: Record<string, any> = {};
-        if (statusFilter) params.status_filter = statusFilter;
-        const data = await apiService.getCitizenComplaints(params);
-        setComplaints(data.items);
-        setTotalCount(data.total_count);
-      } catch {
-        setComplaints([]);
-        setTotalCount(0);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchComplaints();
+  const listParams = useMemo(() => {
+    const params: Record<string, unknown> = {};
+    if (statusFilter) params.status_filter = statusFilter;
+    return params;
   }, [statusFilter]);
+
+  const complaintsQuery = useQuery({
+    queryKey: queryKeys.complaints.citizen(listParams),
+    queryFn: () => apiService.getCitizenComplaints(listParams as any),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = complaintsQuery.data;
+  const complaints: Complaint[] = data?.items ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const firstLoad = complaintsQuery.isPending && !data;
+  const refreshing = complaintsQuery.isFetching && !!data;
+  const refreshFailed = complaintsQuery.isError && !!data;
+  const fullPageError = complaintsQuery.isError && !data;
+  const errorMessage = fullPageError
+    ? describeLoadError(complaintsQuery.error, 'الشكاوى').message
+    : '';
 
   // Stats
   const stats = {
@@ -162,11 +167,29 @@ function CitizenDashboardPage() {
           ))}
         </div>
 
+        {/* Background-refresh indicators — keep cached data on screen. */}
+        {refreshing && !refreshFailed && (
+          <RefreshingIndicator />
+        )}
+        {refreshFailed && (
+          <StaleDataNotice onRetry={() => complaintsQuery.refetch()} retrying={refreshing} />
+        )}
+
         {/* Complaints List */}
-        {loading ? (
+        {firstLoad ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
+        ) : fullPageError ? (
+          <Card>
+            <CardContent className="py-12 text-center space-y-4">
+              <Warning size={48} className="mx-auto text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">{errorMessage}</p>
+              <Button variant="outline" onClick={() => complaintsQuery.refetch()}>
+                إعادة المحاولة
+              </Button>
+            </CardContent>
+          </Card>
         ) : complaints.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">

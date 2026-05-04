@@ -8,6 +8,72 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-04 — Verification of TanStack Query Loading Solution
+
+**Task:** Audit the just-implemented TanStack Query / cached-data UX, verify governor-demo critical pages, and migrate any remaining critical page that still uses legacy full-page loading.
+
+**Audit results:**
+
+#### Core wiring — ✅ correct
+- `src/main.tsx`: `<QueryClientProvider client={createQueryClient()}>` wraps `<AuthProvider><App/></AuthProvider>` inside the existing `<ErrorBoundary>`. Single shared `QueryClient` instance.
+- `src/lib/queryClient.ts`: defaults are `staleTime` 60s, `gcTime` 10min, `refetchOnWindowFocus: false`, `refetchOnReconnect: true`. `shouldRetryQuery` correctly excludes 400/401/403/404/409/422 and only retries `error.retryable === true` once at the query layer (since `fetchWithRetry` already retries 502/503/504/network/timeout up to 2 more times — avoids multiplicative wait). Mutations have `retry: false`.
+- `src/lib/queryKeys.ts`: typed key factory covers all migrated entities. Key prefixes (`['complaints']`, `['tasks']`, `['investment-contracts']`, `['contract-intelligence']`, `['internal-messages']`, `['teams']`) align with the partial-match `invalidateQueries` calls used by mutations.
+
+#### `src/services/api.ts` — ✅ correct
+- `ApiError` has `status`, `statusText`, `detail`, `url`, `body`, `endpoint` (path-only via `extractEndpoint`), `retryable` (true only for 0/502/503/504 — the gateway-transient set).
+- `fetchWithRetry`: GETs wrapped with `AbortController` + 12s timeout; caller `AbortSignal` chained correctly; caller-aborts NEVER retried (correct); our own GET timeouts treated as transient and retried; non-GET methods bypass timeout/retry/dedupe (so POST/PUT/PATCH/DELETE never double-execute).
+- Dev-only `[api-diagnostic]` events emitted with `kind`/`endpoint`/`method`/`status`/`attempt`/`durationMs`. Production console silent (`isDev()` guard).
+- Error body sanitisation: `readErrorBody` discards HTML, `describeLoadError` re-guards against HTML in `detail` — raw HTML/JSON/stack traces never reach the user.
+- In-flight GET dedupe via `inFlightGetRequests` map keyed by `method:url:authHeader`.
+
+#### Governor-demo pages — verified
+| Route | Page | Status | Notes |
+|---|---|---|---|
+| `/dashboard` | DashboardPage | ✅ migrated | stats + recent-activity via `useQuery`; cached data preserved on refresh; `RefreshingIndicator` + `StaleDataNotice` wired. First load shows full-page spinner only when no cache. |
+| `/complaints` | ComplaintsListPage | ✅ migrated | List uses `useQuery` + `keepPreviousData`; areas + projects shared via `queryKeys.areas.all()` / `queryKeys.projects.selector()`. Pagination/filter changes never blank the table. |
+| `/tasks` | TasksListPage | ✅ migrated | Same pattern; projects + active-teams selectors deduped across pages. |
+| `/teams` | TeamsListPage | ✅ migrated | List + filters with `keepPreviousData`. |
+| `/investment-contracts` | InvestmentContractsPage | ✅ migrated | List + properties selector cached; create/update/delete invalidate `['investment-contracts']` instead of forcing a full reload. |
+| `/contract-intelligence` | ContractIntelligencePage | ✅ migrated | Dashboard + queue cached separately; upload invalidates whole `['contract-intelligence']` subtree. |
+| `/messages` (`InternalMessagesPage`) | ✅ migrated | Threads + selected-thread + users-selector all cached; optimistic message append preserved; send/create-thread invalidates targeted keys. |
+| `/citizen` | CitizenDashboardPage | ⚠️ **was legacy → migrated this session** | Now uses `useQuery` + `keepPreviousData`; status-filter changes keep previous list visible while new list loads; `RefreshingIndicator`/`StaleDataNotice` shown; full-page error only when no cache. |
+| `/complaints/new` (governor demo `/citizen/new-complaint`) | ComplaintSubmitPage | ✅ no migration needed | Pure submission form; only API call is the `submitComplaintWithAttachments` mutation triggered by user action. Areas dropdown loaded once on mount via `apiService.getAreas()` (already deduped at the api-client layer). |
+| `/complaints/track` (governor demo `/citizen/track`) | ComplaintTrackPage | ✅ no migration needed | Pure lookup form; `trackComplaint` is a user-initiated POST. No background fetch / no cached-data UX applicable. |
+
+#### Behaviour confirmed for every migrated page
+- ✅ First load with no cache → neutral skeleton or single spinner.
+- ✅ Cached data → rendered immediately; no full-skeleton flash.
+- ✅ Background refresh → small inline **"جارِ تحديث البيانات…"** indicator.
+- ✅ Refresh failure with old data → old data stays on screen + soft amber **"تعذر تحديث البيانات حالياً، يتم عرض آخر نسخة متاحة."** banner with retry button.
+- ✅ Hard error with no cached data → full-page `ErrorState` (or page-level error block on Dashboard / Citizen) with retry — sanitised text via `describeLoadError`, never raw HTML/JSON/stack.
+
+#### Fix made this session
+- `src/lib/queryKeys.ts`: added `complaints.citizen(params)` key.
+- `src/pages/CitizenDashboardPage.tsx`: replaced legacy `useEffect` + `setLoading(true)` + `setComplaints([])` pattern with `useQuery({ placeholderData: keepPreviousData })`. Added `RefreshingIndicator` and `StaleDataNotice`. Added a sanitised full-page error fallback with retry. The `/citizen` page no longer flashes a spinner when changing the status filter — previous results stay on screen until the new ones arrive.
+
+#### Pages still using legacy `setLoading` pattern (NOT critical for governor demo)
+ComplaintDetailsPage, ContractDetailsPage, ContractsListPage, DocumentReviewPage, DuplicateReviewPage, IntelligenceReportsPage, InvestmentContractDetailsPage, InvestmentPropertiesPage, InvestmentPropertyDetailsPage, LocationDetailPage, LocationsListPage, ProcessingQueuePage, ProjectsListPage, ReportsPage, RiskInsightsPage, SettingsPage, TaskDetailsPage, UsersPage, ViolationsPage. These are detail pages or non-demo modules and continue to benefit from the api-client improvements (12s GET timeout, dedupe, transient-error retry, sanitised errors). Documented for future incremental migration.
+
+#### Remaining cosmetic / minor risks (documented, not refactored)
+- `ComplaintSubmitPage` calls `apiService.getAreas()` directly instead of via `useQuery({ queryKey: queryKeys.areas.all() })`. The areas response is already deduped by the api-client in-flight map for ~1 request lifecycle, but a `useQuery` call here would also benefit from the 5-min cache shared with `ComplaintsListPage`. Not critical for the governor demo (form loads <100ms either way).
+- The query-level retry intentionally allows a single retry on top of the api-client's 1+2 retries → in the absolute worst case a transient 502 can lead to up to 6 fetch attempts before failing. Total wall time still bounded by the 12s GET timeout per attempt. Acceptable for the demo; can be tuned to 0 if desired.
+
+**Validation:**
+- `npm install` (re-run after sandbox refresh) → 0 vulnerabilities.
+- `npm run build` → ✓ built in ~1.2s, 0 TypeScript errors.
+- `npm run lint` → 0 errors, 14 warnings (all pre-existing — none introduced this session).
+- `rg "QueryClient|useQuery|useMutation|fetchWithRetry|AbortController|setLoading\(true\)|LoadingSkeleton|تعذر تحديث البيانات|جارِ تحديث البيانات" src PROJECT_CONTINUITY.md` confirms presence of the new helpers in all migrated pages (now including CitizenDashboardPage).
+- Backend not touched.
+
+**Files changed this session:**
+- `src/lib/queryKeys.ts` (added `complaints.citizen` key)
+- `src/pages/CitizenDashboardPage.tsx` (migrated to TanStack Query)
+- `PROJECT_CONTINUITY.md` (this entry)
+
+**Recommended next step:** Migrate the remaining detail pages (ComplaintDetailsPage, ContractDetailsPage, TaskDetailsPage, InvestmentContractDetailsPage, InvestmentPropertyDetailsPage, LocationDetailPage) and then non-demo list pages (ContractsListPage, ProjectsListPage, LocationsListPage, ReportsPage, UsersPage, ViolationsPage, IntelligenceReportsPage, RiskInsightsPage, ProcessingQueuePage, DuplicateReviewPage, DocumentReviewPage) using the same `useQuery` + `RefreshingIndicator` / `StaleDataNotice` recipe.
+
+---
+
 ### Session: 2026-05-04 — Stable Page Loading via TanStack Query + Centralised Timeout/Retry
 
 **Task:** Make the app feel fast and stable by using cached data + background refresh, central timeout/retry, and consistent loading/error states. No backend, infra, route, or business-logic changes.

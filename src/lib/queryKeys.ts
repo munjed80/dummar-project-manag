@@ -18,6 +18,7 @@ export const queryKeys = {
   },
   complaints: {
     list: (params: Record<string, unknown>) => ['complaints', 'list', params] as const,
+    citizen: (params: Record<string, unknown>) => ['complaints', 'citizen', params] as const,
   },
   tasks: {
     list: (params: Record<string, unknown>) => ['tasks', 'list', params] as const,
