@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import {
   apiService,
@@ -30,6 +31,8 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
+import { RefreshingIndicator, StaleDataNotice } from '@/components/data';
 
 function fmtDateTime(value?: string | null) {
   if (!value) return '';
@@ -84,14 +87,11 @@ function AvatarIcon({ name, mine }: { name: string; mine?: boolean }) {
 
 export default function InternalMessagesPage() {
   const { user: currentUser } = useAuth();
-  const [threads, setThreads] = useState<MessageThread[]>([]);
+  const queryClient = useQueryClient();
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [loadingThreads, setLoadingThreads] = useState(false);
-  const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
-  const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mobileShowThread, setMobileShowThread] = useState(false);
 
@@ -105,6 +105,37 @@ export default function InternalMessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Counter for generating unique negative temporary IDs for optimistic messages.
   const optimisticIdCounterRef = useRef(0);
+
+  // ── Cached threads list ────────────────────────────────────────────────
+  // Cached via TanStack Query so navigating away/back keeps the previous
+  // list visible while a quiet background refresh runs.
+  const threadsQuery = useQuery({
+    queryKey: queryKeys.internalMessages.threads(),
+    queryFn: () => apiService.getMessageThreads({ limit: 100 }).then((d) => Array.isArray(d) ? d : []),
+  });
+  const threads: MessageThread[] = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data]);
+  const loadingThreads = threadsQuery.isPending && !threadsQuery.data;
+  const threadsRefreshing = threadsQuery.isFetching && !!threadsQuery.data;
+  const threadsRefreshFailed = threadsQuery.isError && !!threadsQuery.data;
+
+  // ── Cached message thread (selected) ───────────────────────────────────
+  const threadDetailQuery = useQuery({
+    queryKey: selectedThreadId != null ? queryKeys.internalMessages.thread(selectedThreadId) : ['internal-messages', 'thread', null],
+    queryFn: () => apiService.getMessageThread(selectedThreadId as number),
+    enabled: selectedThreadId != null,
+  });
+  const loadingMessages = threadDetailQuery.isPending && !threadDetailQuery.data;
+
+  // ── Users selector (shared cache) ──────────────────────────────────────
+  const usersQuery = useQuery({
+    queryKey: queryKeys.users.selector(),
+    queryFn: () => apiService.getUsers({ limit: 200 }).then((res) => Array.isArray(res?.items) ? res.items : []),
+    staleTime: 5 * 60_000,
+  });
+  const users: User[] = useMemo(
+    () => (usersQuery.data ?? []).filter((u) => u.id !== currentUser?.id),
+    [usersQuery.data, currentUser?.id],
+  );
 
   const userMap = useMemo(() => {
     const map = new Map<number, User>();
@@ -142,66 +173,43 @@ export default function InternalMessagesPage() {
     [threads],
   );
 
-  const loadThreads = useCallback(async (preselectId?: number) => {
-    setLoadingThreads(true);
-    setError(null);
-    try {
-      const data = await apiService.getMessageThreads({ limit: 100 });
-      const list = Array.isArray(data) ? data : [];
-      setThreads(list);
-      setSelectedThreadId((current) => {
-        if (preselectId && list.some((t) => t.id === preselectId)) return preselectId;
-        if (current && list.some((t) => t.id === current)) return current;
-        return list.length > 0 ? list[0].id : null;
-      });
-    } catch (e) {
-      setError(describeLoadError(e, 'المحادثات').message);
-      setThreads([]);
-    } finally {
-      setLoadingThreads(false);
-    }
-  }, []);
+  // When threads list resolves the first time, auto-select the most recent
+  // thread (preserving any explicit selection that's still valid).
+  useEffect(() => {
+    if (selectedThreadId && threads.some((t) => t.id === selectedThreadId)) return;
+    if (threads.length > 0) setSelectedThreadId(threads[0].id);
+  }, [threads, selectedThreadId]);
 
-  const loadThread = useCallback(async (threadId: number) => {
-    setLoadingMessages(true);
-    setError(null);
-    try {
-      const data = await apiService.getMessageThread(threadId);
-      setMessages(Array.isArray(data?.messages) ? data.messages : []);
-    } catch (e) {
-      setError(describeLoadError(e, 'الرسائل').message);
-      setMessages([]);
-    } finally {
-      setLoadingMessages(false);
+  // Sync local `messages` from the cached thread query so optimistic
+  // updates can still mutate it without a full refetch.
+  useEffect(() => {
+    const data = threadDetailQuery.data;
+    setMessages(Array.isArray(data?.messages) ? data!.messages : []);
+  }, [threadDetailQuery.data]);
+
+  // Surface a sanitized error banner only when nothing is on screen yet.
+  useEffect(() => {
+    if (threadsQuery.isError && !threadsQuery.data) {
+      setError(describeLoadError(threadsQuery.error, 'المحادثات').message);
+    } else if (threadDetailQuery.isError && !threadDetailQuery.data) {
+      setError(describeLoadError(threadDetailQuery.error, 'الرسائل').message);
+    } else {
+      setError(null);
     }
-  }, []);
+  }, [threadsQuery.isError, threadsQuery.data, threadsQuery.error, threadDetailQuery.isError, threadDetailQuery.data, threadDetailQuery.error]);
+
+  const refetchThreads = threadsQuery.refetch;
+  const loadThreads = useCallback(async (preselectId?: number) => {
+    const result = await refetchThreads();
+    if (preselectId && result.data?.some((t) => t.id === preselectId)) {
+      setSelectedThreadId(preselectId);
+    }
+  }, [refetchThreads]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  useEffect(() => { void loadThreads(); }, [loadThreads]);
-
-  useEffect(() => {
-    if (selectedThreadId) void loadThread(selectedThreadId);
-    else setMessages([]);
-  }, [selectedThreadId, loadThread]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await apiService.getUsers({ limit: 200 });
-        if (cancelled) return;
-        const list = Array.isArray(res?.items) ? res.items : [];
-        setUsers(list.filter((u) => u.id !== currentUser?.id));
-      } catch {
-        if (!cancelled) setUsers([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [currentUser?.id]);
 
   const handleSend = async () => {
     if (!selectedThreadId || sending) return;
@@ -222,8 +230,10 @@ export default function InternalMessagesPage() {
       const sent = await apiService.sendMessage(selectedThreadId, { body });
       // Replace optimistic entry with the real one from the server.
       setMessages((prev) => prev.map((m) => (m.id === optimisticMsg.id ? sent : m)));
-      // Refresh thread list (unread counts, last message preview).
-      void loadThreads(selectedThreadId);
+      // Refresh thread list (unread counts, last message preview) and the
+      // detail cache via targeted invalidation — avoids a full reload.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.internalMessages.threads() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.internalMessages.thread(selectedThreadId) });
     } catch (e) {
       // Roll back the optimistic message on failure.
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
@@ -354,13 +364,26 @@ export default function InternalMessagesPage() {
               size="sm"
               className="border-red-300 bg-white text-red-800 hover:bg-red-100"
               onClick={() => {
-                if (selectedThreadId) loadThread(selectedThreadId);
-                else loadThreads();
+                if (selectedThreadId) void threadDetailQuery.refetch();
+                else void threadsQuery.refetch();
               }}
             >
               إعادة المحاولة
             </Button>
           </div>
+        )}
+
+        {/* Show a soft "stale data" notice if a refresh failed but cached
+            threads are still on screen — preserves operator context. */}
+        {threadsRefreshFailed && !error && (
+          <StaleDataNotice
+            className="mb-3"
+            onRetry={() => void threadsQuery.refetch()}
+            retrying={threadsRefreshing}
+          />
+        )}
+        {threadsRefreshing && !threadsRefreshFailed && !error && (
+          <RefreshingIndicator className="mb-2" />
         )}
 
         {/* Main layout: thread list + conversation */}

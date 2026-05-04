@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { apiService, ApiError } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,10 +21,12 @@ import { MagnifyingGlass, Spinner, Plus, FileText, PencilSimple, Trash } from '@
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
 import { FileUpload } from '@/components/FileUpload';
 import {
   DataTableShell, DataToolbar, StatusBadge,
   EmptyState, ErrorState, LoadingSkeleton, PaginationBar, MobileEntityCard,
+  RefreshingIndicator, StaleDataNotice,
   type StatusTone,
 } from '@/components/data';
 
@@ -374,12 +377,8 @@ function ContractFormDialog({ open, onOpenChange, editData, properties, onSucces
 export default function InvestmentContractsPage() {
   const navigate = useNavigate();
   const { role } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [contracts, setContracts] = useState<any[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [properties, setProperties] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [propertyFilter, setPropertyFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -390,32 +389,42 @@ export default function InvestmentContractsPage() {
 
   const canManage = role && ['project_director', 'contracts_manager', 'investment_manager'].includes(role);
 
-  const fetchContracts = useCallback(() => {
-    setLoading(true);
-    setError('');
-    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
+  // Properties dropdown — cached and shared with other pages.
+  const propertiesQuery = useQuery({
+    queryKey: queryKeys.investmentProperties.selector(),
+    queryFn: () => apiService.listInvestmentProperties({ limit: 500 }).then((d) => d.items ?? []),
+    staleTime: 5 * 60_000,
+  });
+  const properties = propertiesQuery.data ?? [];
+
+  const listParams = useMemo(() => {
+    const params: Record<string, unknown> = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (propertyFilter !== 'all') params.property_id = Number(propertyFilter);
     if (statusFilter !== 'all') params.status_filter = statusFilter;
     if (search.trim()) params.q = search.trim();
-    apiService.listInvestmentContracts(params)
-      .then(data => {
-        setContracts(data.items);
-        setTotalCount(data.total_count);
-      })
-      .catch(err => setError(describeLoadError(err, 'العقود الاستثمارية').message))
-      .finally(() => setLoading(false));
+    return params;
   }, [page, propertyFilter, statusFilter, search]);
 
-  useEffect(() => {
-    // Load properties once for dropdowns and labels.
-    apiService.listInvestmentProperties({ limit: 500 })
-      .then(data => setProperties(data.items))
-      .catch(() => setProperties([]));
-  }, []);
+  const contractsQuery = useQuery({
+    queryKey: queryKeys.investmentContracts.list(listParams),
+    queryFn: () => apiService.listInvestmentContracts(listParams as any),
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    fetchContracts();
-  }, [fetchContracts]);
+  const data = contractsQuery.data;
+  const contracts = data?.items ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const firstLoad = contractsQuery.isPending && !data;
+  const refreshing = contractsQuery.isFetching && !!data;
+  const refreshFailed = contractsQuery.isError && !!data;
+  const fullPageError = contractsQuery.isError && !data;
+  const error = fullPageError
+    ? describeLoadError(contractsQuery.error, 'العقود الاستثمارية').message
+    : '';
+
+  const refetchContracts = () => contractsQuery.refetch();
+  const invalidateContracts = () =>
+    queryClient.invalidateQueries({ queryKey: ['investment-contracts'] });
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -439,7 +448,7 @@ export default function InvestmentContractsPage() {
     try {
       await apiService.deleteInvestmentContract(c.id);
       toast.success('تم إلغاء العقد');
-      fetchContracts();
+      void invalidateContracts();
     } catch {
       toast.error('فشل حذف العقد');
     }
@@ -512,10 +521,17 @@ export default function InvestmentContractsPage() {
           />
 
           {error && (
-            <ErrorState message={error} onRetry={fetchContracts} retrying={loading} />
+            <ErrorState message={error} onRetry={refetchContracts} retrying={contractsQuery.isFetching} />
           )}
 
-          {loading && !error && (
+          {refreshFailed && (
+            <StaleDataNotice onRetry={refetchContracts} retrying={refreshing} />
+          )}
+          {refreshing && !refreshFailed && (
+            <RefreshingIndicator />
+          )}
+
+          {firstLoad && !error && (
             <>
               <div className="responsive-table-desktop">
                 <DataTableShell>
@@ -528,7 +544,7 @@ export default function InvestmentContractsPage() {
             </>
           )}
 
-          {!loading && !error && contracts.length === 0 && (
+          {!firstLoad && !error && contracts.length === 0 && (
             <EmptyState
               icon={<FileText size={40} weight="duotone" />}
               title={search || propertyFilter !== 'all' || statusFilter !== 'all'
@@ -541,7 +557,7 @@ export default function InvestmentContractsPage() {
             />
           )}
 
-          {!loading && !error && contracts.length > 0 && (
+          {!firstLoad && !error && contracts.length > 0 && (
             <>
               {/* Desktop table view */}
               <div className="responsive-table-desktop">
@@ -672,7 +688,7 @@ export default function InvestmentContractsPage() {
         onOpenChange={setDialogOpen}
         editData={editTarget}
         properties={properties}
-        onSuccess={fetchContracts}
+        onSuccess={() => void invalidateContracts()}
       />
     </Layout>
   );

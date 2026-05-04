@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
+import { RefreshingIndicator, StaleDataNotice } from '@/components/data';
 import {
   ChatCircleDots, ListChecks, FileText, WarningCircle, ArrowRight,
   Spinner, PaperPlaneTilt, Bell, Buildings, ChartBar, UsersThree,
@@ -94,34 +96,41 @@ function getArabicDate(): string {
 const RECENT_ITEMS_LIMIT = 5;
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<any>(null);
-  const [activity, setActivity] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [statsError, setStatsError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setStatsError(null);
-    try {
-      const [statsData, activityData] = await Promise.all([
-        apiService.getDashboardStats(),
-        apiService.getRecentActivity().catch(() => null),
-      ]);
-      setStats(statsData);
-      setActivity(activityData);
-    } catch (error) {
-      setStatsError(describeLoadError(error, 'لوحة التحكم').message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const statsQuery = useQuery({
+    queryKey: queryKeys.dashboard.stats(),
+    queryFn: () => apiService.getDashboardStats(),
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const activityQuery = useQuery({
+    queryKey: queryKeys.dashboard.activity(),
+    queryFn: () => apiService.getRecentActivity(),
+  });
 
-  if (loading) {
+  const stats = statsQuery.data ?? null;
+  const activity = activityQuery.data ?? null;
+
+  // First load with no cache → full skeleton. Once cached data exists we
+  // keep it on screen and only show a small "refreshing" indicator.
+  const firstLoad = statsQuery.isPending && !stats;
+  const refreshing =
+    (statsQuery.isFetching && !!stats) ||
+    (activityQuery.isFetching && !!activity);
+  const refreshFailed =
+    (statsQuery.isError && !!stats) ||
+    (activityQuery.isError && !!activity);
+  const fullPageError = statsQuery.isError && !stats;
+  const statsError = fullPageError
+    ? describeLoadError(statsQuery.error, 'لوحة التحكم').message
+    : null;
+
+  const refetchAll = () => {
+    void statsQuery.refetch();
+    void activityQuery.refetch();
+  };
+
+  if (firstLoad) {
     return (
       <Layout>
         <div className="flex justify-center py-12">
@@ -260,11 +269,23 @@ export default function DashboardPage() {
                 <WarningCircle size={18} className="text-amber-700" />
                 <span>{statsError}</span>
               </div>
-              <Button variant="outline" size="sm" onClick={fetchData} className="self-start sm:self-auto">
+              <Button variant="outline" size="sm" onClick={refetchAll} className="self-start sm:self-auto">
                 إعادة المحاولة
               </Button>
             </CardContent>
           </Card>
+        )}
+
+        {/* Soft inline indicator: a background refresh is running while
+            cached data is on screen. */}
+        {refreshing && !refreshFailed && (
+          <RefreshingIndicator />
+        )}
+
+        {/* Refresh failed but the previous payload is still visible — keep
+            the operator's context, do NOT replace the page with an error. */}
+        {refreshFailed && (
+          <StaleDataNotice onRetry={refetchAll} retrying={refreshing} />
         )}
 
         {/* ── 3. Urgent-alert banner ────────────────────────────────────── */}

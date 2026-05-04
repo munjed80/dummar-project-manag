@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
@@ -14,9 +15,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass, Plus, UsersThree } from '@phosphor-icons/react';
 import { useAuth } from '@/hooks/useAuth';
 import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
 import {
   DataTableShell, DataToolbar, StatusBadge,
   EmptyState, ErrorState, LoadingSkeleton, PaginationBar, MobileEntityCard,
+  RefreshingIndicator, StaleDataNotice,
 } from '@/components/data';
 
 const typeLabels: Record<string, string> = {
@@ -28,33 +31,37 @@ const PAGE_SIZE = 15;
 export default function TeamsListPage() {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const [teams, setTeams] = useState<any[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [activeFilter, setActiveFilter] = useState('all');
   const [page, setPage] = useState(0);
-  const [reloadTick, setReloadTick] = useState(0);
 
   const canCreate = role && ['project_director', 'contracts_manager', 'engineer_supervisor'].includes(role);
 
-  useEffect(() => {
-    setLoading(true);
-    setError('');
-    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
+  const listParams = useMemo(() => {
+    const params: Record<string, unknown> = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (typeFilter !== 'all') params.team_type = typeFilter;
     if (activeFilter !== 'all') params.is_active = activeFilter === 'active';
     if (search) params.search = search;
-    apiService.getTeams(params)
-      .then((data) => {
-        setTeams(data.items);
-        setTotalCount(data.total_count);
-      })
-      .catch((err) => setError(describeLoadError(err, 'الفرق').message))
-      .finally(() => setLoading(false));
-  }, [typeFilter, activeFilter, search, page, reloadTick]);
+    return params;
+  }, [page, typeFilter, activeFilter, search]);
+
+  const teamsQuery = useQuery({
+    queryKey: queryKeys.teams.list(listParams),
+    queryFn: () => apiService.getTeams(listParams as any),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = teamsQuery.data;
+  const teams = data?.items ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const firstLoad = teamsQuery.isPending && !data;
+  const refreshing = teamsQuery.isFetching && !!data;
+  const refreshFailed = teamsQuery.isError && !!data;
+  const fullPageError = teamsQuery.isError && !data;
+  const error = fullPageError
+    ? describeLoadError(teamsQuery.error, 'الفرق').message
+    : '';
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const hasActiveFilters = search.length > 0 || typeFilter !== 'all' || activeFilter !== 'all';
@@ -110,10 +117,17 @@ export default function TeamsListPage() {
           />
 
           {error && (
-            <ErrorState message={error} onRetry={() => setReloadTick((t) => t + 1)} retrying={loading} />
+            <ErrorState message={error} onRetry={() => teamsQuery.refetch()} retrying={teamsQuery.isFetching} />
           )}
 
-          {loading && !error && (
+          {refreshFailed && (
+            <StaleDataNotice onRetry={() => teamsQuery.refetch()} retrying={refreshing} />
+          )}
+          {refreshing && !refreshFailed && (
+            <RefreshingIndicator />
+          )}
+
+          {firstLoad && !error && (
             <>
               <div className="responsive-table-desktop">
                 <DataTableShell>
@@ -126,7 +140,7 @@ export default function TeamsListPage() {
             </>
           )}
 
-          {!loading && !error && teams.length === 0 && (
+          {!firstLoad && !error && teams.length === 0 && (
             <EmptyState
               icon={<UsersThree size={40} weight="duotone" />}
               title={hasActiveFilters ? 'لم يتم العثور على نتائج مطابقة' : 'لا توجد فرق بعد'}
@@ -136,7 +150,7 @@ export default function TeamsListPage() {
             />
           )}
 
-          {!loading && !error && teams.length > 0 && (
+          {!firstLoad && !error && teams.length > 0 && (
             <>
               {/* Desktop table view */}
               <div className="responsive-table-desktop">
