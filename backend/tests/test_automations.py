@@ -396,12 +396,12 @@ def test_complaint_status_changed_fires_create_task_action(
     complaint_id = create.json()["id"]
     tracking = create.json()["tracking_number"]
 
-    # 2. Configure automation: when complaint becomes UNDER_REVIEW, create a task.
+    # 2. Configure automation: when complaint becomes IN_PROGRESS, create a task.
     _create_automation_row(
         db,
         trigger="complaint_status_changed",
         conditions=[
-            {"field": "new_status", "operator": "eq", "value": "under_review"}
+            {"field": "new_status", "operator": "eq", "value": "in_progress"}
         ],
         actions=[
             {
@@ -420,7 +420,7 @@ def test_complaint_status_changed_fires_create_task_action(
     resp = client.put(
         f"/complaints/{complaint_id}",
         headers=_auth_headers(director_token),
-        json={"status": "under_review"},
+        json={"status": "in_progress"},
     )
     assert resp.status_code == 200, resp.text
 

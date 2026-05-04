@@ -84,8 +84,6 @@ class TestFullComplaintWorkflow:
         cid = c.id
 
         transitions = [
-            ("under_review", "complaint_status_change"),
-            ("assigned", "complaint_status_change"),
             ("in_progress", "complaint_status_change"),
             ("resolved", "complaint_status_change"),
         ]
@@ -538,7 +536,7 @@ class TestNotificationFlow:
         c = _make_complaint(db, sample_area, tracking="NOTIF000001")
 
         resp = client.put(f"/complaints/{c.id}",
-                          json={"status": "under_review"},
+                          json={"status": "in_progress"},
                           headers=_auth_headers(director_token))
         assert resp.status_code == 200
 

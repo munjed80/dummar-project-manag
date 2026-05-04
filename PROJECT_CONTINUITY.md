@@ -8,6 +8,92 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-04 — Simplify Complaint Status Workflow
+
+**Task:** Reduce the public-facing complaint status display from 6 values to 4 simplified Arabic labels. Enforce a clean workflow in the backend. No migrations, no module renames, no route changes.
+
+**What was done:**
+
+#### Backend — `backend/app/api/complaints.py`
+- Added `_ALLOWED_TRANSITIONS` dict defining the simplified four-status workflow:
+  - `new / under_review / assigned` → may transition to `in_progress`, `resolved`, or `rejected`
+  - `in_progress` → may transition to `resolved` or `rejected`
+  - `resolved` / `rejected` → terminal (no further transitions)
+- Added workflow validation in `update_complaint`: raises HTTP 400 with Arabic error message if the requested transition is not allowed.
+- Default status for new complaints remains `ComplaintStatus.NEW` (no DB or migration change).
+
+#### Backend — `backend/app/api/internal_bot.py`
+- Updated `_arabic_status()`: `NEW` / `UNDER_REVIEW` / `ASSIGNED` now all map to `"قيد المعالجة"`. `IN_PROGRESS` → `"قيد التنفيذ"`, `RESOLVED` → `"تم الحل"`, `REJECTED` → `"مرفوضة"`.
+
+#### Frontend — `src/pages/ComplaintDetailsPage.tsx`
+- `statusLabels`: `new / under_review / assigned` all display as `قيد المعالجة`.
+- `statusColors`: unified indigo for `new / under_review / assigned`.
+- Added `VALID_NEXT_STATUSES` map — the status update dropdown now shows only valid next transitions for the current complaint status (no more جديدة, معينة, قيد المراجعة options).
+- `canConvertToTask` now includes `assigned` status (was only `new | under_review`).
+
+#### Frontend — `src/pages/ComplaintsListPage.tsx`
+- `statusLabels`: same 4-label mapping.
+- `statusTones`: `new / under_review / assigned` all → `'progress'`.
+- Filter dropdown replaced with `statusFilterOptions` (4 entries: قيد المعالجة→new, قيد التنفيذ→in_progress, تم الحل→resolved, مرفوضة→rejected).
+
+#### Frontend — `src/pages/ComplaintTrackPage.tsx`
+- `statusLabels`, `statusColors`, `statusGuidance`: all three internal states (`new / under_review / assigned`) unified to single `قيد المعالجة` display.
+
+#### Frontend — `src/pages/CitizenDashboardPage.tsx`
+- `statusConfig`: `new / under_review / assigned` all → `{ label: 'قيد المعالجة', variant: 'secondary' }`.
+- `statusFilters`: reduced from 7 options to 5 (All + 4 simplified).
+
+#### Frontend — `src/pages/DashboardPage.tsx`
+- `complaintStatusLabels` / `complaintStatusColors`: same unified mapping.
+- Status distribution chart now merges `new + under_review + assigned` into a single `قيد المعالجة` bar.
+
+#### Frontend — `src/components/data/StatusBadge.tsx`
+- `COMMON_STATUS_TONES`: `new` and `under_review` now both map to `'progress'` (same indigo tone as `assigned / in_progress`), hiding the old `'info'` / `'warning'` distinctions.
+
+#### Backend tests updated
+- `tests/test_api.py::TestEnhancedAuditLogging::test_complaint_status_change_audit`: `under_review` → `in_progress`.
+- `tests/test_automations.py::test_complaint_status_changed_fires_create_task_action`: automation trigger now `in_progress`.
+- `tests/test_e2e.py::TestFullComplaintWorkflow::test_complaint_full_status_progression`: removed `under_review` / `assigned` steps; now `new → in_progress → resolved`.
+- `tests/test_e2e.py::TestNotificationFlow::test_complaint_status_change_creates_notification`: `under_review` → `in_progress`.
+
+**Default status behaviour:** New complaints start as `new` (backend enum), which displays to all users as `قيد المعالجة`.
+
+**UI statuses shown:** `قيد المعالجة` | `قيد التنفيذ` | `تم الحل` | `مرفوضة`
+
+**Old status mapping (backward-compatible, no data deleted):**
+| Backend value | Display |
+|---|---|
+| `new` | قيد المعالجة |
+| `under_review` | قيد المعالجة |
+| `assigned` | قيد المعالجة |
+| `in_progress` | قيد التنفيذ |
+| `resolved` | تم الحل |
+| `rejected` | مرفوضة |
+
+**Files changed:**
+- `backend/app/api/complaints.py` — `_ALLOWED_TRANSITIONS` + workflow validation
+- `backend/app/api/internal_bot.py` — `_arabic_status()` update
+- `src/pages/ComplaintDetailsPage.tsx`
+- `src/pages/ComplaintsListPage.tsx`
+- `src/pages/ComplaintTrackPage.tsx`
+- `src/pages/CitizenDashboardPage.tsx`
+- `src/pages/DashboardPage.tsx`
+- `src/components/data/StatusBadge.tsx`
+- `backend/tests/test_api.py`, `backend/tests/test_automations.py`, `backend/tests/test_e2e.py` — updated to use valid transitions
+
+**Commands run:**
+- `npm install` → OK
+- `npm run build` → ✓ built in 1.58s, no errors
+- `cd backend && python -m pytest tests/ -q` → **612 passed**, 0 failed
+
+**`rg` validation:** No remaining `جديدة`, `معينة`, or `قيد المراجعة` labels found in `src/` or `backend/app/`.
+
+**Current project state:** Build clean. 612 backend tests green. Complaint status workflow simplified to 4 public labels. Old database values preserved and mapped correctly. No migrations, no module renames, no route changes, no Docker/nginx/SSL changes.
+
+**Recommended next step:** Optionally add an admin "override" endpoint to bypass transition rules for edge-case corrections, or add a backend API endpoint that returns valid next statuses for a given complaint to keep frontend and backend in sync.
+
+---
+
 ### Session: 2026-05-03 — Smart Assistant & Internal Messages UX overhaul
 
 **Task:** Improve Smart Assistant and Internal Messages reliability and UX (frontend-focused).

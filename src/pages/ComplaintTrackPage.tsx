@@ -13,14 +13,14 @@ import { MagnifyingGlass, ArrowLeft, Info, CheckCircle, MapPin } from '@phosphor
 import { format } from 'date-fns';
 
 const statusLabels: Record<string, string> = {
-  new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
+  new: 'قيد المعالجة', under_review: 'قيد المعالجة', assigned: 'قيد المعالجة',
   in_progress: 'قيد التنفيذ', resolved: 'تم الحل', rejected: 'مرفوضة',
 };
 
 const statusColors: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-800',
-  under_review: 'bg-yellow-100 text-yellow-800',
-  assigned: 'bg-orange-100 text-orange-800',
+  new: 'bg-indigo-100 text-indigo-800',
+  under_review: 'bg-indigo-100 text-indigo-800',
+  assigned: 'bg-indigo-100 text-indigo-800',
   in_progress: 'bg-purple-100 text-purple-800',
   resolved: 'bg-green-100 text-green-800',
   rejected: 'bg-red-100 text-red-800',
@@ -33,9 +33,9 @@ const typeLabels: Record<string, string> = {
 };
 
 const statusGuidance: Record<string, string> = {
-  new: 'تم استلام طلبك وهو بانتظار المراجعة من قِبَل فريق الاستقبال.',
-  under_review: 'يقوم فريق الاستقبال بمراجعة طلبك حالياً.',
-  assigned: 'تم تحويل طلبك إلى مهمة تنفيذية وأُسندت إلى الفريق المختص.',
+  new: 'تم استلام طلبك وهو قيد المعالجة من قِبَل فريق إدارة الشكاوى.',
+  under_review: 'تم استلام طلبك وهو قيد المعالجة من قِبَل فريق إدارة الشكاوى.',
+  assigned: 'تم استلام طلبك وهو قيد المعالجة من قِبَل فريق إدارة الشكاوى.',
   in_progress: 'الفريق المختص يعمل على معالجة طلبك حالياً.',
   resolved: 'تمت معالجة طلبك وإغلاقه. شكراً لإبلاغنا.',
   rejected: 'تم إغلاق طلبك دون تنفيذ. يمكنك التواصل مع الإدارة لمزيد من التفاصيل.',

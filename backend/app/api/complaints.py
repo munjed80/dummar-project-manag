@@ -32,6 +32,17 @@ router = APIRouter(prefix="/complaints", tags=["complaints"])
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger("dummar.complaints")
 
+# Simplified status workflow: new/under_review/assigned display as قيد المعالجة.
+# Allowed transitions enforce the four-status public workflow.
+_ALLOWED_TRANSITIONS: dict[ComplaintStatus, set[ComplaintStatus]] = {
+    ComplaintStatus.NEW: {ComplaintStatus.IN_PROGRESS, ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED},
+    ComplaintStatus.UNDER_REVIEW: {ComplaintStatus.IN_PROGRESS, ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED},
+    ComplaintStatus.ASSIGNED: {ComplaintStatus.IN_PROGRESS, ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED},
+    ComplaintStatus.IN_PROGRESS: {ComplaintStatus.RESOLVED, ComplaintStatus.REJECTED},
+    ComplaintStatus.RESOLVED: set(),
+    ComplaintStatus.REJECTED: set(),
+}
+
 # Roles allowed to manage complaints
 _complaint_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
@@ -335,7 +346,16 @@ def update_complaint(
     
     old_status = complaint.status
     old_assigned_to_id = complaint.assigned_to_id
-    
+
+    # Enforce simplified workflow transitions
+    if complaint_update.status and complaint_update.status != old_status:
+        allowed = _ALLOWED_TRANSITIONS.get(old_status, set())
+        if complaint_update.status not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"الانتقال من الحالة '{old_status.value}' إلى '{complaint_update.status.value}' غير مسموح به",
+            )
+
     update_data = complaint_update.model_dump(exclude_unset=True)
 
     # Serialize file list fields to JSON for DB storage

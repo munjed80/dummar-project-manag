@@ -1005,9 +1005,9 @@ class TestEnhancedAuditLogging:
         db.commit()
         db.refresh(complaint)
         cid = complaint.id
-        # Change status
+        # Change status — use a valid simplified-workflow transition
         resp = client.put(f"/complaints/{cid}", json={
-            "status": "under_review",
+            "status": "in_progress",
         }, headers=_auth_headers(director_token))
         assert resp.status_code == 200
         log = db.query(AuditLog).filter(
@@ -1016,7 +1016,7 @@ class TestEnhancedAuditLogging:
         ).first()
         assert log is not None
         assert "new" in (log.description or "")
-        assert "under_review" in (log.description or "")
+        assert "in_progress" in (log.description or "")
 
     def test_contract_approve_audit(self, client, db, director_user, director_token):
         """Contract approval generates a specific audit entry."""

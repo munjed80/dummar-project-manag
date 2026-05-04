@@ -68,12 +68,13 @@ export function StatusBadge({
 
 /** Convenience map: callers can derive a tone from a domain status string. */
 export const COMMON_STATUS_TONES: Record<string, StatusTone> = {
-  // complaints / tasks
-  new: 'info',
+  // complaints / tasks — simplified four-status workflow
+  // new / under_review / assigned all display as قيد المعالجة
+  new: 'progress',
   open: 'info',
   submitted: 'info',
   pending: 'warning',
-  under_review: 'warning',
+  under_review: 'progress',
   review: 'warning',
   assigned: 'progress',
   in_progress: 'progress',
