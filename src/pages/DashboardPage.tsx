@@ -65,7 +65,9 @@ const contractStatusBadge: Record<string, string> = {
 
 function getArabicGreeting(): string {
   const h = new Date().getHours();
-  return h < 12 ? 'صباح الخير' : 'مساء الخير';
+  if (h < 12) return 'صباح الخير';
+  if (h < 18) return 'مساء الخير';
+  return 'مساء النور';
 }
 
 function getArabicDate(): string {
@@ -75,6 +77,8 @@ function getArabicDate(): string {
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
+
+const RECENT_ITEMS_LIMIT = 5;
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
@@ -409,7 +413,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground text-center py-6">لا توجد بيانات</p>
               ) : (
                 <div className="space-y-1">
-                  {activity.recent_complaints.slice(0, 5).map((c: any) => (
+                  {activity.recent_complaints.slice(0, RECENT_ITEMS_LIMIT).map((c: any) => (
                     <Link
                       key={c.id}
                       to={`/complaints/${c.id}`}
@@ -444,7 +448,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground text-center py-6">لا توجد بيانات</p>
               ) : (
                 <div className="space-y-1">
-                  {activity.recent_tasks.slice(0, 5).map((t: any) => (
+                  {activity.recent_tasks.slice(0, RECENT_ITEMS_LIMIT).map((t: any) => (
                     <Link
                       key={t.id}
                       to={`/tasks/${t.id}`}
@@ -475,7 +479,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground text-center py-6">لا توجد بيانات</p>
               ) : (
                 <div className="space-y-1">
-                  {activity.recent_contracts.slice(0, 5).map((c: any) => (
+                  {activity.recent_contracts.slice(0, RECENT_ITEMS_LIMIT).map((c: any) => (
                     <Link
                       key={c.id}
                       to={`/contracts/${c.id}`}
@@ -483,7 +487,7 @@ export default function DashboardPage() {
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-medium truncate group-hover:text-emerald-700">{c.title || c.contract_number}</p>
-                        <p className="text-xs text-muted-foreground">{c.contract_number}</p>
+                        {c.title && <p className="text-xs text-muted-foreground">{c.contract_number}</p>}
                       </div>
                       <span className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 mt-0.5 ${contractStatusBadge[c.status] || 'bg-gray-100 text-gray-600'}`}>
                         {c.status}
