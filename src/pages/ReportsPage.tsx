@@ -281,6 +281,13 @@ export default function ReportsPage() {
                   {/* Summary Tab */}
                   <TabsContent value="summary">
                     {summary && (
+                      ((summary.complaints?.total || 0) +
+                        (summary.tasks?.total || 0) +
+                        (summary.contracts?.total || 0) === 0) ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          لا توجد بيانات تقارير حالياً
+                        </div>
+                      ) : (
                       <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <SummaryCard title="إجمالي الشكاوى" value={summary.complaints?.total || 0} color="border-r-blue-500" />
@@ -322,6 +329,7 @@ export default function ReportsPage() {
                           </Card>
                         </div>
                       </div>
+                      )
                     )}
                   </TabsContent>
 
@@ -458,7 +466,7 @@ export default function ReportsPage() {
                         </TableHeader>
                         <TableBody>
                           {contracts.length === 0 ? (
-                            <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">لا توجد بيانات</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">لا توجد بيانات تقارير حالياً</TableCell></TableRow>
                           ) : contracts.map((c: any) => (
                             <TableRow key={c.id}>
                               <TableCell className="font-mono">{c.contract_number}</TableCell>
