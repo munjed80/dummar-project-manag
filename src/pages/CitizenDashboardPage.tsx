@@ -25,9 +25,9 @@ interface Complaint {
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  new: { label: 'جديدة', variant: 'destructive' },
-  under_review: { label: 'قيد المراجعة', variant: 'secondary' },
-  assigned: { label: 'تم التعيين', variant: 'outline' },
+  new: { label: 'قيد المعالجة', variant: 'secondary' },
+  under_review: { label: 'قيد المعالجة', variant: 'secondary' },
+  assigned: { label: 'قيد المعالجة', variant: 'secondary' },
   in_progress: { label: 'قيد التنفيذ', variant: 'default' },
   resolved: { label: 'تم الحل', variant: 'default' },
   rejected: { label: 'مرفوضة', variant: 'destructive' },
@@ -78,9 +78,7 @@ function CitizenDashboardPage() {
 
   const statusFilters = [
     { value: '', label: 'الكل' },
-    { value: 'new', label: 'جديدة' },
-    { value: 'under_review', label: 'قيد المراجعة' },
-    { value: 'assigned', label: 'تم التعيين' },
+    { value: 'new', label: 'قيد المعالجة' },
     { value: 'in_progress', label: 'قيد التنفيذ' },
     { value: 'resolved', label: 'تم الحل' },
     { value: 'rejected', label: 'مرفوضة' },

@@ -43,9 +43,9 @@ _MESSAGE_PREVIEW_MAX_LENGTH = 140
 
 def _arabic_status(status: ComplaintStatus | None) -> str:
     return {
-        ComplaintStatus.NEW: "جديدة",
-        ComplaintStatus.UNDER_REVIEW: "قيد المراجعة",
-        ComplaintStatus.ASSIGNED: "مُعينة",
+        ComplaintStatus.NEW: "قيد المعالجة",
+        ComplaintStatus.UNDER_REVIEW: "قيد المعالجة",
+        ComplaintStatus.ASSIGNED: "قيد المعالجة",
         ComplaintStatus.IN_PROGRESS: "قيد التنفيذ",
         ComplaintStatus.RESOLVED: "تم الحل",
         ComplaintStatus.REJECTED: "مرفوضة",

@@ -25,14 +25,25 @@ import { ContextMessagesPanel } from '@/components/messages/ContextMessagesPanel
 import { SmartAssistantDrawer } from '@/components/SmartAssistantDrawer';
 
 const statusLabels: Record<string, string> = {
-  new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
+  new: 'قيد المعالجة', under_review: 'قيد المعالجة', assigned: 'قيد المعالجة',
   in_progress: 'قيد التنفيذ', resolved: 'تم الحل', rejected: 'مرفوضة',
 };
 
 const statusColors: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-800', under_review: 'bg-yellow-100 text-yellow-800',
-  assigned: 'bg-orange-100 text-orange-800', in_progress: 'bg-purple-100 text-purple-800',
+  new: 'bg-indigo-100 text-indigo-800', under_review: 'bg-indigo-100 text-indigo-800',
+  assigned: 'bg-indigo-100 text-indigo-800', in_progress: 'bg-purple-100 text-purple-800',
   resolved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800',
+};
+
+// Valid status transitions per the simplified four-status workflow.
+// new / under_review / assigned all display as قيد المعالجة.
+const VALID_NEXT_STATUSES: Record<string, { value: string; label: string }[]> = {
+  new:          [{ value: 'in_progress', label: 'قيد التنفيذ' }, { value: 'resolved', label: 'تم الحل' }, { value: 'rejected', label: 'مرفوضة' }],
+  under_review: [{ value: 'in_progress', label: 'قيد التنفيذ' }, { value: 'resolved', label: 'تم الحل' }, { value: 'rejected', label: 'مرفوضة' }],
+  assigned:     [{ value: 'in_progress', label: 'قيد التنفيذ' }, { value: 'resolved', label: 'تم الحل' }, { value: 'rejected', label: 'مرفوضة' }],
+  in_progress:  [{ value: 'resolved', label: 'تم الحل' }, { value: 'rejected', label: 'مرفوضة' }],
+  resolved:     [],
+  rejected:     [],
 };
 
 const priorityLabels: Record<string, string> = {
@@ -304,11 +315,11 @@ export default function ComplaintDetailsPage() {
     }
   };
 
-  // Convert action is shown only while the complaint is still actionable.
+  // Convert action is shown only while the complaint is still actionable (قيد المعالجة group).
   const canConvertToTask =
     canManageComplaints &&
     complaint &&
-    (complaint.status === 'new' || complaint.status === 'under_review');
+    (complaint.status === 'new' || complaint.status === 'under_review' || complaint.status === 'assigned');
 
   if (loading) {
     return (
@@ -471,14 +482,18 @@ export default function ComplaintDetailsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">الحالة الجديدة</label>
-                <Select value={newStatus} onValueChange={setNewStatus}>
-                  <SelectTrigger><SelectValue placeholder="اختر الحالة" /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(statusLabels).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {(VALID_NEXT_STATUSES[complaint.status] || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">الشكوى في حالة نهائية — لا توجد انتقالات متاحة</p>
+                ) : (
+                  <Select value={newStatus} onValueChange={setNewStatus}>
+                    <SelectTrigger><SelectValue placeholder="اختر الحالة" /></SelectTrigger>
+                    <SelectContent>
+                      {(VALID_NEXT_STATUSES[complaint.status] || []).map(({ value: k, label: v }) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">الجهة المسؤولة</label>

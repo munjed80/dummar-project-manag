@@ -20,14 +20,23 @@ import {
 } from '@/components/data';
 
 const statusLabels: Record<string, string> = {
-  new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
+  new: 'قيد المعالجة', under_review: 'قيد المعالجة', assigned: 'قيد المعالجة',
   in_progress: 'قيد التنفيذ', resolved: 'تم الحل', rejected: 'مرفوضة',
 };
 
 const statusTones: Record<string, StatusTone> = {
-  new: 'info', under_review: 'warning', assigned: 'progress',
+  new: 'progress', under_review: 'progress', assigned: 'progress',
   in_progress: 'progress', resolved: 'success', rejected: 'danger',
 };
+
+// Filter options use individual backend values; قيد المعالجة maps to 'new'
+// (the default initial state for all new complaints).
+const statusFilterOptions = [
+  { value: 'new', label: 'قيد المعالجة' },
+  { value: 'in_progress', label: 'قيد التنفيذ' },
+  { value: 'resolved', label: 'تم الحل' },
+  { value: 'rejected', label: 'مرفوضة' },
+];
 
 const priorityLabels: Record<string, string> = {
   low: 'منخفضة', medium: 'متوسطة', high: 'عالية', urgent: 'عاجلة',
@@ -130,7 +139,7 @@ export default function ComplaintsListPage() {
                   <SelectTrigger className="flex-1 sm:w-[170px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">جميع الحالات</SelectItem>
-                    {Object.entries(statusLabels).map(([k, v]) => (
+                    {statusFilterOptions.map(({ value: k, label: v }) => (
                       <SelectItem key={k} value={k}>{v}</SelectItem>
                     ))}
                   </SelectContent>

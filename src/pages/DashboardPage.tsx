@@ -16,20 +16,33 @@ import {
 // ── Label / colour maps ───────────────────────────────────────────────────────
 
 const complaintStatusLabels: Record<string, string> = {
-  new: 'جديدة', under_review: 'قيد المراجعة', assigned: 'مُعينة',
+  new: 'قيد المعالجة', under_review: 'قيد المعالجة', assigned: 'قيد المعالجة',
   in_progress: 'قيد التنفيذ', resolved: 'تم الحل', rejected: 'مرفوضة',
 };
 
 const complaintStatusColors: Record<string, string> = {
-  new: 'bg-blue-500', under_review: 'bg-yellow-500',
-  assigned: 'bg-orange-500', in_progress: 'bg-purple-500',
+  new: 'bg-indigo-500', under_review: 'bg-indigo-500',
+  assigned: 'bg-indigo-500', in_progress: 'bg-purple-500',
   resolved: 'bg-green-500', rejected: 'bg-red-500',
 };
 
+// The three internal backend values that all map to قيد المعالجة.
+const IN_PROCESSING_STATUSES = ['new', 'under_review', 'assigned'] as const;
+
+/** Merge raw backend status counts into the four simplified display buckets. */
+function simplifyComplaintStatusCounts(raw: Record<string, number>): Record<string, number> {
+  return {
+    new: IN_PROCESSING_STATUSES.reduce((sum, s) => sum + (raw[s] || 0), 0),
+    in_progress: raw.in_progress || 0,
+    resolved: raw.resolved || 0,
+    rejected: raw.rejected || 0,
+  };
+}
+
 const complaintStatusBadge: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-700',
-  under_review: 'bg-yellow-100 text-yellow-700',
-  assigned: 'bg-orange-100 text-orange-700',
+  new: 'bg-indigo-100 text-indigo-700',
+  under_review: 'bg-indigo-100 text-indigo-700',
+  assigned: 'bg-indigo-100 text-indigo-700',
   in_progress: 'bg-purple-100 text-purple-700',
   resolved: 'bg-green-100 text-green-700',
   rejected: 'bg-red-100 text-red-700',
@@ -344,23 +357,27 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {stats && Object.entries(stats.complaints_by_status as Record<string, number>).map(([status, count]) => {
-                  const pct = totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0;
-                  return (
-                    <div key={status} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{complaintStatusLabels[status] || status}</span>
-                        <span className="font-semibold">{count} <span className="text-muted-foreground">({pct}%)</span></span>
+                {stats && (() => {
+                  const raw = stats.complaints_by_status as Record<string, number>;
+                  const simplified = simplifyComplaintStatusCounts(raw);
+                  return Object.entries(simplified).map(([status, count]) => {
+                    const pct = totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0;
+                    return (
+                      <div key={status} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{complaintStatusLabels[status] || status}</span>
+                          <span className="font-semibold">{count} <span className="text-muted-foreground">({pct}%)</span></span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${complaintStatusColors[status] || 'bg-gray-400'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${complaintStatusColors[status] || 'bg-gray-400'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </CardContent>
           </Card>
