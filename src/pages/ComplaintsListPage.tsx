@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
@@ -13,9 +14,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
 import {
   DataTableShell, DataToolbar, StatusBadge, PriorityBadge,
   EmptyState, ErrorState, LoadingSkeleton, PaginationBar, MobileEntityCard,
+  RefreshingIndicator, StaleDataNotice,
   type StatusTone,
 } from '@/components/data';
 
@@ -54,18 +57,11 @@ export default function ComplaintsListPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialProject = searchParams.get('project_id') || 'all';
-  const [complaints, setComplaints] = useState<any[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [areas, setAreas] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [areaFilter, setAreaFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(initialProject);
   const [page, setPage] = useState(0);
-  const [reloadTick, setReloadTick] = useState(0);
 
   // Keep URL in sync when project filter changes so deep links remain shareable.
   useEffect(() => {
@@ -76,34 +72,46 @@ export default function ComplaintsListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectFilter]);
 
-  useEffect(() => {
-    apiService.getAreas().then(setAreas).catch((err) => {
-      if (import.meta.env?.DEV) console.warn('[load:areas]', err);
-    });
-    apiService.getProjects({ limit: 200 })
-      .then((data) => setProjects(data.items || []))
-      .catch((err) => {
-        if (import.meta.env?.DEV) console.warn('[load:projects-selector]', err);
-        setProjects([]);
-      });
-  }, []);
+  // Shared selector lookups — cached across pages via stable query keys
+  // so navigating between Complaints/Tasks does not refetch them.
+  const areasQuery = useQuery({
+    queryKey: queryKeys.areas.all(),
+    queryFn: () => apiService.getAreas(),
+    staleTime: 5 * 60_000,
+  });
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects.selector(),
+    queryFn: () => apiService.getProjects({ limit: 200 }).then((d) => d.items || []),
+    staleTime: 5 * 60_000,
+  });
+  const areas = areasQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
 
-  useEffect(() => {
-    setLoading(true);
-    setError('');
-    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
+  const listParams = useMemo(() => {
+    const params: Record<string, unknown> = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
     if (areaFilter !== 'all') params.area_id = Number(areaFilter);
     if (projectFilter !== 'all') params.project_id = Number(projectFilter);
     if (search) params.search = search;
-    apiService.getComplaints(params)
-      .then((data) => {
-        setComplaints(data.items);
-        setTotalCount(data.total_count);
-      })
-      .catch((err) => setError(describeLoadError(err, 'الشكاوى').message))
-      .finally(() => setLoading(false));
-  }, [statusFilter, areaFilter, projectFilter, search, page, reloadTick]);
+    return params;
+  }, [page, statusFilter, areaFilter, projectFilter, search]);
+
+  const complaintsQuery = useQuery({
+    queryKey: queryKeys.complaints.list(listParams),
+    queryFn: () => apiService.getComplaints(listParams as any),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = complaintsQuery.data;
+  const complaints = data?.items ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const firstLoad = complaintsQuery.isPending && !data;
+  const refreshing = complaintsQuery.isFetching && !!data;
+  const refreshFailed = complaintsQuery.isError && !!data;
+  const fullPageError = complaintsQuery.isError && !data;
+  const error = fullPageError
+    ? describeLoadError(complaintsQuery.error, 'الشكاوى').message
+    : '';
 
   const areaMap = Object.fromEntries(areas.map((a: any) => [a.id, a.name_ar || a.name]));
   const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
@@ -167,10 +175,17 @@ export default function ComplaintsListPage() {
           />
 
           {error && (
-            <ErrorState message={error} onRetry={() => setReloadTick((t) => t + 1)} retrying={loading} />
+            <ErrorState message={error} onRetry={() => complaintsQuery.refetch()} retrying={complaintsQuery.isFetching} />
           )}
 
-          {loading && !error && (
+          {refreshFailed && (
+            <StaleDataNotice onRetry={() => complaintsQuery.refetch()} retrying={refreshing} />
+          )}
+          {refreshing && !refreshFailed && (
+            <RefreshingIndicator />
+          )}
+
+          {firstLoad && !error && (
             <>
               <div className="responsive-table-desktop">
                 <DataTableShell>
@@ -183,7 +198,7 @@ export default function ComplaintsListPage() {
             </>
           )}
 
-          {!loading && !error && (
+          {!firstLoad && !error && (
             <>
               {/* Desktop table view */}
               <div className="responsive-table-desktop">

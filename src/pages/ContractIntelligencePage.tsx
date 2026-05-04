@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,9 +14,11 @@ import {
 } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
 import {
   DataTableShell, StatusBadge, EmptyState, ErrorState, LoadingSkeleton,
-  MobileEntityCard, type StatusTone,
+  MobileEntityCard, RefreshingIndicator, StaleDataNotice, type StatusTone,
 } from '@/components/data';
 
 const statusLabels: Record<string, string> = {
@@ -40,33 +43,40 @@ const RECENT_LIMIT = 10;
 
 export default function ContractIntelligencePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [stats, setStats] = useState<any>(null);
-  const [recentDocs, setRecentDocs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
-  const fetchData = useCallback(() => {
-    setLoading(true);
-    setError('');
-    Promise.all([
-      apiService.getIntelligenceDashboard(),
-      apiService.getProcessingQueue({ limit: RECENT_LIMIT }),
-    ])
-      .then(([dashData, queueData]) => {
-        setStats(dashData);
-        setRecentDocs(queueData.documents || []);
-      })
-      .catch(() => setError('فشل تحميل بيانات مركز الذكاء'))
-      .finally(() => setLoading(false));
-  }, []);
+  const dashboardQuery = useQuery({
+    queryKey: queryKeys.contractIntelligence.dashboard(),
+    queryFn: () => apiService.getIntelligenceDashboard(),
+  });
+  const queueQuery = useQuery({
+    queryKey: queryKeys.contractIntelligence.queue({ limit: RECENT_LIMIT }),
+    queryFn: () => apiService.getProcessingQueue({ limit: RECENT_LIMIT }).then((d) => d.documents || []),
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const stats = dashboardQuery.data ?? null;
+  const recentDocs = queueQuery.data ?? [];
+
+  const firstLoad = dashboardQuery.isPending && !stats;
+  const refreshing =
+    (dashboardQuery.isFetching && !!stats) || (queueQuery.isFetching && recentDocs.length > 0);
+  const refreshFailed =
+    (dashboardQuery.isError && !!stats) || (queueQuery.isError && recentDocs.length > 0);
+  const fullPageError = dashboardQuery.isError && !stats;
+  const error = fullPageError
+    ? describeLoadError(dashboardQuery.error, 'مركز ذكاء العقود').message
+    : '';
+
+  const refetchAll = () => {
+    void dashboardQuery.refetch();
+    void queueQuery.refetch();
+  };
+  const invalidateAll = () =>
+    queryClient.invalidateQueries({ queryKey: ['contract-intelligence'] });
 
   const handleUpload = async (file: File) => {
     const maxSize = 10 * 1024 * 1024;
@@ -78,7 +88,7 @@ export default function ContractIntelligencePage() {
     try {
       await apiService.uploadContractDocument(file);
       toast.success(`تم رفع "${file.name}" بنجاح`);
-      fetchData();
+      void invalidateAll();
     } catch {
       toast.error('فشل رفع الملف');
     } finally {
@@ -135,10 +145,17 @@ export default function ContractIntelligencePage() {
         </div>
 
         {error && (
-          <ErrorState message={error} onRetry={fetchData} retrying={loading} />
+          <ErrorState message={error} onRetry={refetchAll} retrying={dashboardQuery.isFetching} />
         )}
 
-        {loading && !error ? (
+        {refreshFailed && (
+          <StaleDataNotice onRetry={refetchAll} retrying={refreshing} />
+        )}
+        {refreshing && !refreshFailed && (
+          <RefreshingIndicator />
+        )}
+
+        {firstLoad && !error ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (

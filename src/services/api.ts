@@ -201,6 +201,12 @@ export class ApiError extends Error {
   readonly detail: string | null;
   readonly url: string;
   readonly body: unknown;
+  /** Path portion of the request URL (e.g. "/api/complaints"); useful for
+   *  diagnostics and for query-key tagging without leaking the full origin. */
+  readonly endpoint: string;
+  /** True when this error is safe-to-retry (transient gateway 502/503/504,
+   *  network drop, request timeout). False for definitive 4xx and other 5xx. */
+  readonly retryable: boolean;
 
   constructor(opts: {
     status: number;
@@ -209,6 +215,7 @@ export class ApiError extends Error {
     url: string;
     body: unknown;
     message?: string;
+    retryable?: boolean;
   }) {
     super(opts.message ?? `HTTP ${opts.status}: ${opts.detail ?? opts.statusText}`);
     this.name = 'ApiError';
@@ -217,7 +224,22 @@ export class ApiError extends Error {
     this.detail = opts.detail;
     this.url = opts.url;
     this.body = opts.body;
+    this.endpoint = extractEndpoint(opts.url);
+    this.retryable = opts.retryable ?? isRetryableStatus(opts.status);
   }
+}
+
+function extractEndpoint(url: string): string {
+  try {
+    return new URL(url, 'http://_').pathname;
+  } catch {
+    return url;
+  }
+}
+
+function isRetryableStatus(status: number): boolean {
+  // Network/timeout uses status 0; 502/503/504 are transient gateway errors.
+  return status === 0 || status === 502 || status === 503 || status === 504;
 }
 
 /** Maximum number of characters of a non-JSON error body to keep for diagnostics. */
@@ -316,6 +338,7 @@ async function throwApiError(response: Response, fallbackMessage: string): Promi
 //   * GET requests (idempotent)
 //   * status 502/503/504 (gateway-side transient failures)
 //   * network errors (TypeError thrown by fetch when the connection drops)
+//   * our own AbortController timeout (NOT a caller-supplied AbortSignal)
 // We NEVER retry 4xx (the request itself is the problem) or non-GET
 // methods (could double-create resources).
 //
@@ -324,12 +347,24 @@ async function throwApiError(response: Response, fallbackMessage: string): Promi
 // its retry button.
 const TRANSIENT_STATUSES = new Set([502, 503, 504]);
 const RETRY_BACKOFF_MS = [500, 1500];
+/** Timeout for safe GET requests (ms). Long enough for slow upstream calls
+ *  but short enough to keep the UI responsive when the backend is wedged. */
+const GET_TIMEOUT_MS = 12_000;
 const inFlightGetRequests = new Map<string, Promise<Response>>();
 
 function shouldRetry(method: string, statusOrNull: number | null): boolean {
   if (method.toUpperCase() !== 'GET') return false;
-  if (statusOrNull === null) return true; // network error
+  if (statusOrNull === null) return true; // network error or our own timeout
   return TRANSIENT_STATUSES.has(statusOrNull);
+}
+
+function isDev(): boolean {
+  try { return !!import.meta.env?.DEV; } catch { return false; }
+}
+
+function logDiagnostic(payload: Record<string, unknown>): void {
+  if (!isDev()) return;
+  console.debug('[api-diagnostic]', payload);
 }
 
 async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<Response> {
@@ -340,24 +375,54 @@ async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<R
   // where a future maintainer forgets to wrap a new GET endpoint.
   const method = (init?.method ?? 'GET').toUpperCase();
   const url = typeof input === 'string' ? input : input.url;
+  const endpoint = extractEndpoint(url);
   const authHeader = new Headers(init?.headers ?? {}).get('Authorization') ?? '';
   const dedupeKey = `${method}:${url}:${authHeader}`;
+  const callerSignal = init?.signal ?? null;
 
   const run = async (): Promise<Response> => {
     let lastResponse: Response | null = null;
     let lastError: unknown = null;
     // Attempt 0 = original; attempts 1..N = retries.
     const totalAttempts = 1 + RETRY_BACKOFF_MS.length;
+    const startedAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      // For safe GETs we attach an internal AbortController so a wedged
+      // upstream cannot pin the UI for minutes. We chain it to any caller
+      // signal so existing cancellation semantics still work.
+      const controller = method === 'GET' ? new AbortController() : null;
+      const timeoutId = controller
+        ? setTimeout(() => controller.abort(new DOMException('timeout', 'TimeoutError')), GET_TIMEOUT_MS)
+        : null;
+      const onCallerAbort = () => controller?.abort((callerSignal as AbortSignal)?.reason);
+      if (callerSignal && controller) {
+        if (callerSignal.aborted) controller.abort(callerSignal.reason);
+        else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+      }
+      const perRequestInit: RequestInit | undefined = controller
+        ? { ...init, signal: controller.signal }
+        : init;
       try {
-        const response = await fetch(input, init);
+        const response = await fetch(input, perRequestInit);
+        const elapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt);
         if (!response.ok && response.status >= 500) {
-          console.error('[api-diagnostic]', {
-            endpoint: response.url,
+          logDiagnostic({
+            kind: 'http-error',
+            endpoint,
             method,
             status: response.status,
             contentType: response.headers.get('content-type') ?? 'unknown',
             attempt,
+            durationMs: elapsed,
+          });
+        } else if (isDev()) {
+          logDiagnostic({
+            kind: 'http',
+            endpoint,
+            method,
+            status: response.status,
+            attempt,
+            durationMs: elapsed,
           });
         }
         lastResponse = response;
@@ -368,12 +433,29 @@ async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<R
         return response;
       } catch (err) {
         lastError = err;
-        if (shouldRetry(method, null) && attempt < RETRY_BACKOFF_MS.length) {
+        const elapsed = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt);
+        const isAbort = err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError');
+        const isOurTimeout = isAbort && controller?.signal.aborted && !(callerSignal && (callerSignal as AbortSignal).aborted);
+        logDiagnostic({
+          kind: isOurTimeout ? 'timeout' : isAbort ? 'cancelled' : 'network-error',
+          endpoint,
+          method,
+          attempt,
+          durationMs: elapsed,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        // Caller-initiated aborts are never retried — propagate immediately.
+        if (isAbort && !isOurTimeout) throw err;
+        // Our own GET timeouts are treated as transient: try again.
+        if ((isOurTimeout || shouldRetry(method, null)) && attempt < RETRY_BACKOFF_MS.length) {
           await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
           continue;
         }
         if (lastResponse) return lastResponse;
         throw err;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (callerSignal && controller) callerSignal.removeEventListener('abort', onCallerAbort);
       }
     }
     // Exhausted retries — return the last response (still 5xx) so callers
@@ -393,7 +475,8 @@ async function fetchWithRetry(input: RequestInfo, init?: RequestInit): Promise<R
 function logApiFailureDiagnostic(response: Response, detail: string | null): void {
   if (response.status < 500) return;
   console.error('[api-diagnostic]', {
-    endpoint: response.url,
+    kind: 'http-failure',
+    endpoint: extractEndpoint(response.url),
     method: 'unknown',
     status: response.status,
     contentType: response.headers.get('content-type') ?? 'unknown',

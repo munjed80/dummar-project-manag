@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
 import { Input } from '@/components/ui/input';
@@ -13,9 +14,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { format } from 'date-fns';
 import { describeLoadError } from '@/lib/loadError';
+import { queryKeys } from '@/lib/queryKeys';
 import {
   DataTableShell, DataToolbar, StatusBadge, PriorityBadge,
   EmptyState, ErrorState, LoadingSkeleton, PaginationBar, MobileEntityCard,
+  RefreshingIndicator, StaleDataNotice,
   type StatusTone,
 } from '@/components/data';
 
@@ -44,19 +47,12 @@ export default function TasksListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialProject = searchParams.get('project_id') || 'all';
   const initialTeam = searchParams.get('team_id') || 'all';
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(initialProject);
   const [teamFilter, setTeamFilter] = useState(initialTeam);
   const [page, setPage] = useState(0);
-  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -68,38 +64,46 @@ export default function TasksListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectFilter, teamFilter]);
 
-  useEffect(() => {
-    apiService.getProjects({ limit: 200 })
-      .then((data) => setProjects(data.items || []))
-      .catch((err) => {
-        if (import.meta.env?.DEV) console.warn('[load:projects-selector]', err);
-        setProjects([]);
-      });
-    apiService.getActiveTeams()
-      .then((data) => setTeams(Array.isArray(data) ? data : []))
-      .catch((err) => {
-        if (import.meta.env?.DEV) console.warn('[load:teams-selector]', err);
-        setTeams([]);
-      });
-  }, []);
+  // Selector lookups — shared cache across pages.
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects.selector(),
+    queryFn: () => apiService.getProjects({ limit: 200 }).then((d) => d.items || []),
+    staleTime: 5 * 60_000,
+  });
+  const teamsQuery = useQuery({
+    queryKey: queryKeys.teams.active(),
+    queryFn: () => apiService.getActiveTeams().then((d) => Array.isArray(d) ? d : []),
+    staleTime: 5 * 60_000,
+  });
+  const projects = projectsQuery.data ?? [];
+  const teams = teamsQuery.data ?? [];
 
-  useEffect(() => {
-    setLoading(true);
-    setError('');
-    const params: any = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
+  const listParams = useMemo(() => {
+    const params: Record<string, unknown> = { skip: page * PAGE_SIZE, limit: PAGE_SIZE };
     if (statusFilter !== 'all') params.status = statusFilter;
     if (priorityFilter !== 'all') params.priority = priorityFilter;
     if (projectFilter !== 'all') params.project_id = Number(projectFilter);
     if (teamFilter !== 'all') params.team_id = Number(teamFilter);
     if (search) params.search = search;
-    apiService.getTasks(params)
-      .then((data) => {
-        setTasks(data.items);
-        setTotalCount(data.total_count);
-      })
-      .catch((err) => setError(describeLoadError(err, 'المهام').message))
-      .finally(() => setLoading(false));
-  }, [statusFilter, search, priorityFilter, projectFilter, teamFilter, page, reloadTick]);
+    return params;
+  }, [page, statusFilter, priorityFilter, projectFilter, teamFilter, search]);
+
+  const tasksQuery = useQuery({
+    queryKey: queryKeys.tasks.list(listParams),
+    queryFn: () => apiService.getTasks(listParams as any),
+    placeholderData: keepPreviousData,
+  });
+
+  const data = tasksQuery.data;
+  const tasks = data?.items ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const firstLoad = tasksQuery.isPending && !data;
+  const refreshing = tasksQuery.isFetching && !!data;
+  const refreshFailed = tasksQuery.isError && !!data;
+  const fullPageError = tasksQuery.isError && !data;
+  const error = fullPageError
+    ? describeLoadError(tasksQuery.error, 'المهام').message
+    : '';
 
   const projectMap = Object.fromEntries(projects.map((p: any) => [p.id, p.title]));
   const teamMap = Object.fromEntries(teams.map((t: any) => [t.id, t.name]));
@@ -173,10 +177,17 @@ export default function TasksListPage() {
           />
 
           {error && (
-            <ErrorState message={error} onRetry={() => setReloadTick((t) => t + 1)} retrying={loading} />
+            <ErrorState message={error} onRetry={() => tasksQuery.refetch()} retrying={tasksQuery.isFetching} />
           )}
 
-          {loading && !error && (
+          {refreshFailed && (
+            <StaleDataNotice onRetry={() => tasksQuery.refetch()} retrying={refreshing} />
+          )}
+          {refreshing && !refreshFailed && (
+            <RefreshingIndicator />
+          )}
+
+          {firstLoad && !error && (
             <>
               <div className="responsive-table-desktop">
                 <DataTableShell>
@@ -189,7 +200,7 @@ export default function TasksListPage() {
             </>
           )}
 
-          {!loading && !error && (
+          {!firstLoad && !error && (
             <>
               {/* Desktop table view */}
               <div className="responsive-table-desktop">

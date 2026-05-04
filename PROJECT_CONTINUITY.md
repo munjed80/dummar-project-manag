@@ -8,6 +8,75 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-04 — Stable Page Loading via TanStack Query + Centralised Timeout/Retry
+
+**Task:** Make the app feel fast and stable by using cached data + background refresh, central timeout/retry, and consistent loading/error states. No backend, infra, route, or business-logic changes.
+
+**Stack additions:**
+- New runtime dependency: `@tanstack/react-query` (v5).
+- New file `src/lib/queryClient.ts` — central `createQueryClient()` factory with sensible defaults: `staleTime` 60s, `gcTime` 10min, `refetchOnWindowFocus: false`. Smart `retry` only fires for safe GET 502/503/504 / network / our own GET timeout (max 2 retries with 500 ms / 1500 ms backoff). Mutations never auto-retry.
+- New file `src/lib/queryKeys.ts` — typed factory for stable, structured query keys (dashboard, complaints, tasks, teams, projects, areas, investmentContracts, investmentProperties, contractIntelligence, internalMessages, users) so list pages and selectors can dedupe + invalidate precisely.
+- `src/main.tsx` wraps `<App>` in `<QueryClientProvider>`.
+
+**API client (`src/services/api.ts`) improvements:**
+- `ApiError` extended with `endpoint` (path-only, derived from URL) and `retryable` (true only for 0/502/503/504). Existing `status` / `statusText` / `detail` / `url` / `body` preserved.
+- `fetchWithRetry` now wraps every safe GET with an `AbortController` and a 12 s timeout. Caller-supplied `AbortSignal`s still propagate via a chained listener; caller-initiated aborts are NEVER retried.
+- Our own GET timeouts ARE retried (treated as transient) using the existing 500 ms / 1500 ms backoff schedule.
+- Dev-only diagnostics via `logDiagnostic({ kind, endpoint, method, status, attempt, durationMs, … })`. Kinds: `http`, `http-error`, `http-failure`, `timeout`, `cancelled`, `network-error`. Production console stays silent.
+- Non-JSON / HTML 5xx error bodies are still safely discarded (existing `readErrorBody` + `looksLikeHtml`); raw HTML never reaches the user.
+
+**New shared UI primitives (`src/components/data/RefreshingIndicator.tsx`):**
+- `<RefreshingIndicator />` — small inline status shown while a background refresh runs and cached data is on screen. Text: **"جارِ تحديث البيانات…"** (matches required copy).
+- `<StaleDataNotice onRetry retrying />` — soft amber banner shown when a refresh fails but cached data is still visible. Text: **"تعذر تحديث البيانات حالياً، يتم عرض آخر نسخة متاحة."** (matches required copy).
+- Both exported from `@/components/data` barrel.
+
+**Pages migrated to `useQuery` + cached-data UX:**
+1. `src/pages/DashboardPage.tsx` — stats + recent activity cached separately.
+2. `src/pages/ComplaintsListPage.tsx` — list + areas + projects (selectors deduped).
+3. `src/pages/TasksListPage.tsx` — list + projects + active teams (deduped via shared `queryKeys.projects.selector()` / `queryKeys.teams.active()`).
+4. `src/pages/TeamsListPage.tsx` — list with `keepPreviousData`.
+5. `src/pages/InvestmentContractsPage.tsx` — list + properties selector. Mutations (`createInvestmentContract` / `updateInvestmentContract` / `deleteInvestmentContract`) now call `queryClient.invalidateQueries({ queryKey: ['investment-contracts'] })` instead of triggering full reloads.
+6. `src/pages/InternalMessagesPage.tsx` — threads + selected-thread detail + users-selector. Send / create-thread mutations invalidate `internal-messages` query keys instead of forcing a full reload; optimistic message append still kept locally.
+7. `src/pages/ContractIntelligencePage.tsx` — dashboard + queue. File upload invalidates the whole `contract-intelligence` subtree.
+8. `src/pages/ManualContractsPage.tsx` — verified static (no API calls); no migration needed.
+
+**Behaviour each migrated page now exhibits:**
+- **First load (no cache):** neutral skeleton (existing `LoadingSkeleton` / shared spinners) — same as before.
+- **Cached data present:** rendered immediately; small `<RefreshingIndicator />` shown while a quiet background refetch runs.
+- **Background refresh fails with old data:** old data stays on screen; a `<StaleDataNotice />` appears with an "إعادة المحاولة" button. Page never blanks.
+- **Hard error with no data:** existing `<ErrorState />` (or page-level error block on Dashboard) is shown, with retry — never raw JSON / HTML / stack traces (sanitised through `describeLoadError` and `loadError.ts` HTML guards).
+
+**Duplicate / redundant requests removed:**
+- `apiService.getProjects({ limit: 200 })` was previously fetched independently by ComplaintsListPage and TasksListPage every mount → now de-duplicated through `queryKeys.projects.selector()`.
+- `apiService.getActiveTeams()` previously refetched each time TasksListPage mounted → cached for 5 min via `queryKeys.teams.active()`.
+- `apiService.getAreas()` cached via `queryKeys.areas.all()` for 5 min.
+- `apiService.listInvestmentProperties({ limit: 500 })` cached via `queryKeys.investmentProperties.selector()` for 5 min.
+- `apiService.getUsers({ limit: 200 })` (InternalMessagesPage selector) cached via `queryKeys.users.selector()` for 5 min.
+- All list queries also benefit from in-flight GET de-duplication already implemented in `fetchWithRetry`.
+- `setLoading(true)` patterns that reset data to empty before each refresh removed; `keepPreviousData` keeps the table populated during pagination/filter changes.
+
+**Backend:** No changes. Diagnostics did not surface a specific endpoint bug — all observed flakiness was the gateway-blip / no-timeout / no-cache pattern that is now handled client-side.
+
+**Validation:**
+- `npm install` (added `@tanstack/react-query`, 270 packages, 0 vulnerabilities).
+- `npm run build` → ✓ built in ~880 ms, no TypeScript errors.
+- `npm run lint` → 0 errors (14 pre-existing warnings, none introduced).
+- `rg "QueryClient|useQuery|useMutation|staleTime|gcTime|cacheTime|fetchWithRetry|AbortController|setLoading\(true\)|LoadingSkeleton|تعذر تحديث البيانات|جارِ تحديث البيانات" src backend PROJECT_CONTINUITY.md` confirms presence of the new helpers in all migrated pages and absence of the old `setLoading(true)`-before-refresh pattern in those pages.
+- Backend tests not run — backend unchanged.
+
+**Files changed:**
+- Added: `src/lib/queryClient.ts`, `src/lib/queryKeys.ts`, `src/components/data/RefreshingIndicator.tsx`.
+- Modified: `package.json`, `package-lock.json`, `src/main.tsx`, `src/services/api.ts`, `src/components/data/index.ts`, `src/pages/DashboardPage.tsx`, `src/pages/ComplaintsListPage.tsx`, `src/pages/TasksListPage.tsx`, `src/pages/TeamsListPage.tsx`, `src/pages/InvestmentContractsPage.tsx`, `src/pages/InternalMessagesPage.tsx`, `src/pages/ContractIntelligencePage.tsx`, `PROJECT_CONTINUITY.md`.
+
+**Remaining risks / follow-ups:**
+- The other (un-migrated) list/detail pages still use the legacy `setLoading(true)` + `useEffect` pattern. They continue to benefit from the api-client improvements (timeout, dedupe, retry) but do NOT yet show the cached-data UX. A future session can migrate them incrementally using the same `useQuery` + `RefreshingIndicator` / `StaleDataNotice` recipe.
+- `staleTime` defaults to 60 s globally but selector queries override to 5 min — deliberate; can be tuned per-query.
+- React Query devtools were intentionally NOT added to keep the production bundle lean; the dev `[api-diagnostic]` console stream is sufficient for production triage.
+
+**Recommended next step:** Migrate the remaining heavy pages (ContractsListPage, InvestmentPropertiesPage, ReportsPage, UsersPage, LocationsListPage) using the same `useQuery` + cached-data UX recipe documented above.
+
+---
+
 ### Session: 2026-05-04 — Simplify Complaint Status Workflow
 
 **Task:** Reduce the public-facing complaint status display from 6 values to 4 simplified Arabic labels. Enforce a clean workflow in the backend. No migrations, no module renames, no route changes.
