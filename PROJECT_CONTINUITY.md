@@ -8,7 +8,108 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
-### Session: 2026-05-04 — Audit & Cleanup of Legacy/Demo Contract Data
+### Session: 2026-05-05 — Citizen Complaint UI Polish + Smart Assistant Quality Improvement
+
+**Task:** Improve the citizen complaint landing/submission UI and the Smart Assistant quality/UX. Keep Arabic RTL UI, navy/blue premium look. No migrations, no route renames, no docker/nginx changes.
+
+---
+
+#### Part 1 — Citizen Complaint Page UI Polish
+
+**Files changed:**
+- `src/pages/ComplaintSubmitPage.tsx`
+- `src/pages/ComplaintTrackPage.tsx`
+
+**ComplaintSubmitPage.tsx improvements:**
+- Added section dividers (Personal info / Complaint details / Location / Attachments) with section icons for visual hierarchy
+- CTA submit button: `h-13 py-3.5 rounded-xl text-base font-semibold gap-2.5 shadow-sm hover:shadow-md tracking-wide size="lg"` — wider, taller, more prominent, elegant
+- Added `PaperPlaneTilt` icon inside submit button for visual weight
+- Added helper text below CTA ("بعد الإرسال ستحصل على رقم متابعة")
+- Personal info fields moved into a 2-column grid on sm+ screens
+- All inputs: `h-10 rounded-lg` for consistent tap target
+- Select triggers: `h-10 rounded-lg`
+- Textarea: added descriptive placeholder for description
+- Upload drop zone: `border-dashed border-border/60 rounded-xl p-6` with hover highlight
+- File list: `bg-muted/50 rounded-lg border border-border/40` for attached file chips
+- Card: `shadow-lg border-0 ring-1 ring-border/60` for premium look
+- Success page: numbered step list with circular number badges, tracking number block improved with `tracking-widest`, copy button improved, action buttons `h-12 rounded-xl`
+
+**ComplaintTrackPage.tsx improvements:**
+- Search form: inputs `h-10 rounded-lg`, CTA button `h-12 rounded-xl text-base font-semibold` with MagnifyingGlass + ArrowLeft icons
+- Result card: `shadow-md border-0 ring-1 ring-border/60`
+- Data grid: replaced flat key-value pairs with bordered/divided grid block `divide-y sm:divide-x rounded-xl`
+- Each data field has icon + label + value in clear hierarchy
+- Status badge: includes `border` class for defined edges
+- Resolved date: dedicated green chip with CheckCircle icon
+- Repair result section: notes in a rounded bg card, images in `rounded-xl` containers
+- Not-found state: `rounded-xl` with leading-relaxed text
+
+---
+
+#### Part 2 — Smart Assistant Quality Improvement
+
+**Files changed:**
+- `src/components/SmartAssistantDrawer.tsx`
+- `backend/app/api/internal_bot.py`
+- `src/pages/InternalBotPage.tsx`
+
+**SmartAssistantDrawer.tsx improvements:**
+- `ContextAnalysisPanel`: redesigned with combined summary+risk badge in header, divider-separated key-points list, action list with fill CheckCircle icons, related items with type label translations (مهمة/نقاش), tighter rounded-xl borders
+- `ResultPanel`: improved summary label ("نتيجة التحليل"), cleaner stat cards (`rounded-xl border-white/8`), table with `rounded-xl`
+- Empty state: icon in a rounded card, "جاهز للتحليل" headline + sub-copy, better centered layout
+- Thinking indicator: replaced `Spinner + animate-pulse` with a 3-dot bouncing indicator (CSS animate-bounce with delays) + "المساعد يحلل البيانات..." label
+- Error state: long technical errors (>120 chars) are replaced with a user-friendly message; no raw JSON shown to users
+- Context banner: headline "تحليل مرتبط بشكوى" + subtitle with complaint title, analyze button labeled "حلّل هذه الشكوى الآن" + Spinner when loading
+- Previous response stays visible while loading new one (dimmed to 40% opacity with transition)
+- All borders upgraded from `rounded-lg` to `rounded-xl` for consistency
+
+**backend/app/api/internal_bot.py improvements (no migrations):**
+- Added `_arabic_type()` helper: human-readable Arabic complaint type labels (heating_network → صيانة شبكة التدفئة, etc.)
+- Added `_arabic_task_status()` helper: human-readable Arabic task status labels (pending → معلقة, etc.)
+- `_build_complaint_analysis()` summary: rewritten to produce a natural, decisive Arabic paragraph with opening line that escalates to "تنبيه" for high-risk open complaints, age phrasing (أقل من يوم / X يوم), complaint type label, area, task status, discussion count
+- Key points: improved wording ("الحالة الحالية:", type included, age: "أقل من يوم واحد" for new, "يومان" etc., task status Arabic label)
+- Recommended actions: more decisive and specific — urgent complaints get "⚠ شكوى عاجلة — أبلغ المسؤول المباشر الآن", age-based text includes exact day count, task-specific: names the linked task in the action, post-resolution: checks photo documentation and archiving
+- `complaints_summary` intent: richer summary with total + open count ("وردت N شكوى، منها X مفتوحة")
+- `tasks_summary` intent: richer summary with total + pending count
+- `contracts_expiring` intent: richer summary ("يوجد N عقداً ستنتهي... يُنصح بمراجعتها")
+- All data dict keys kept as-is (raw English values) for backward compatibility with existing tests
+
+**InternalBotPage.tsx improvements:**
+- Added `context_analysis` to INTENT_LABELS (was missing)
+- Added Arabic column label passthrough keys for when backend returns Arabic-keyed rows
+
+---
+
+#### Validation results
+
+| Check | Result |
+|---|---|
+| `npm run build` | ✅ built in 1.23s, no errors |
+| `cd backend && python -m pytest tests/ -q` | ✅ **612 passed** in 290.62s |
+| Internal bot tests (7) | ✅ all pass |
+
+---
+
+#### Backend changed?
+
+Yes — `backend/app/api/internal_bot.py` improved (no migrations, no schema changes, no new endpoints, no route renames).
+
+---
+
+#### Remaining risks
+
+- Smart assistant is still rule-based (no external AI). Richer summaries are deterministic and safe. Actual NLP/LLM integration is not in scope.
+- `_arabic_type` and `_arabic_task_status` helpers cover the current enum values; if new complaint types or task statuses are added, update these maps.
+- The 3-dot bounce animation requires Tailwind `animate-bounce` utility (already in the design system). If custom delays aren't in the Tailwind config, they will fall back to default timing but still animate.
+
+---
+
+#### Recommended next step
+
+Consider enhancing the Smart Assistant with dashboard context (open complaint count, overdue task count) automatically loaded on drawer open without requiring a manual query — this would make the "ملخص اليوم" tab immediately useful without a button press.
+
+---
+
 
 **Task:** Audit dashboard / reports for old, demo, or mock contract data. Make contract counts reflect only the real modules (manual contracts, investment contracts, contract intelligence). No destructive DB migrations, no schema changes, no route renames.
 

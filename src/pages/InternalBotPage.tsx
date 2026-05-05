@@ -26,6 +26,7 @@ const INTENT_LABELS: Record<InternalBotIntent, string> = {
   complaints_summary: 'ملخص الشكاوى',
   tasks_summary: 'ملخص المهام',
   contracts_expiring: 'العقود التي تقترب من الانتهاء',
+  context_analysis: 'تحليل سياقي',
 };
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -34,6 +35,10 @@ const COLUMN_LABELS: Record<string, string> = {
   contract_number: 'رقم العقد',
   title: 'العنوان',
   end_date: 'تاريخ الانتهاء',
+  'رقم العقد': 'رقم العقد',
+  'العنوان': 'العنوان',
+  'تاريخ الانتهاء': 'تاريخ الانتهاء',
+  'الحالة': 'الحالة',
 };
 
 interface Preset {
