@@ -35,6 +35,7 @@ const COLUMN_LABELS: Record<string, string> = {
   contract_number: 'رقم العقد',
   title: 'العنوان',
   end_date: 'تاريخ الانتهاء',
+  // Passthrough for rows where the backend already uses Arabic column names.
   'رقم العقد': 'رقم العقد',
   'العنوان': 'العنوان',
   'تاريخ الانتهاء': 'تاريخ الانتهاء',

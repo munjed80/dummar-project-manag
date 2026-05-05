@@ -175,8 +175,12 @@ def _build_complaint_analysis(db: Session, complaint: Complaint) -> InternalBotR
             key_points.append("عمر الشكوى: أقل من يوم واحد (جديدة)")
         elif age_days == 1:
             key_points.append("عمر الشكوى: يوم واحد")
+        elif age_days == 2:
+            key_points.append("عمر الشكوى: يومان")
+        elif age_days <= 10:
+            key_points.append(f"عمر الشكوى: {age_days} أيام")
         else:
-            key_points.append(f"عمر الشكوى: {age_days} يوم{'اً' if age_days <= 10 else ''}")
+            key_points.append(f"عمر الشكوى: {age_days} يوماً")
     if area_name:
         key_points.append(f"المنطقة: {area_name}")
     if location_name:
@@ -515,8 +519,17 @@ def run_internal_bot_query(
         if len(data) == 0:
             summary = f"لا توجد عقود تنتهي خلال الـ {payload.days} يوم القادمة."
         else:
+            n = len(data)
+            if n == 1:
+                contract_word = "عقد واحد"
+            elif n == 2:
+                contract_word = "عقدان"
+            elif n <= 10:
+                contract_word = f"{n} عقود"
+            else:
+                contract_word = f"{n} عقداً"
             summary = (
-                f"يوجد {len(data)} عقد{'اً' if len(data) <= 10 else ''} ستنتهي خلال الـ {payload.days} يوم القادمة — "
+                f"يوجد {contract_word} ستنتهي خلال الـ {payload.days} يوم القادمة — "
                 "يُنصح بمراجعتها وبدء إجراءات التجديد أو الإغلاق."
             )
 

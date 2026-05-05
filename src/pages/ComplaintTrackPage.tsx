@@ -171,6 +171,7 @@ export default function ComplaintTrackPage() {
                           href={`/uploads/${path}`}
                           target="_blank"
                           rel="noopener noreferrer"
+                          aria-label={`عرض صورة بعد الإصلاح رقم ${i + 1}`}
                           className="block rounded-xl overflow-hidden border border-border/40 hover:opacity-90 transition-opacity"
                         >
                           <img
