@@ -499,7 +499,7 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sanitizeJsonPayload(credentials)),
     });
-    if (!response.ok) throw new Error('Login failed');
+    if (!response.ok) await throwApiError(response, 'Login failed');
     const data: AuthToken = await response.json();
     localStorage.setItem('access_token', data.access_token);
     if (data.must_change_password) {
@@ -563,7 +563,7 @@ class ApiService {
 
   async getComplaint(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch complaint');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch complaint');
     return response.json();
   }
 
@@ -633,7 +633,7 @@ class ApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sanitizeJsonPayload({ tracking_number, phone })),
     });
-    if (!response.ok) throw new Error('Complaint not found');
+    if (!response.ok) await throwApiError(response, 'Complaint not found');
     return response.json();
   }
 
@@ -643,13 +643,13 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to update complaint');
+    if (!response.ok) await throwApiError(response, 'Failed to update complaint');
     return response.json();
   }
 
   async getComplaintActivities(id: number): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/${id}/activities`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch activities');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch activities');
     return response.json();
   }
 
@@ -675,7 +675,7 @@ class ApiService {
 
   async getTask(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch task');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch task');
     return response.json();
   }
 
@@ -729,7 +729,7 @@ class ApiService {
 
   async getTaskActivities(id: number): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/tasks/${id}/activities`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch activities');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch activities');
     return response.json();
   }
 
@@ -750,7 +750,7 @@ class ApiService {
 
   async getContract(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch contract');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch contract');
     return response.json();
   }
 
@@ -780,7 +780,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(sanitizeJsonPayload({ action, comments })),
     });
-    if (!response.ok) throw new Error('Failed to approve contract');
+    if (!response.ok) await throwApiError(response, 'Failed to approve contract');
     return response.json();
   }
 
@@ -789,7 +789,7 @@ class ApiService {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to delete contract');
+    if (!response.ok) await throwApiError(response, 'Failed to delete contract');
     return response.json();
   }
 
@@ -798,13 +798,13 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to generate PDF');
+    if (!response.ok) await throwApiError(response, 'Failed to generate PDF');
     return response.json();
   }
 
   async getContractApprovals(id: number): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contracts/${id}/approvals`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch approvals');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch approvals');
     return response.json();
   }
 
@@ -825,7 +825,7 @@ class ApiService {
 
   async getProject(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/projects/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch project');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch project');
     return response.json();
   }
 
@@ -854,7 +854,7 @@ class ApiService {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to delete project');
+    if (!response.ok) await throwApiError(response, 'Failed to delete project');
     return response.json();
   }
 
@@ -882,7 +882,7 @@ class ApiService {
 
   async getTeam(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/teams/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch team');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch team');
     return response.json();
   }
 
@@ -913,7 +913,7 @@ class ApiService {
   // ── Settings ──
   async getSettings(): Promise<Record<string, any[]>> {
     const response = await fetchWithRetry(`${API_BASE_URL}/settings/`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch settings');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch settings');
     return response.json();
   }
 
@@ -923,7 +923,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(sanitizeJsonPayload({ items })),
     });
-    if (!response.ok) throw new Error('Failed to update settings');
+    if (!response.ok) await throwApiError(response, 'Failed to update settings');
     return response.json();
   }
 
@@ -940,20 +940,20 @@ class ApiService {
   // ── Dashboard ──
   async getDashboardStats(): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/dashboard/stats`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch dashboard stats');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch dashboard stats');
     return response.json();
   }
 
   async getRecentActivity(): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/dashboard/recent-activity`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch recent activity');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch recent activity');
     return response.json();
   }
 
   // ── Locations ──
   async getAreas(): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/areas`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch areas');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch areas');
     return response.json();
   }
 
@@ -961,7 +961,7 @@ class ApiService {
     const qp = new URLSearchParams();
     if (areaId) qp.append('area_id', areaId.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/buildings?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch buildings');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch buildings');
     return response.json();
   }
 
@@ -984,19 +984,19 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/list?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch locations');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch locations');
     return response.json();
   }
 
   async getLocationTree(): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/tree`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location tree');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location tree');
     return response.json();
   }
 
   async getLocationDetail(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location detail');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location detail');
     return response.json();
   }
 
@@ -1004,7 +1004,7 @@ class ApiService {
     const qp = new URLSearchParams();
     if (statusFilter) qp.append('status_filter', statusFilter);
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/complaints?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location complaints');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location complaints');
     return response.json();
   }
 
@@ -1012,19 +1012,19 @@ class ApiService {
     const qp = new URLSearchParams();
     if (statusFilter) qp.append('status_filter', statusFilter);
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/tasks?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location tasks');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location tasks');
     return response.json();
   }
 
   async getLocationContracts(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/contracts`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location contracts');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location contracts');
     return response.json();
   }
 
   async getLocationActivity(id: number): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/activity`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location activity');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location activity');
     return response.json();
   }
 
@@ -1032,13 +1032,13 @@ class ApiService {
     const qp = new URLSearchParams();
     if (locationType) qp.append('location_type', locationType);
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/stats/all?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location stats');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location stats');
     return response.json();
   }
 
   async getLocationReportSummary(): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/reports/summary`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location report');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location report');
     return response.json();
   }
 
@@ -1072,15 +1072,14 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to delete location');
+      await throwApiError(response, 'Failed to delete location');
     }
     return response.json();
   }
 
   async getLocationMapData(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/detail/${id}/map-data`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch location map data');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch location map data');
     return response.json();
   }
 
@@ -1090,15 +1089,14 @@ class ApiService {
     if (params?.status) qp.append('status', params.status);
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to export location report');
+      await throwApiError(response, 'Failed to export location report');
     }
     return response.blob();
   }
 
   async getContractLocations(contractId: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/contracts/${contractId}/locations`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch contract locations');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch contract locations');
     return response.json();
   }
 
@@ -1108,8 +1106,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to link contract to location');
+      await throwApiError(response, 'Failed to link contract to location');
     }
     return response.json();
   }
@@ -1120,15 +1117,14 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to unlink contract from location');
+      await throwApiError(response, 'Failed to unlink contract from location');
     }
     return response.json();
   }
 
   async getGeoDashboard(): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/locations/geo-dashboard`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch geo dashboard');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch geo dashboard');
     return response.json();
   }
 
@@ -1148,7 +1144,7 @@ class ApiService {
 
   async getUser(id: number): Promise<User> {
     const response = await fetchWithRetry(`${API_BASE_URL}/users/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch user');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch user');
     return response.json();
   }
 
@@ -1207,8 +1203,7 @@ class ApiService {
       body: JSON.stringify(sanitizeJsonPayload(payload)),
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to change password');
+      await throwApiError(response, 'Failed to change password');
     }
     const updated: User = await response.json();
     localStorage.removeItem('must_change_password');
@@ -1230,7 +1225,7 @@ class ApiService {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to upload file');
+    if (!response.ok) await throwApiError(response, 'Failed to upload file');
     return response.json();
   }
 
@@ -1241,7 +1236,7 @@ class ApiService {
       method: 'POST',
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to upload file');
+    if (!response.ok) await throwApiError(response, 'Failed to upload file');
     return response.json();
   }
 
@@ -1257,7 +1252,7 @@ class ApiService {
     if (params?.priority) qp.append('priority', params.priority);
     if (params?.assigned_to_id) qp.append('assigned_to_id', params.assigned_to_id.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/reports/summary?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch report summary');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch report summary');
     return response.json();
   }
 
@@ -1269,7 +1264,7 @@ class ApiService {
       });
     }
     const response = await fetchWithRetry(`${API_BASE_URL}/reports/complaints?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch complaints report');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch complaints report');
     return response.json();
   }
 
@@ -1281,7 +1276,7 @@ class ApiService {
       });
     }
     const response = await fetchWithRetry(`${API_BASE_URL}/reports/tasks?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch tasks report');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch tasks report');
     return response.json();
   }
 
@@ -1293,7 +1288,7 @@ class ApiService {
       });
     }
     const response = await fetchWithRetry(`${API_BASE_URL}/reports/contracts?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch contracts report');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch contracts report');
     return response.json();
   }
 
@@ -1305,7 +1300,7 @@ class ApiService {
       });
     }
     const response = await fetchWithRetry(`${API_BASE_URL}/reports/${entity}/csv?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to download CSV');
+    if (!response.ok) await throwApiError(response, 'Failed to download CSV');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1324,7 +1319,7 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/citizen/my-complaints?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch citizen complaints');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch citizen complaints');
     return response.json();
   }
 
@@ -1334,7 +1329,7 @@ class ApiService {
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/complaints/map/markers?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch map markers');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch map markers');
     return response.json();
   }
 
@@ -1345,13 +1340,13 @@ class ApiService {
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.area_id) qp.append('area_id', params.area_id.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/gis/operations-map?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch operations map markers');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch operations map markers');
     return response.json();
   }
 
   async getAreaBoundaries(): Promise<any[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/gis/area-boundaries`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch area boundaries');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch area boundaries');
     return response.json();
   }
 
@@ -1363,7 +1358,7 @@ class ApiService {
     if (params?.unread_only) qp.append('unread_only', 'true');
     // Trailing slash required — backend route is `@router.get("/")`.
     const response = await fetchWithRetry(`${API_BASE_URL}/notifications/?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch notifications');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch notifications');
     return response.json();
   }
 
@@ -1373,7 +1368,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ notification_ids: ids }),
     });
-    if (!response.ok) throw new Error('Failed to mark notifications read');
+    if (!response.ok) await throwApiError(response, 'Failed to mark notifications read');
     return response.json();
   }
 
@@ -1382,14 +1377,14 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to mark all notifications read');
+    if (!response.ok) await throwApiError(response, 'Failed to mark all notifications read');
     return response.json();
   }
 
   // ── Contract Intelligence ──
   async getIntelligenceDashboard(): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/dashboard`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch intelligence dashboard');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch intelligence dashboard');
     return response.json();
   }
 
@@ -1399,7 +1394,7 @@ class ApiService {
     if (params?.skip !== undefined) qp.append('skip', params.skip.toString());
     if (params?.limit !== undefined) qp.append('limit', params.limit.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/queue?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch processing queue');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch processing queue');
     return response.json();
   }
 
@@ -1412,13 +1407,13 @@ class ApiService {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to upload contract document');
+    if (!response.ok) await throwApiError(response, 'Failed to upload contract document');
     return response.json();
   }
 
   async getContractDocument(id: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${id}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch document');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch document');
     return response.json();
   }
 
@@ -1428,7 +1423,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to update document');
+    if (!response.ok) await throwApiError(response, 'Failed to update document');
     return response.json();
   }
 
@@ -1437,7 +1432,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to approve document');
+    if (!response.ok) await throwApiError(response, 'Failed to approve document');
     return response.json();
   }
 
@@ -1446,7 +1441,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to reject document');
+    if (!response.ok) await throwApiError(response, 'Failed to reject document');
     return response.json();
   }
 
@@ -1455,7 +1450,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to reprocess document');
+    if (!response.ok) await throwApiError(response, 'Failed to reprocess document');
     return response.json();
   }
 
@@ -1464,7 +1459,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to convert to contract');
+    if (!response.ok) await throwApiError(response, 'Failed to convert to contract');
     return response.json();
   }
 
@@ -1474,7 +1469,7 @@ class ApiService {
     if (params?.contract_id) qp.append('contract_id', params.contract_id.toString());
     if (params?.unresolved_only) qp.append('unresolved_only', 'true');
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/risks?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch risks');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch risks');
     return response.json();
   }
 
@@ -1485,7 +1480,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to resolve risk');
+    if (!response.ok) await throwApiError(response, 'Failed to resolve risk');
     return response.json();
   }
 
@@ -1494,7 +1489,7 @@ class ApiService {
     if (params?.status_filter) qp.append('status_filter', params.status_filter);
     if (params?.document_id) qp.append('document_id', params.document_id.toString());
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/duplicates?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch duplicates');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch duplicates');
     return response.json();
   }
 
@@ -1504,7 +1499,7 @@ class ApiService {
       headers: this.getAuthHeaders(),
       body: JSON.stringify(sanitizeJsonPayload(data)),
     });
-    if (!response.ok) throw new Error('Failed to review duplicate');
+    if (!response.ok) await throwApiError(response, 'Failed to review duplicate');
     return response.json();
   }
 
@@ -1517,7 +1512,7 @@ class ApiService {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to preview CSV');
+    if (!response.ok) await throwApiError(response, 'Failed to preview CSV');
     return response.json();
   }
 
@@ -1530,7 +1525,7 @@ class ApiService {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to execute CSV import');
+    if (!response.ok) await throwApiError(response, 'Failed to execute CSV import');
     return response.json();
   }
 
@@ -1543,13 +1538,13 @@ class ApiService {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to bulk scan import');
+    if (!response.ok) await throwApiError(response, 'Failed to bulk scan import');
     return response.json();
   }
 
   async getContractIntelligence(contractId: number): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/contracts/${contractId}/intelligence`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch contract intelligence');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch contract intelligence');
     return response.json();
   }
 
@@ -1558,7 +1553,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to analyze risks');
+    if (!response.ok) await throwApiError(response, 'Failed to analyze risks');
     return response.json();
   }
 
@@ -1567,7 +1562,7 @@ class ApiService {
       method: 'POST',
       headers: this.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Failed to detect duplicates');
+    if (!response.ok) await throwApiError(response, 'Failed to detect duplicates');
     return response.json();
   }
 
@@ -1581,7 +1576,7 @@ class ApiService {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to preview Excel');
+    if (!response.ok) await throwApiError(response, 'Failed to preview Excel');
     return response.json();
   }
 
@@ -1594,14 +1589,14 @@ class ApiService {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    if (!response.ok) throw new Error('Failed to execute Excel import');
+    if (!response.ok) await throwApiError(response, 'Failed to execute Excel import');
     return response.json();
   }
 
   // OCR status
   async getOcrStatus(): Promise<any> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/ocr-status`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch OCR status');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch OCR status');
     return response.json();
   }
 
@@ -1620,7 +1615,7 @@ class ApiService {
   async getIntelligenceReports(params?: Record<string, any>): Promise<any> {
     const qp = this._buildQueryParams(params);
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/reports?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to fetch intelligence reports');
+    if (!response.ok) await throwApiError(response, 'Failed to fetch intelligence reports');
     return response.json();
   }
 
@@ -1628,7 +1623,7 @@ class ApiService {
   async downloadIntelligenceCsv(params?: Record<string, any>): Promise<void> {
     const qp = this._buildQueryParams(params);
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/reports/export/csv?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to download CSV');
+    if (!response.ok) await throwApiError(response, 'Failed to download CSV');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1643,7 +1638,7 @@ class ApiService {
   async downloadIntelligencePdf(params?: Record<string, any>): Promise<void> {
     const qp = this._buildQueryParams(params);
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/reports/export/pdf?${qp}`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to download PDF');
+    if (!response.ok) await throwApiError(response, 'Failed to download PDF');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1657,7 +1652,7 @@ class ApiService {
 
   async downloadDocumentPdf(documentId: number): Promise<void> {
     const response = await fetchWithRetry(`${API_BASE_URL}/contract-intelligence/documents/${documentId}/export/pdf`, { headers: this.getAuthHeaders() });
-    if (!response.ok) throw new Error('Failed to download document PDF');
+    if (!response.ok) await throwApiError(response, 'Failed to download document PDF');
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

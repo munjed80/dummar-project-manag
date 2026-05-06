@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService, ApiError } from '@/services/api';
+import { describeLoadError } from '@/lib/loadError';
 import { FileUpload } from '@/components/FileUpload';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -140,7 +141,7 @@ export default function ComplaintDetailsPage() {
           setResponsibleAuthority(matchedAuthority.value);
         }
       })
-      .catch(() => setError('فشل تحميل بيانات الشكوى'))
+      .catch((err) => setError(describeLoadError(err, 'بيانات الشكوى').message))
       .finally(() => setLoading(false));
   };
 

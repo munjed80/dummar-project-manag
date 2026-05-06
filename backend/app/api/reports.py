@@ -97,6 +97,7 @@ def get_report_summary(
 
     # --- Tasks ---
     t_query = db.query(Task)
+    t_query = perms.scope_query(t_query, db, current_user, Task)
     t_query = _apply_date_filter(t_query, Task, date_from, date_to)
     if area_id:
         t_query = t_query.filter(Task.area_id == area_id)
@@ -132,6 +133,7 @@ def get_report_summary(
 
     # --- Contracts ---
     co_query = db.query(Contract)
+    co_query = perms.scope_query(co_query, db, current_user, Contract)
     co_query = _apply_date_filter(co_query, Contract, date_from, date_to)
     if status:
         co_query = co_query.filter(Contract.status == status)
@@ -228,6 +230,7 @@ def get_tasks_report(
     db: Session = Depends(get_db),
 ):
     query = db.query(Task)
+    query = perms.scope_query(query, db, current_user, Task)
     query = _apply_date_filter(query, Task, date_from, date_to)
 
     if status:
@@ -267,6 +270,7 @@ def get_contracts_report(
     db: Session = Depends(get_db),
 ):
     query = db.query(Contract)
+    query = perms.scope_query(query, db, current_user, Contract)
     query = _apply_date_filter(query, Contract, date_from, date_to)
 
     if status:
@@ -468,6 +472,7 @@ def export_tasks_csv(
         db, date_from, date_to, status, area_id, priority,
         assigned_to_id, source_type, search,
     )
+    query = perms.scope_query(query, db, current_user, Task)
     items = query.order_by(Task.created_at.desc()).all()
 
     # Resolve area names
@@ -518,6 +523,7 @@ def export_contracts_csv(
     query = _contract_query_with_filters(
         db, date_from, date_to, status, contract_type, search
     )
+    query = perms.scope_query(query, db, current_user, Contract)
     items = query.order_by(Contract.created_at.desc()).all()
 
     headers = [

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { apiService } from '@/services/api';
+import { describeLoadError } from '@/lib/loadError';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -75,7 +76,7 @@ export default function ProcessingQueuePage() {
         setDocuments(data.documents);
         setQueueLength(data.queue_length);
       })
-      .catch(() => setError('فشل تحميل قائمة المعالجة'))
+      .catch((err) => setError(describeLoadError(err, 'قائمة المعالجة').message))
       .finally(() => setLoading(false));
   }, [statusFilter, page]);
 
