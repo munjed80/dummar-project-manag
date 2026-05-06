@@ -181,76 +181,79 @@ function ContextAnalysisPanel({ response }: { response: InternalBotResponse }) {
 
   return (
     <div className="space-y-4">
-      {/* Summary */}
-      <div className="rounded-lg border border-sky-200/30 bg-sky-950/40 p-4">
+      {/* Summary — prominent card */}
+      <div className="rounded-xl border border-sky-500/25 bg-sky-950/50 p-4">
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2 text-sky-300 font-medium text-sm">
-            <ChartBar size={16} />
-            <span>الخلاصة</span>
+          <div className="flex items-center gap-2 text-sky-300 font-semibold text-sm">
+            <Robot size={16} weight="fill" />
+            <span>تحليل المساعد الذكي</span>
           </div>
-          <Badge
-            variant="secondary"
-            className="text-[10px] bg-indigo-900/60 text-indigo-200 border border-indigo-500/30"
+          <div
+            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${riskMeta.classes}`}
           >
-            {INTENT_LABELS[response.intent] ?? response.intent}
-          </Badge>
+            <ShieldWarning size={11} />
+            {riskMeta.label}
+          </div>
         </div>
-        <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+        <p className="text-sm text-slate-100 leading-relaxed whitespace-pre-wrap">
           {response.summary}
         </p>
-        <p className="text-[11px] text-slate-500 mt-2">توليد: {response.generated_on}</p>
-      </div>
-
-      {/* Risk badge */}
-      <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${riskMeta.classes}`}>
-        <ShieldWarning size={18} />
-        <span className="font-medium">مستوى المخاطر:</span>
-        <span className="font-bold">{riskMeta.label}</span>
+        <p className="text-[10px] text-slate-600 mt-2.5">
+          تحليل آلي · {response.generated_on}
+        </p>
       </div>
 
       {/* Key points */}
       {keyPoints.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 mb-2">النقاط الرئيسية</p>
-          <ul className="space-y-1.5 rounded-lg border border-white/10 bg-white/5 p-3">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            النقاط الرئيسية
+          </p>
+          <div className="rounded-xl border border-white/8 bg-white/[0.03] divide-y divide-white/5">
             {keyPoints.map((kp, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-slate-200">
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 text-xs text-slate-200">
                 <Info size={12} className="mt-0.5 shrink-0 text-sky-400" />
                 <span className="leading-relaxed">{kp}</span>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {/* Recommended actions */}
       {actions.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 mb-2">إجراءات مقترحة</p>
-          <ul className="space-y-1.5 rounded-lg border border-emerald-500/20 bg-emerald-950/20 p-3">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            الإجراءات المقترحة
+          </p>
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 divide-y divide-emerald-500/10">
             {actions.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-emerald-200">
-                <CheckCircle size={12} className="mt-0.5 shrink-0 text-emerald-400" />
+              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 text-xs text-emerald-100">
+                <CheckCircle size={12} className="mt-0.5 shrink-0 text-emerald-400" weight="fill" />
                 <span className="leading-relaxed">{a}</span>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {/* Related items */}
       {related.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 mb-2">عناصر مرتبطة</p>
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            عناصر مرتبطة
+          </p>
           <div className="space-y-1.5">
             {related.map((item) => (
               <div
                 key={`${item.type}-${item.id}`}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200"
+                className="flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5 text-xs text-slate-200"
               >
-                <LinkIcon size={12} className="text-sky-400" />
-                <span className="font-medium">{item.label}</span>
-                <span className="text-[10px] text-slate-500">#{item.id} · {item.type}</span>
+                <LinkIcon size={12} className="text-sky-400 shrink-0" />
+                <span className="font-semibold flex-1">{item.label}</span>
+                <span className="text-[10px] text-slate-500">
+                  {item.type === 'task' ? 'مهمة' : item.type === 'message_thread' ? 'نقاش' : item.type} #{item.id}
+                </span>
               </div>
             ))}
           </div>
@@ -281,7 +284,7 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
     return rows.map((r) => {
       const row = r as BotRow;
       return {
-        label: String(row.status ?? '—'),
+        label: String(row.status ?? row['الحالة'] ?? '—'),
         count: Number(row.count ?? 0),
       };
     });
@@ -295,11 +298,11 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
   return (
     <div className="space-y-4">
       {/* Summary card */}
-      <div className="rounded-lg border border-sky-200/30 bg-sky-950/40 p-4">
+      <div className="rounded-xl border border-sky-200/30 bg-sky-950/40 p-4">
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2 text-sky-300 font-medium text-sm">
+          <div className="flex items-center gap-2 text-sky-300 font-semibold text-sm">
             <ChartBar size={16} />
-            <span>النتيجة</span>
+            <span>نتيجة التحليل</span>
           </div>
           <Badge
             variant="secondary"
@@ -308,29 +311,29 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
             {INTENT_LABELS[response.intent] ?? response.intent}
           </Badge>
         </div>
-        <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+        <p className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">
           {response.summary}
         </p>
-        <p className="text-[11px] text-slate-500 mt-2">
-          توليد: {response.generated_on}
+        <p className="text-[10px] text-slate-500 mt-2.5">
+          تحليل آلي · {response.generated_on}
         </p>
       </div>
 
       {/* Stat cards */}
       {statCards.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 mb-2">الإحصائيات</p>
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">الإحصائيات</p>
           <div className="grid grid-cols-2 gap-2">
             {statCards.map((s) => (
               <div
                 key={s.label}
-                className="rounded-lg border border-white/10 bg-white/5 p-3"
+                className="rounded-xl border border-white/8 bg-white/[0.03] p-3"
               >
                 <div className="text-[10px] text-slate-400 truncate">{s.label}</div>
                 <div className="text-xl font-bold text-white mt-1">{s.count}</div>
               </div>
             ))}
-            <div className="rounded-lg border border-sky-500/30 bg-sky-900/30 p-3 col-span-2">
+            <div className="rounded-xl border border-sky-500/30 bg-sky-900/30 p-3 col-span-2">
               <div className="text-[10px] text-sky-400">الإجمالي</div>
               <div className="text-xl font-bold text-sky-200 mt-1">{totalCount}</div>
             </div>
@@ -341,17 +344,17 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
       {/* Data table */}
       {response.data.length > 0 && columns.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-400 mb-2">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
             التفاصيل ({response.data.length})
           </p>
-          <div className="overflow-auto rounded-lg border border-white/10">
+          <div className="overflow-auto rounded-xl border border-white/8">
             <Table>
               <TableHeader>
-                <TableRow className="border-white/10 hover:bg-transparent">
+                <TableRow className="border-white/8 hover:bg-transparent">
                   {columns.map((c) => (
                     <TableHead
                       key={c}
-                      className="text-right text-[11px] text-slate-400 bg-white/5 py-2"
+                      className="text-right text-[11px] text-slate-400 bg-white/[0.03] py-2"
                     >
                       {COLUMN_LABELS[c] ?? c}
                     </TableHead>
@@ -360,7 +363,7 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
               </TableHeader>
               <TableBody>
                 {response.data.map((row, idx) => (
-                  <TableRow key={idx} className="border-white/5 hover:bg-white/5">
+                  <TableRow key={idx} className="border-white/5 hover:bg-white/[0.03]">
                     {columns.map((c) => (
                       <TableCell key={c} className="text-xs text-slate-300 py-2">
                         {String((row as BotRow)[c] ?? '—')}
@@ -375,8 +378,9 @@ function ResultPanel({ response }: { response: InternalBotResponse }) {
       )}
 
       {response.data.length === 0 && (
-        <div className="text-center py-6 text-sm text-slate-400">
-          <p>لا توجد بيانات متاحة لهذا الاستعلام في الوقت الحالي.</p>
+        <div className="text-center py-8 text-sm text-slate-500">
+          <ChartBar size={28} className="mx-auto mb-2 opacity-30" />
+          <p>لا توجد بيانات متاحة لهذا الاستعلام.</p>
           <p className="text-xs text-slate-600 mt-1">تأكد من وجود سجلات في النظام أو جرّب استعلاماً مختلفاً.</p>
         </div>
       )}
@@ -564,24 +568,25 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
           {/* Context banner (Phase 3) */}
           {context && (
             <div className="space-y-2">
-              <div className="flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-950/30 p-3 text-xs text-sky-200">
-                <Info size={14} className="mt-0.5 shrink-0" />
-                <span>
-                  تحليل مرتبط بالشكوى رقم {context.contextTitle ?? `#${context.contextId}`}
-                </span>
+              <div className="flex items-start gap-2 rounded-xl border border-sky-500/30 bg-sky-950/40 p-3.5 text-xs text-sky-200">
+                <Info size={14} className="mt-0.5 shrink-0 text-sky-400" />
+                <div>
+                  <p className="font-semibold text-sky-300 mb-0.5">تحليل مرتبط بشكوى</p>
+                  <p className="text-sky-400/80">{context.contextTitle ?? `الشكوى رقم #${context.contextId}`}</p>
+                </div>
               </div>
               <Button
                 onClick={() => void runQuery({ useContext: true })}
                 disabled={loading}
                 size="sm"
-                className="w-full gap-2 bg-sky-600 hover:bg-sky-500 text-white font-medium"
+                className="w-full gap-2 bg-sky-600 hover:bg-sky-500 text-white font-semibold h-9 rounded-xl"
               >
                 {loading ? (
                   <Spinner size={14} className="animate-spin" />
                 ) : (
-                  <Robot size={14} />
+                  <Robot size={14} weight="fill" />
                 )}
-                حلّل هذه الشكوى
+                {loading ? 'جارٍ التحليل...' : 'حلّل هذه الشكوى الآن'}
               </Button>
             </div>
           )}
@@ -686,10 +691,12 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
 
           {/* Error */}
           {error && (
-            <div className="flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300">
+            <div className="flex flex-col gap-2 rounded-xl border border-red-500/30 bg-red-950/30 p-3.5 text-xs text-red-300">
               <div className="flex items-start gap-2">
                 <Warning size={14} className="mt-0.5 shrink-0" />
-                <span className="flex-1">{error}</span>
+                <span className="flex-1 leading-relaxed">
+                  {error.length > 120 ? 'تعذّر إتمام الطلب. تحقق من الاتصال وحاول مجدداً.' : error}
+                </span>
               </div>
               <Button
                 size="sm"
@@ -708,15 +715,19 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
 
           {/* Thinking indicator */}
           {loading && (
-            <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-950/30 px-3 py-2.5 text-xs text-sky-400">
-              <Spinner size={12} className="animate-spin shrink-0" />
-              <span className="animate-pulse">يفكر النظام...</span>
+            <div className="flex items-center gap-3 rounded-xl border border-sky-500/20 bg-sky-950/30 px-4 py-3 text-xs text-sky-300">
+              <div className="flex gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce [animation-delay:300ms]" />
+              </div>
+              <span className="font-medium">المساعد يحلل البيانات...</span>
             </div>
           )}
 
-          {/* Results — kept visible while loading (above the thinking bar) */}
+          {/* Results — kept visible while loading (dimmed) */}
           {response && (
-            <div className={loading ? 'opacity-50 pointer-events-none' : undefined}>
+            <div className={loading ? 'opacity-40 pointer-events-none transition-opacity' : 'transition-opacity'}>
               {response.intent === 'context_analysis'
                 ? <ContextAnalysisPanel response={response} />
                 : <ResultPanel response={response} />
@@ -726,10 +737,13 @@ export function SmartAssistantDrawer({ open, onOpenChange, context }: SmartAssis
 
           {/* Empty state */}
           {!loading && !response && !error && (
-            <div className="flex flex-col items-center justify-center py-10 text-slate-600">
-              <Robot size={40} className="mb-3 opacity-30" />
-              <p className="text-xs text-center">
-                اختر استعلاماً سريعاً أو اكتب سؤالاً للحصول على النتائج.
+            <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
+                <Robot size={28} className="opacity-50" />
+              </div>
+              <p className="text-sm font-medium text-slate-400 mb-1">جاهز للتحليل</p>
+              <p className="text-xs text-center text-slate-600 max-w-[200px] leading-relaxed">
+                اختر استعلاماً سريعاً أعلاه أو اكتب سؤالاً مخصصاً للحصول على النتائج.
               </p>
             </div>
           )}

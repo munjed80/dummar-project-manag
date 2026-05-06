@@ -164,49 +164,80 @@ def _build_complaint_analysis(db: Session, complaint: Complaint) -> InternalBotR
 
     # ── Key points (factual bullets) ──────────────────────────────────
     key_points: list[str] = []
-    key_points.append(f"الحالة: {_arabic_status(complaint.status)}")
+    key_points.append(f"الحالة الحالية: {_arabic_status(complaint.status)}")
     key_points.append(f"الأولوية: {_arabic_priority(complaint.priority)}")
+    type_label = _arabic_type(complaint.complaint_type)
+    key_points.append(f"نوع الشكوى: {type_label}")
     if complaint.tracking_number:
         key_points.append(f"رقم التتبع: {complaint.tracking_number}")
     if created_at:
-        key_points.append(f"عمر الشكوى: {age_days} يوم")
-    if location_name:
-        key_points.append(f"الموقع: {location_name}")
+        if age_days == 0:
+            key_points.append("عمر الشكوى: أقل من يوم واحد (جديدة)")
+        elif age_days == 1:
+            key_points.append("عمر الشكوى: يوم واحد")
+        elif age_days == 2:
+            key_points.append("عمر الشكوى: يومان")
+        elif age_days <= 10:
+            key_points.append(f"عمر الشكوى: {age_days} أيام")
+        else:
+            key_points.append(f"عمر الشكوى: {age_days} يوماً")
     if area_name:
         key_points.append(f"المنطقة: {area_name}")
+    if location_name:
+        key_points.append(f"الموقع: {location_name}")
     if related_task is not None:
+        task_status_ar = _arabic_task_status(related_task.status)
         key_points.append(
-            f"مهمة مرتبطة: {related_task.title} (الحالة: {related_task.status.value if related_task.status else 'غير محددة'})"
+            f"مهمة مرتبطة: «{related_task.title}» — الحالة: {task_status_ar}"
         )
     else:
-        key_points.append("لا توجد مهمة مرتبطة بعد")
+        key_points.append("لا توجد مهمة تنفيذية مرتبطة حتى الآن")
     if message_count > 0:
-        key_points.append(f"عدد رسائل النقاش الداخلي: {message_count}")
+        key_points.append(f"رسائل النقاش الداخلي: {message_count} رسالة")
     else:
-        key_points.append("لا يوجد نقاش داخلي مرتبط")
+        key_points.append("لم يُفتح نقاش داخلي لهذه الشكوى بعد")
 
     # ── Recommended actions ───────────────────────────────────────────
     recommended_actions: list[str] = []
     if not is_open:
         if complaint.status == ComplaintStatus.RESOLVED:
-            recommended_actions.append("تأكد من توثيق نتيجة الإصلاح وإغلاق المهمة المرتبطة.")
+            recommended_actions.append("تحقق من توثيق نتيجة الإصلاح بالصور والتقرير النهائي.")
+            recommended_actions.append("أغلق المهمة المرتبطة إن كانت لا تزال مفتوحة.")
+            if message_count > 0:
+                recommended_actions.append("راجع النقاش الداخلي وأرشفه ضمن سجل الشكوى.")
         elif complaint.status == ComplaintStatus.REJECTED:
-            recommended_actions.append("راجع سبب الرفض وأبلغ مقدم الشكوى رسمياً.")
+            recommended_actions.append("راجع سبب الرفض وتأكد من تسجيله بوضوح في النظام.")
+            recommended_actions.append("أبلغ مقدم الشكوى رسمياً بقرار الرفض ومبرراته.")
     else:
         if complaint.status == ComplaintStatus.NEW:
-            recommended_actions.append("راجع الشكوى وحدد الأولوية المناسبة خلال 24 ساعة.")
+            recommended_actions.append("راجع الشكوى وصنّفها (نوع، أولوية، منطقة) خلال 24 ساعة.")
         if related_task is None:
-            recommended_actions.append("أنشئ مهمة تنفيذية وارفعها للجهة المسؤولة.")
-        elif related_task.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED) and age_days >= 3:
-            recommended_actions.append("تابع المهمة المرتبطة لتفعيل التنفيذ.")
-        if complaint.priority in (ComplaintPriority.HIGH, ComplaintPriority.URGENT):
-            recommended_actions.append("أبلغ المسؤول المباشر عن الأولوية المرتفعة.")
+            recommended_actions.append("أنشئ مهمة تنفيذية وأسندها للجهة المسؤولة فوراً.")
+        elif related_task.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED):
+            if age_days >= 3:
+                recommended_actions.append(
+                    f"تابع المهمة «{related_task.title}» — لم يبدأ التنفيذ بعد مرور {age_days} يوم."
+                )
+            else:
+                recommended_actions.append(
+                    f"تحقق من أن الفريق المسؤول استلم المهمة «{related_task.title}» وبدأ التخطيط."
+                )
+        if complaint.priority in (ComplaintPriority.URGENT,):
+            recommended_actions.append("⚠ شكوى عاجلة — أبلغ المسؤول المباشر الآن ولا تُأجّل.")
+        elif complaint.priority == ComplaintPriority.HIGH:
+            recommended_actions.append("أولوية مرتفعة — أخطر المسؤول المباشر وتابع يومياً.")
         if message_count == 0:
-            recommended_actions.append("افتح نقاشاً داخلياً لتنسيق المعالجة بين الفرق.")
-        if age_days >= 7:
-            recommended_actions.append("راجع أسباب التأخير ووثّقها في سجل الشكوى.")
+            recommended_actions.append("افتح نقاشاً داخلياً لتنسيق العمل بين الأقسام المعنية.")
+        if age_days >= 14:
+            recommended_actions.append(
+                f"الشكوى متأخرة جداً ({age_days} يوم) — اجمع تقريراً فورياً عن أسباب التأخير."
+            )
+        elif age_days >= 7:
+            recommended_actions.append(
+                f"مضى {age_days} أيام دون حل — وثّق أسباب التأخير واتخذ إجراءً تصعيدياً."
+            )
     if not recommended_actions:
-        recommended_actions.append("لا توجد إجراءات عاجلة — تابع المتابعة الدورية.")
+        recommended_actions.append("لا توجد إجراءات عاجلة — تابع دورياً وحدّث الحالة عند أي تقدم.")
 
     # ── Related items (links the UI can render) ───────────────────────
     related_items: list[RelatedItem] = []
@@ -223,19 +254,56 @@ def _build_complaint_analysis(db: Session, complaint: Complaint) -> InternalBotR
             )
         )
 
-    # ── Summary (one short paragraph) ─────────────────────────────────
-    summary_parts = [
-        f"الشكوى {complaint.tracking_number or f'#{complaint.id}'} — {_arabic_status(complaint.status)}.",
-        f"الأولوية {_arabic_priority(complaint.priority)}.",
-    ]
-    if created_at:
-        summary_parts.append(f"عمرها {age_days} يوم.")
-    if related_task is None and is_open:
-        summary_parts.append("لا توجد مهمة تنفيذية مرتبطة.")
-    elif related_task is not None:
-        summary_parts.append(f"يوجد مهمة مرتبطة بحالة {related_task.status.value if related_task.status else 'غير محددة'}.")
+    # ── Summary (one clear, human paragraph) ──────────────────────────
+    type_label = _arabic_type(complaint.complaint_type)
+    tracking_ref = complaint.tracking_number or f"#{complaint.id}"
+    status_ar = _arabic_status(complaint.status)
+    priority_ar = _arabic_priority(complaint.priority)
+
+    summary_parts: list[str] = []
+
+    # Opening line
+    if is_open:
+        if risk_level == "high":
+            summary_parts.append(
+                f"تنبيه: الشكوى {tracking_ref} ({type_label}) لا تزال مفتوحة وتستدعي تدخلاً عاجلاً."
+            )
+        else:
+            summary_parts.append(
+                f"الشكوى {tracking_ref} ({type_label}) قيد المعالجة حالياً."
+            )
+    else:
+        summary_parts.append(
+            f"الشكوى {tracking_ref} ({type_label}) أُغلقت بحالة: {status_ar}."
+        )
+
+    # Priority and age context
+    if is_open:
+        age_text = "منذ أقل من يوم" if age_days == 0 else f"منذ {age_days} يوم"
+        summary_parts.append(
+            f"أولويتها {priority_ar}، وقُدِّمت {age_text}."
+        )
+
+    # Location context
+    if area_name:
+        summary_parts.append(f"المنطقة: {area_name}.")
+
+    # Task context
+    if is_open:
+        if related_task is None:
+            summary_parts.append("لم يتم إنشاء مهمة تنفيذية لها حتى الآن.")
+        else:
+            task_status_ar = _arabic_task_status(related_task.status)
+            summary_parts.append(
+                f"يوجد مهمة مرتبطة «{related_task.title}» بحالة {task_status_ar}."
+            )
+
+    # Discussion context
     if message_count > 0:
-        summary_parts.append(f"تم تبادل {message_count} رسالة في النقاش الداخلي.")
+        summary_parts.append(f"جرى تبادل {message_count} رسالة في النقاش الداخلي.")
+    elif is_open:
+        summary_parts.append("لم يُفتح نقاش داخلي بعد.")
+
     summary = " ".join(summary_parts)
 
     # Raw structured payload — kept in `data` for parity with other intents.
@@ -283,6 +351,39 @@ def _build_complaint_analysis(db: Session, complaint: Complaint) -> InternalBotR
         context_type="complaint",
         context_id=complaint.id,
     )
+
+
+def _arabic_type(complaint_type) -> str:
+    """Return a human-readable Arabic label for a complaint type."""
+    type_map = {
+        "heating_network": "صيانة شبكة التدفئة",
+        "corruption": "شكوى فساد",
+        "infrastructure": "بنية تحتية",
+        "cleaning": "نظافة",
+        "electricity": "كهرباء",
+        "water": "مياه",
+        "roads": "طرق",
+        "lighting": "إنارة",
+        "other": "أخرى",
+    }
+    if complaint_type is None:
+        return "غير محدد"
+    val = complaint_type.value if hasattr(complaint_type, "value") else str(complaint_type)
+    return type_map.get(val, val)
+
+
+def _arabic_task_status(status) -> str:
+    """Return a human-readable Arabic label for a task status."""
+    if status is None:
+        return "غير محددة"
+    val = status.value if hasattr(status, "value") else str(status)
+    return {
+        "pending": "معلقة",
+        "assigned": "مُسندة",
+        "in_progress": "قيد التنفيذ",
+        "completed": "مكتملة",
+        "cancelled": "ملغاة",
+    }.get(val, val)
 
 
 def _infer_intent(question: str) -> BotIntent:
@@ -368,7 +469,16 @@ def run_internal_bot_query(
             query = query.filter(Complaint.project_id == payload.project_id)
         rows = query.group_by(Complaint.status).all()
         data = [{"status": status.value if status else "unknown", "count": count} for status, count in rows]
-        summary = f"ملخص الشكاوى خلال آخر {payload.days} يوم."
+        total = sum(r["count"] for r in data)
+        open_statuses_raw = {"new", "under_review", "assigned", "in_progress"}
+        open_count = sum(r["count"] for r in data if r["status"] in open_statuses_raw)
+        if total == 0:
+            summary = f"لا توجد شكاوى مسجّلة خلال آخر {payload.days} يوم."
+        else:
+            summary = (
+                f"خلال آخر {payload.days} يوم، وردت {total} شكوى إجمالاً"
+                + (f"، منها {open_count} شكوى لا تزال مفتوحة." if open_count > 0 else "، وقد أُغلقت جميعها.")
+            )
 
     elif intent == "tasks_summary":
         cutoff = now - timedelta(days=payload.days)
@@ -379,7 +489,15 @@ def run_internal_bot_query(
             query = query.filter(Task.project_id == payload.project_id)
         rows = query.group_by(Task.status).all()
         data = [{"status": status.value if status else "unknown", "count": count} for status, count in rows]
-        summary = f"ملخص المهام خلال آخر {payload.days} يوم."
+        total = sum(r["count"] for r in data)
+        if total == 0:
+            summary = f"لا توجد مهام مسجّلة خلال آخر {payload.days} يوم."
+        else:
+            pending_count = sum(r["count"] for r in data if r["status"] in {"pending", "assigned"})
+            summary = (
+                f"خلال آخر {payload.days} يوم، سُجِّلت {total} مهمة إجمالاً"
+                + (f"، منها {pending_count} مهمة معلقة أو بانتظار التنفيذ." if pending_count > 0 else ".")
+            )
 
     else:  # contracts_expiring
         end_cutoff = (now + timedelta(days=payload.days)).date()
@@ -398,7 +516,22 @@ def run_internal_bot_query(
             }
             for contract_number, title, end_date, status in rows
         ]
-        summary = f"العقود التي ستنتهي خلال {payload.days} يوم (حد أقصى {payload.limit})."
+        if len(data) == 0:
+            summary = f"لا توجد عقود تنتهي خلال الـ {payload.days} يوم القادمة."
+        else:
+            n = len(data)
+            if n == 1:
+                contract_word = "عقد واحد"
+            elif n == 2:
+                contract_word = "عقدان"
+            elif n <= 10:
+                contract_word = f"{n} عقود"
+            else:
+                contract_word = f"{n} عقداً"
+            summary = (
+                f"يوجد {contract_word} ستنتهي خلال الـ {payload.days} يوم القادمة — "
+                "يُنصح بمراجعتها وبدء إجراءات التجديد أو الإغلاق."
+            )
 
     write_audit_log(
         db,
