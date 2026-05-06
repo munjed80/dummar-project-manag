@@ -43,7 +43,7 @@ class Contract(Base):
     pdf_file = Column(String(255), nullable=True)
     attachments = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
-    qr_code = Column(String(255), nullable=True)
+    qr_code = Column(Text, nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True, index=True)
     org_unit_id = Column(
         Integer, ForeignKey("organization_units.id"), nullable=True, index=True
