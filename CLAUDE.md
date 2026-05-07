@@ -14,7 +14,12 @@ Dummar Project Management is a full-stack application:
 ### Backend
 ```bash
 cd backend
-python -m pytest tests/ -q          # Run all backend tests (currently 526)
+python -m pytest tests/ -q          # Run all backend tests (currently 612)
+                                     # Tests run against PostgreSQL+PostGIS
+                                     # via Alembic migrations. The conftest
+                                     # auto-starts a postgis docker container,
+                                     # or set DUMMAR_TEST_DATABASE_URL to
+                                     # point at an existing instance.
 alembic upgrade head                 # Apply migrations
 uvicorn app.main:app --reload        # Start dev server
 ```

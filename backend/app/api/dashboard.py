@@ -33,9 +33,10 @@ def get_dashboard_stats(
         s.value: complaint_counts.get(s, 0) for s in ComplaintStatus
     }
 
-    # Tasks: single GROUP BY
+    # Tasks: single GROUP BY (scoped to the user's organizational subtree)
+    task_base = perms.scope_query(db.query(Task), db, current_user, Task)
     task_counts = dict(
-        db.query(Task.status, func.count(Task.id))
+        task_base.with_entities(Task.status, func.count(Task.id))
         .group_by(Task.status)
         .all()
     )
@@ -44,9 +45,10 @@ def get_dashboard_stats(
         s.value: task_counts.get(s, 0) for s in TaskStatus
     }
 
-    # Contracts: count totals in fewer queries
+    # Contracts: count totals in fewer queries (scoped to org subtree)
+    contract_base = perms.scope_query(db.query(Contract), db, current_user, Contract)
     contract_counts = dict(
-        db.query(Contract.status, func.count(Contract.id))
+        contract_base.with_entities(Contract.status, func.count(Contract.id))
         .group_by(Contract.status)
         .all()
     )
@@ -54,7 +56,9 @@ def get_dashboard_stats(
     active_contracts = contract_counts.get(ContractStatus.ACTIVE, 0)
 
     threshold_date = date.today() + timedelta(days=30)
-    contracts_nearing_expiry = db.query(func.count(Contract.id)).filter(
+    contracts_nearing_expiry = perms.scope_query(
+        db.query(func.count(Contract.id)), db, current_user, Contract
+    ).filter(
         Contract.status == ContractStatus.ACTIVE,
         Contract.end_date <= threshold_date,
         Contract.end_date >= date.today()
@@ -134,8 +138,18 @@ def get_recent_activity(
         .limit(5)
         .all()
     )
-    recent_tasks = db.query(Task).order_by(Task.created_at.desc()).limit(5).all()
-    recent_contracts = db.query(Contract).order_by(Contract.created_at.desc()).limit(5).all()
+    recent_tasks = (
+        perms.scope_query(db.query(Task), db, current_user, Task)
+        .order_by(Task.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_contracts = (
+        perms.scope_query(db.query(Contract), db, current_user, Contract)
+        .order_by(Contract.created_at.desc())
+        .limit(5)
+        .all()
+    )
     
     return RecentActivity(
         recent_complaints=[{

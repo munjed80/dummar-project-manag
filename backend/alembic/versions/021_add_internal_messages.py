@@ -16,11 +16,14 @@ branch_labels = None
 depends_on = None
 
 
-messagethreadtype = sa.Enum("direct", "group", name="messagethreadtype")
+messagethreadtype = sa.Enum(
+    "direct", "group", name="messagethreadtype"
+)
 
 
 def upgrade() -> None:
-    messagethreadtype.create(op.get_bind(), checkfirst=True)
+    # The thread_type Enum column below auto-issues CREATE TYPE on
+    # PostgreSQL via SQLAlchemy's _on_table_create hook.
 
     op.create_table(
         "message_threads",
