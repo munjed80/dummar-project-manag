@@ -13,7 +13,7 @@ from app.models.task import Task, TaskStatus, TaskSourceType, TaskPriority
 from app.models.contract import Contract, ContractType, ContractStatus
 from app.models.location import Area
 from app.models.user import User
-from app.api.deps import get_current_user, get_current_internal_user
+from app.api.deps import get_current_user, get_current_admin_module_user
 from app.core import permissions as perms
 from app.schemas.report import (
     ReportSummary,
@@ -49,7 +49,7 @@ def get_report_summary(
     contract_type: Optional[ContractType] = None,
     priority: Optional[str] = None,
     assigned_to_id: Optional[int] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     # --- Complaints ---
@@ -184,7 +184,7 @@ def get_complaints_report(
     search: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(Complaint)
@@ -226,7 +226,7 @@ def get_tasks_report(
     search: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(Task)
@@ -266,7 +266,7 @@ def get_contracts_report(
     search: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(Contract)
@@ -417,7 +417,7 @@ def export_complaints_csv(
     area_id: Optional[int] = None,
     priority: Optional[ComplaintPriority] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     query = _complaint_query_with_filters(
@@ -465,7 +465,7 @@ def export_tasks_csv(
     assigned_to_id: Optional[int] = None,
     source_type: Optional[TaskSourceType] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     query = _task_query_with_filters(
@@ -517,7 +517,7 @@ def export_contracts_csv(
     status: Optional[ContractStatus] = None,
     contract_type: Optional[ContractType] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db),
 ):
     query = _contract_query_with_filters(

@@ -16,7 +16,7 @@ from app.schemas.contract import (
     ContractApprovalResponse,
 )
 from app.schemas.report import PaginatedContracts
-from app.api.deps import get_current_user, get_current_contracts_manager, get_current_internal_user
+from app.api.deps import get_current_user, get_current_contracts_manager, get_current_contracts_module_user
 from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.pdf_generator import generate_contract_pdf
@@ -103,7 +103,7 @@ def list_contracts(
     contract_type: Optional[ContractType] = None,
     project_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_contracts_module_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Contract)
@@ -137,7 +137,7 @@ def list_contracts(
 @router.get("/expiring-soon", response_model=List[ContractResponse])
 def get_expiring_contracts(
     days: int = 30,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_contracts_module_user),
     db: Session = Depends(get_db)
 ):
     from datetime import date
@@ -157,7 +157,7 @@ def get_expiring_contracts(
 @router.get("/{contract_id}", response_model=ContractResponse)
 def get_contract(
     contract_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_contracts_module_user),
     db: Session = Depends(get_db)
 ):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
@@ -265,7 +265,7 @@ def approve_contract(
 @router.post("/{contract_id}/generate-pdf")
 def generate_contract_pdf_endpoint(
     contract_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_contracts_module_user),
     db: Session = Depends(get_db)
 ):
     """Generate the PDF summary for a contract.
@@ -309,7 +309,7 @@ def generate_contract_pdf_endpoint(
 @router.get("/{contract_id}/approvals", response_model=List[ContractApprovalResponse])
 def get_contract_approvals(
     contract_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_contracts_module_user),
     db: Session = Depends(get_db)
 ):
     contract = db.query(Contract).filter(Contract.id == contract_id).first()

@@ -58,6 +58,39 @@ function PageLoader() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Role-based access control
+//
+// Per the role-access spec, three roles have a strict module whitelist. Any
+// route they are not explicitly allowed to use must redirect them to their
+// default landing page (NOT to /login, which would just bounce them back in
+// after logging in again).
+// ---------------------------------------------------------------------------
+
+/**
+ * The first allowed page for each role. Used both after login and when a
+ * route guard rejects a forbidden URL, so restricted users always land on
+ * a page they can actually use.
+ */
+const ROLE_HOME: Record<UserRole, string> = {
+  project_director: '/dashboard',
+  engineer_supervisor: '/dashboard',
+  area_supervisor: '/dashboard',
+  field_team: '/dashboard',
+  contractor_user: '/dashboard',
+  property_manager: '/dashboard',
+  // Strict-whitelist roles get their first allowed module as a home page.
+  complaints_officer: '/complaints',
+  contracts_manager: '/manual-contracts',
+  investment_manager: '/investment-contracts',
+  citizen: '/citizen',
+};
+
+function homePathForRole(role: UserRole | null): string {
+  if (!role) return '/login';
+  return ROLE_HOME[role] ?? '/dashboard';
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!apiService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
@@ -91,25 +124,56 @@ function RoleProtectedRoute({ children, roles }: { children: React.ReactNode; ro
     return <>{children}</>;
   }
 
-  // Citizen users go to their own dashboard; others go to main dashboard
-  if (role === 'citizen') {
-    return <Navigate to="/citizen" replace />;
+  // Forbidden: send the user to their own role-appropriate home so a typed
+  // URL never silently shows a page they shouldn't see.
+  if (role) {
+    const home = homePathForRole(role);
+    if (home !== window.location.pathname) {
+      return <Navigate to={home} replace />;
+    }
+    // Already on the home page (defensive — should not happen since each
+    // role's home is in its allowed routes list below).
+    return <>{children}</>;
   }
 
   return <Navigate to="/login" replace />;
 }
 
-// Internal staff roles (all roles except citizen)
+// Internal staff roles (all roles except citizen) — kept for routes that
+// every internal staff member may access (locations, projects list, etc.).
 const INTERNAL_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
   'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
   'property_manager', 'investment_manager',
 ];
 
-// Roles that can view reports
+// ---------------------------------------------------------------------------
+// Per-module role allowlists.
+//
+// The 3 restricted roles (complaints_officer, contracts_manager,
+// investment_manager) are NOT in the "internal" buckets below — only in
+// their own module's allowlist. Every other internal role retains its
+// previous access (we do not widen permissions for unrelated roles).
+// ---------------------------------------------------------------------------
+
+// Field-operations modules: complaints, tasks, teams, violations, complaints
+// map. complaints_officer is included; contracts_manager / investment_manager
+// are explicitly excluded.
+const FIELD_MODULE_ROLES: UserRole[] = [
+  'project_director', 'engineer_supervisor', 'complaints_officer',
+  'area_supervisor', 'field_team', 'contractor_user', 'property_manager',
+];
+
+// Admin / oversight modules: reports, settings, dashboard. The 3 restricted
+// roles are denied; the remaining internal roles keep their access.
+const ADMIN_MODULE_ROLES: UserRole[] = [
+  'project_director', 'engineer_supervisor', 'area_supervisor',
+  'field_team', 'contractor_user', 'property_manager',
+];
+
+// Roles that can view reports (subset of admin module — same rule).
 const REPORT_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor',
+  'project_director', 'engineer_supervisor', 'area_supervisor',
 ];
 
 // Roles that can access contract intelligence (per spec: director,
@@ -132,15 +196,27 @@ const INVESTMENT_CONTRACTS_ROLES: UserRole[] = [
   'investment_manager', 'property_manager',
 ];
 
+// /manual-contracts is the contracts_manager landing page. complaints_officer
+// must NOT see it per the spec.
 const MANUAL_CONTRACTS_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'investment_manager', 'property_manager',
-  'engineer_supervisor', 'complaints_officer', 'area_supervisor',
+  'engineer_supervisor', 'area_supervisor',
 ];
 
+// Operational contracts: same role set as /manual-contracts. complaints_officer
+// is excluded.
 const OPERATIONAL_CONTRACT_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor', 'property_manager', 'investment_manager',
+  'area_supervisor', 'property_manager', 'investment_manager',
 ];
+
+// Licenses, inspection-teams, violations: oversight modules — same roles as
+// FIELD_MODULE_ROLES (field staff + director); the 3 restricted roles are
+// denied.
+const OVERSIGHT_ROLES: UserRole[] = FIELD_MODULE_ROLES;
+
+// /users — admin only.
+const USERS_ROLES: UserRole[] = ['project_director'];
 
 function RootRoute() {
   // Unauthenticated visitors see the public landing page so the complaint
@@ -148,8 +224,10 @@ function RootRoute() {
   if (!apiService.isAuthenticated()) {
     return <PublicLandingPage />;
   }
-  // Authenticated users are routed to their role-appropriate home.
-  return <RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>;
+  // Authenticated users are routed to their role-appropriate home. The 3
+  // module-restricted roles can't see /dashboard so RoleProtectedRoute will
+  // bounce them to homePathForRole(role) automatically.
+  return <RoleProtectedRoute roles={ADMIN_MODULE_ROLES}><DashboardPage /></RoleProtectedRoute>;
 }
 
 function App() {
@@ -171,25 +249,25 @@ function App() {
           <Route path="/complaints/track" element={<ComplaintTrackPage />} />
           
           <Route path="/" element={<RootRoute />} />
-          <Route path="/dashboard" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><DashboardPage /></RoleProtectedRoute>} />
+          <Route path="/dashboard" element={<RoleProtectedRoute roles={ADMIN_MODULE_ROLES}><DashboardPage /></RoleProtectedRoute>} />
           <Route path="/citizen" element={<RoleProtectedRoute roles={['citizen']}><CitizenDashboardPage /></RoleProtectedRoute>} />
-          <Route path="/violations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ViolationsPage /></RoleProtectedRoute>} />
-          <Route path="/complaints" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
-          <Route path="/complaints/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/complaints-map" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
-          <Route path="/tasks" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TasksListPage /></RoleProtectedRoute>} />
-          <Route path="/tasks/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/violations" element={<RoleProtectedRoute roles={OVERSIGHT_ROLES}><ViolationsPage /></RoleProtectedRoute>} />
+          <Route path="/complaints" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
+          <Route path="/complaints/:id" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/complaints-map" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
+          <Route path="/tasks" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TasksListPage /></RoleProtectedRoute>} />
+          <Route path="/tasks/:id" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contracts" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
           <Route path="/contracts/:id" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
           <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/inspection-teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InspectionTeamsPage /></RoleProtectedRoute>} />
-          <Route path="/teams" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
-          <Route path="/teams/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/teams/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/inspection-teams" element={<RoleProtectedRoute roles={OVERSIGHT_ROLES}><InspectionTeamsPage /></RoleProtectedRoute>} />
+          <Route path="/teams" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
+          <Route path="/teams/new" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/teams/:id" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ContractIntelligencePage /></RoleProtectedRoute>} />
-          <Route path="/licenses" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><LicensesPage /></RoleProtectedRoute>} />
+          <Route path="/licenses" element={<RoleProtectedRoute roles={OVERSIGHT_ROLES}><LicensesPage /></RoleProtectedRoute>} />
           <Route path="/manual-contracts" element={<RoleProtectedRoute roles={MANUAL_CONTRACTS_ROLES}><ManualContractsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/queue" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><ProcessingQueuePage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/documents/:id" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DocumentReviewPage /></RoleProtectedRoute>} />
@@ -201,16 +279,16 @@ function App() {
           <Route path="/locations/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><LocationReportsPage /></RoleProtectedRoute>} />
           <Route path="/locations/geo-dashboard" element={<RoleProtectedRoute roles={REPORT_ROLES}><GeoDashboardPage /></RoleProtectedRoute>} />
           <Route path="/locations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
-          <Route path="/users" element={<RoleProtectedRoute roles={['project_director']}><UsersPage /></RoleProtectedRoute>} />
+          <Route path="/users" element={<RoleProtectedRoute roles={USERS_ROLES}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<RoleProtectedRoute roles={ADMIN_MODULE_ROLES}><SettingsPage /></RoleProtectedRoute>} />
           <Route path="/investment-properties" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertiesPage /></RoleProtectedRoute>} />
           <Route path="/investment-properties/:id" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertyDetailsPage /></RoleProtectedRoute>} />
           <Route path="/investment-contracts" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractsPage /></RoleProtectedRoute>} />
           <Route path="/investment-contracts/:id" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractDetailsPage /></RoleProtectedRoute>}/>
           <Route path="/messages" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalMessagesPage /></RoleProtectedRoute>} />
           <Route path="/internal-bot" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalBotPage /></RoleProtectedRoute>} />
-          <Route path="/executive-briefing" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ExecutiveBriefingPage /></RoleProtectedRoute>} />
+          <Route path="/executive-briefing" element={<RoleProtectedRoute roles={ADMIN_MODULE_ROLES}><ExecutiveBriefingPage /></RoleProtectedRoute>} />
         </Routes>
       </Suspense>
     </BrowserRouter>

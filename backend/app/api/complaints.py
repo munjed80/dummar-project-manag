@@ -22,7 +22,7 @@ from app.schemas.complaint import (
 )
 from app.services.location_service import infer_location_id
 from app.schemas.report import PaginatedComplaints
-from app.api.deps import get_current_user, require_role, get_current_internal_user
+from app.api.deps import get_current_user, require_role, get_current_field_module_user
 from app.core import permissions as perms
 from app.services.audit import write_audit_log
 from app.services.notification_service import notify_complaint_status_change
@@ -223,7 +223,7 @@ def list_complaints(
     location_id: Optional[int] = None,
     project_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Complaint)
@@ -261,7 +261,7 @@ def list_complaints(
 def get_complaints_map_markers(
     status_filter: Optional[ComplaintStatus] = None,
     area_id: Optional[int] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db),
 ):
     """Return complaints that have coordinates, for map display."""
@@ -309,7 +309,7 @@ def get_citizen_complaints(
 @router.get("/{complaint_id}", response_model=ComplaintResponse)
 def get_complaint(
     complaint_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db)
 ):
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
@@ -454,7 +454,7 @@ def update_complaint(
 @router.get("/{complaint_id}/activities", response_model=List[ComplaintActivityResponse])
 def get_complaint_activities(
     complaint_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db)
 ):
     complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()

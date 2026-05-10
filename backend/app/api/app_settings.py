@@ -7,14 +7,13 @@ from app.core.database import get_db
 from app.models.app_setting import AppSetting
 from app.models.user import User, UserRole
 from app.schemas.app_setting import SettingItem, SettingsBulkUpdate
-from app.api.deps import require_role, get_current_internal_user
+from app.api.deps import require_role, get_current_admin_module_user
 from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 _settings_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
-    UserRole.CONTRACTS_MANAGER,
 )
 
 
@@ -49,7 +48,7 @@ def _seed_default_settings(db: Session):
 
 @router.get("/", response_model=Dict[str, List[SettingItem]])
 def get_settings(
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db)
 ):
     _seed_default_settings(db)
