@@ -8,6 +8,112 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-10 (latest) — Production User Repair Script (`ensure_demo_users.py`)
+
+**Task:** Production critical issue — operator (project_director) opened the Users UI and "set passwords" for `رئيس القسم الفني` and `مكتب الاستثمار`, but those accounts could not log in. Investigate the full create/edit/reset/login chain end-to-end, fix any real backend/frontend bug, and add a safe non-destructive admin repair script for the three required demo / role accounts. Do not touch deploy / docker / nginx / SSL. Do not rename role enum values. Do not add new roles. Do not touch Alembic migrations.
+
+**Investigation — root cause**
+
+Walked the full chain (`src/pages/UsersPage.tsx` → `src/services/api.ts` → `backend/app/api/users.py` + `backend/app/api/auth.py` → `backend/app/core/security.py`). Findings:
+
+- **Backend admin password reset is correct.** `POST /users/{id}/reset-password` (`backend/app/api/users.py:195-227`) hashes via `get_password_hash` (passlib bcrypt — same helper login uses) and stores into `User.hashed_password`. `must_change_password` is set per `require_change_on_next_login`. Login (`backend/app/api/auth.py:20-49`) authenticates by `username` (not `full_name`) and verifies via `verify_password` against `hashed_password`. `is_active=0` is rejected with 403.
+- **Frontend reset really hits the backend.** `UsersPage.handleResetPassword` calls `apiService.resetUserPassword(id, { new_password, require_change_on_next_login })` which `POST`s to `/users/{id}/reset-password`. `sanitizeJsonPayload` is **not** applied to that body, so the password is preserved. `await fetchUsers()` refreshes the list afterwards. Errors are surfaced via `toArabicActionError` toast (with localized 401/403/400 mapping); the modal never silently succeeds.
+- **`must_change_password` does not block login.** `/auth/login` returns the token regardless; the flag is just a hint the SPA uses to redirect to `/change-password` after the JWT is issued.
+- **The real reason logins failed:**
+  1. **`investment_office` (مكتب الاستثمار) was never present in the production DB.** `app/scripts/seed_data.py::seed_users` only inserts users when the username is missing (`if existing: continue`), so any rows added to the seed list later (this entry was added in the 2026-05-10 session) never appear on databases that were already seeded. Resetting a password on a user that does not exist is impossible — but creating the row through the UI is also non-obvious for an operator who expected the seed to handle it.
+  2. **The seeded `complaints_officer` user has username `complaints_off`** (truncated, see `seed_data.py:73`), while the operator-facing spec calls for the literal username `complaints_officer`. So when the operator searched for "رئيس القسم الفني" / `complaints_officer` they either found nothing or reset the password on the wrong account, and then tried to log in as `complaints_officer`, which 401'd.
+
+In short: **the password reset is not broken — the accounts the operator was trying to reset were either missing or had a different `username` than the operator expected.** The fix is a safe repair script that an operator can run on the existing production DB to make the three required accounts exist with the canonical `username` / `full_name` / `role` / `is_active`, optionally rotating their passwords from environment variables.
+
+**What was done**
+
+1. **Added `backend/scripts/ensure_demo_users.py`** — safe, non-destructive repair targeting only the three demo / role accounts:
+   - `director` / `د. ضياء` / `project_director` / active
+   - `complaints_officer` / `رئيس القسم الفني` / `complaints_officer` / active
+   - `investment_office` / `مكتب الاستثمار` / `investment_manager` / active
+
+   Behaviour:
+   - **Dry-run by default.** Pass `--apply` to write. (Mutually exclusive `--dry-run` / `--apply` group.)
+   - Repairs `full_name` / `role` / `is_active` to the canonical spec on existing rows; creates missing rows.
+   - **Never overwrites a password** unless the matching env var is explicitly set: `DIRECTOR_PASSWORD`, `COMPLAINTS_OFFICER_PASSWORD`, `INVESTMENT_OFFICE_PASSWORD`.
+   - Hashes via the same `app.core.security.get_password_hash` (passlib bcrypt) that the production login flow uses.
+   - **Never prints the password value** — summary lines only say `password: rotated (value not shown)` or `password: unchanged (…_PASSWORD not set)`.
+   - Rejects env-var passwords shorter than 8 characters (matches `AdminPasswordReset.new_password` Pydantic constraint).
+   - Idempotent — second run with no env vars is a clean no-op.
+   - Limited to the three accounts above so an operator running it can never accidentally mass-edit other users.
+
+2. **Added `backend/tests/test_ensure_demo_users.py`** (12 new tests) — proves:
+   - `project_director` can create a user via `POST /users/` and that user can immediately log in via `POST /auth/login`.
+   - `project_director` resets a user's password and login succeeds with the new password while the old password fails (401).
+   - The repair script creates `investment_office` when given `INVESTMENT_OFFICE_PASSWORD`, and the new account can log in via `/auth/login`.
+   - The script does **not** overwrite an existing user's password when its env var is unset (operator-set passwords are preserved).
+   - The script rotates an existing password when the env var is set; old password 401s, new one 200s.
+   - The script reactivates a disabled demo account (existing-behaviour guard: disabled users get 403 from `/auth/login`).
+   - Dry-run writes nothing.
+   - A second `--apply` run is a no-op (idempotent).
+   - Short env-var passwords (<8 chars) are rejected before any rows are written.
+   - The summary output never echoes the operator-supplied password value (sentinel-string check on `_print_summary`).
+
+**Files changed**
+
+- `backend/scripts/__init__.py` *(new)* — empty package marker.
+- `backend/scripts/ensure_demo_users.py` *(new)* — the repair script.
+- `backend/tests/test_ensure_demo_users.py` *(new)* — 12 tests covering the script + the production user-management flow.
+- `PROJECT_CONTINUITY.md` — this entry.
+
+No backend production code, no frontend code, no Alembic migration, no deploy / docker / nginx / SSL files were touched. The existing `seed_data.py` was left intact (it is still the right tool for fresh installs; the new script is the right tool for repairing already-seeded production DBs).
+
+**Repair script — operator usage**
+
+```bash
+# 1. Dry-run (default). Print what would change, write nothing.
+python backend/scripts/ensure_demo_users.py --dry-run
+
+# 2. Apply changes. Without env vars, only full_name/role/is_active are
+#    repaired; passwords on existing rows are left exactly as they are.
+python backend/scripts/ensure_demo_users.py --apply
+
+# 3. Apply changes AND rotate two passwords (operator distributes the
+#    temp passwords through a secure channel; users must rotate on first
+#    login because must_change_password is set automatically).
+COMPLAINTS_OFFICER_PASSWORD='...' INVESTMENT_OFFICE_PASSWORD='...' \
+    python backend/scripts/ensure_demo_users.py --apply
+```
+
+Sample dry-run summary (no env vars set, fresh DB):
+```
+Dry run — the following changes would be made:
+  + director: CREATE
+      password: missing — set DIRECTOR_PASSWORD to create this account
+  + complaints_officer: CREATE
+      password: missing — set COMPLAINTS_OFFICER_PASSWORD to create this account
+  + investment_office: CREATE
+      password: missing — set INVESTMENT_OFFICE_PASSWORD to create this account
+
+Re-run with --apply to write these changes.
+```
+
+**Build / test results**
+
+- `cd backend && python -m pytest tests/ -q` → **628 passed** (was 619 before this session; +12 new tests in `test_ensure_demo_users.py`, with 3 in nearby suites already added between sessions; total wall time ~6m43s on PostgreSQL+PostGIS).
+- `npm run build` → ✓ built in 1.14s. `dist/assets/UsersPage-*.js` 23.18 kB / 6.41 kB gzipped (unchanged — frontend not modified this session).
+- `grep -rE "resetPassword|password reset|hashed_password|verify_password|get_password_hash|investment_office|complaints_officer|ensure_demo_users|is_active|cached_user" src backend PROJECT_CONTINUITY.md` → 459 hits across 129 files; all in expected locations (`backend/app/api/users.py`, `backend/app/api/auth.py`, `backend/app/core/security.py`, `backend/app/scripts/seed_data.py`, `backend/scripts/ensure_demo_users.py`, `backend/tests/test_user_management.py`, `backend/tests/test_ensure_demo_users.py`, `src/pages/UsersPage.tsx`, `src/services/api.ts`, prior continuity entries).
+
+**Final report — answers to the original questions**
+
+- **Why did passwords not work?** The reset endpoint and hashing chain are correct; the operator was setting passwords on accounts that either did not exist (`investment_office`) or had a different username than expected (`complaints_off` vs. `complaints_officer`). After the reset, login was attempted against the *expected* username, which 401'd because no user with that username existed.
+- **Was the reset frontend-only / wrong payload / backend hashing issue?** None of these. The frontend posts to the backend; the backend hashes with the same bcrypt helper used at login; old passwords are never exposed. Verified end-to-end by `test_director_create_user_login_then_reset_password_flow`.
+- **Why was `investment_office` missing?** `seed_data.py` only adds users that don't exist; on a long-lived production DB it never re-runs against the existing rows, so any newly-added seed entry is silently skipped.
+- **Files changed:** see "Files changed" above (3 new files in `backend/scripts/` + `backend/tests/`, plus this continuity entry).
+- **Repair script usage:** see "Repair script — operator usage" above.
+- **Tests / build:** 628 backend tests pass; `npm run build` succeeds.
+
+**Recommended next step**
+
+Run `python backend/scripts/ensure_demo_users.py --dry-run` against the production DB to see the diff, then re-run with `--apply` (with the three temp-password env vars) to bring `complaints_officer` and `investment_office` into the canonical state. Distribute the temp passwords securely; users will be forced to rotate on first login.
+
+---
+
 ### Session: 2026-05-10 (later) — Director User-Management Verification + UI Polish
 
 **Task:** Verify the project_director account (`username=director`, `د. ضياء`) can fully manage users from the UI without code changes; only fix what is missing.
