@@ -84,11 +84,16 @@ Sample dry-run summary (no env vars set, fresh DB):
 ```
 Dry run — the following changes would be made:
   + director: CREATE
-      password: missing — set DIRECTOR_PASSWORD to create this account
+      password: missing (env var not set)
   + complaints_officer: CREATE
-      password: missing — set COMPLAINTS_OFFICER_PASSWORD to create this account
+      password: missing (env var not set)
   + investment_office: CREATE
-      password: missing — set INVESTMENT_OFFICE_PASSWORD to create this account
+      password: missing (env var not set)
+
+To create or rotate a password for an account, set the matching env var before re-running with --apply:
+  - director           : DIRECTOR_PASSWORD
+  - complaints_officer : COMPLAINTS_OFFICER_PASSWORD
+  - investment_office  : INVESTMENT_OFFICE_PASSWORD
 
 Re-run with --apply to write these changes.
 ```

@@ -76,6 +76,11 @@ def test_dry_run_does_not_write(client, db, monkeypatch):
     assert director.password_changed is False
     assert director.skipped_password_reason is ensure_demo_users.PasswordSkipReason.MISSING_FOR_CREATE
 
+    complaints = _by_username(results, "complaints_officer")
+    assert complaints.created is True
+    assert complaints.password_changed is False
+    assert complaints.skipped_password_reason is ensure_demo_users.PasswordSkipReason.MISSING_FOR_CREATE
+
 
 # ---------------------------------------------------------------------------
 # Apply: create missing investment_office and verify login works
