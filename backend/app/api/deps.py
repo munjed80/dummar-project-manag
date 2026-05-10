@@ -116,6 +116,128 @@ def get_current_internal_user(
 
 
 # ---------------------------------------------------------------------------
+# Module-level role allowlists.
+#
+# Per the role-access spec, three roles have a strict whitelist of modules:
+#   * complaints_officer (رئيس القسم الفني):
+#       complaints, tasks, teams (field operations only).
+#   * contracts_manager (مدير العقود):
+#       manual/operational contracts, investment contracts, contract
+#       intelligence, investment properties (assets).
+#   * investment_manager (مكتب الاستثمار):
+#       investment properties, investment contracts, contract intelligence.
+#
+# These dependencies are the backend "URL guard" mirror of the frontend route
+# guards. They guarantee that a restricted role typing the URL of a forbidden
+# endpoint receives a 403 even if the SPA didn't redirect.
+# ---------------------------------------------------------------------------
+
+# Field-operations modules (complaints, tasks, teams, violations, complaints
+# map). The 3 contract/investment-only roles are denied; everyone else who
+# was previously "internal" keeps access.
+_field_module_users = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.COMPLAINTS_OFFICER,
+    UserRole.AREA_SUPERVISOR,
+    UserRole.FIELD_TEAM,
+    UserRole.CONTRACTOR_USER,
+    UserRole.PROPERTY_MANAGER,
+)
+
+
+def get_current_field_module_user(
+    current_user: User = Depends(_field_module_users),
+) -> User:
+    """Internal staff allowed to access complaints/tasks/teams/violations.
+
+    Excludes contracts_manager and investment_manager — these contract-only
+    roles must not see field-operations data per the role-access spec.
+    """
+    return current_user
+
+
+# Contract / investment modules (operational contracts, investment contracts,
+# investment properties, contract intelligence).
+#
+# This allowlist intentionally excludes BOTH complaints_officer AND
+# investment_manager:
+#   * complaints_officer — that role's whitelist is field-operations only
+#     (complaints / tasks / teams).
+#   * investment_manager — مكتب الاستثمار only reaches investment-specific
+#     endpoints (which use their own viewer dependencies); they must NOT
+#     see operational `/contracts`.
+_contracts_module_users = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.CONTRACTS_MANAGER,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.AREA_SUPERVISOR,
+    UserRole.FIELD_TEAM,
+    UserRole.CONTRACTOR_USER,
+    UserRole.PROPERTY_MANAGER,
+)
+
+
+def get_current_contracts_module_user(
+    current_user: User = Depends(_contracts_module_users),
+) -> User:
+    """Internal staff allowed to access contract / investment modules.
+
+    Excludes complaints_officer — that role's whitelist is field-operations
+    only (complaints, tasks, teams). Excludes investment_manager from the
+    operational-contracts module — they only reach the investment-specific
+    endpoints (which use their own viewer dependencies).
+    """
+    return current_user
+
+
+# Oversight modules (violations, licenses, inspection teams). Same role set
+# as field operations EXCEPT all 3 module-restricted roles (complaints_officer,
+# contracts_manager, investment_manager) are denied — رئيس القسم الفني only
+# sees complaints/tasks/teams per the role-access spec, and the two
+# contract-only roles never reach oversight modules.
+_oversight_module_users = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.AREA_SUPERVISOR,
+    UserRole.FIELD_TEAM,
+    UserRole.CONTRACTOR_USER,
+    UserRole.PROPERTY_MANAGER,
+)
+
+
+def get_current_oversight_module_user(
+    current_user: User = Depends(_oversight_module_users),
+) -> User:
+    """Internal staff allowed to access violations/licenses/inspection.
+
+    Excludes all 3 module-restricted roles (complaints_officer,
+    contracts_manager, investment_manager).
+    """
+    return current_user
+
+
+# Admin / oversight modules (settings read, reports). All 3 restricted roles
+# are denied; the remaining internal staff keep their existing visibility.
+_admin_module_users = require_role(
+    UserRole.PROJECT_DIRECTOR,
+    UserRole.ENGINEER_SUPERVISOR,
+    UserRole.AREA_SUPERVISOR,
+    UserRole.FIELD_TEAM,
+    UserRole.CONTRACTOR_USER,
+    UserRole.PROPERTY_MANAGER,
+)
+
+
+def get_current_admin_module_user(
+    current_user: User = Depends(_admin_module_users),
+) -> User:
+    """Internal staff allowed to access admin/oversight modules (reports,
+    settings read). Denies the 3 module-restricted roles outright."""
+    return current_user
+
+
+# ---------------------------------------------------------------------------
 # Fine-grained permission dependency.
 #
 # Layers role + organization scope + ownership on top of get_current_user.

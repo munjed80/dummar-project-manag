@@ -8,7 +8,104 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
-### Session: 2026-05-10 (latest) — Production User Repair Script (`ensure_demo_users.py`)
+### Session: 2026-05-10 (latest) — Strict module-level RBAC for the 3 restricted roles
+
+**Task:** Critical RBAC issue — after login, restricted roles (complaints_officer, contracts_manager, investment_manager) could still see and reach the full platform. Enforce strict role-based access in BOTH frontend and backend, redirect restricted roles to their landing page after login, and forbid direct URL access to disallowed routes/endpoints. Don't touch Alembic, deploy/docker/nginx, role names, or RTL UI.
+
+**Root cause**
+
+* **Frontend.** Almost every internal page in `src/App.tsx` was guarded with the broad `INTERNAL_ROLES` allowlist that includes the 3 restricted roles, so typing a forbidden URL directly rendered the page even though `nav-config.ts` hid the menu entry. After login, every non-citizen was unconditionally redirected to `/dashboard`.
+* **Backend.** `_internal_staff` in `backend/app/api/deps.py` (and `_ALL_INTERNAL_READ` in `app/core/permissions.py`) granted every internal role read access to every resource, so `/complaints`, `/contracts`, `/reports`, `/settings`, `/violations` etc. all returned 200 to the 3 restricted roles.
+
+**Frontend fixes**
+
+1. `src/App.tsx` — replaced `INTERNAL_ROLES` on restricted routes with per-module allowlists:
+   * `FIELD_MODULE_ROLES` for `/complaints`, `/complaints/:id`, `/complaints-map`, `/tasks`, `/tasks/:id`, `/teams*` — denies contracts_manager + investment_manager.
+   * `OVERSIGHT_ROLES` for `/violations`, `/licenses`, `/inspection-teams` — denies all 3 restricted roles.
+   * `OPERATIONAL_CONTRACT_ROLES` for `/contracts*` — denies complaints_officer; investment_manager removed too (per spec).
+   * `MANUAL_CONTRACTS_ROLES` for `/manual-contracts` — denies complaints_officer.
+   * `INVESTMENT_PROPERTIES_ROLES` / `INVESTMENT_CONTRACTS_ROLES` already exclude complaints_officer.
+   * `CONTRACT_INTELLIGENCE_ROLES` (director + contracts_manager + investment_manager) for `/contract-intelligence*`.
+   * `ADMIN_MODULE_ROLES` for `/dashboard`, `/settings`, `/executive-briefing` — denies all 3 restricted roles.
+   * `REPORT_ROLES` (director + engineer/area supervisors) for `/reports` and the `/locations/reports`, `/locations/geo-dashboard` shortcuts.
+   * `USERS_ROLES` (director only) for `/users`.
+2. `RoleProtectedRoute` — when a role is denied, instead of bouncing to `/login` (which would re-bounce them in), it now redirects to a per-role landing path via `homePathForRole`/`ROLE_HOME`. So a restricted user who types a forbidden URL lands on a page they can actually use.
+3. `src/pages/LoginPage.tsx` — after login, a `landingByRole` map sends the 3 restricted roles to their first allowed page (`/complaints`, `/manual-contracts`, `/investment-contracts`) instead of `/dashboard`.
+4. `src/components/navigation/nav-config.ts` — sidebar entries for `/dashboard`, `/executive-briefing`, `/messages`, `/settings`, `/licenses`, `/violations`, `/inspection-teams`, `/complaints-map` now use the same per-module allowlists so the 3 restricted roles never see those entries even visually. (Defense-in-depth — the route guards above are the real gate.)
+
+**Backend fixes**
+
+1. `backend/app/api/deps.py` — added 3 new module-level role allowlists (mirrors the frontend):
+   * `get_current_field_module_user` — director + engineer/area supervisors + complaints_officer + field_team + contractor_user + property_manager (denies contracts_manager, investment_manager).
+   * `get_current_contracts_module_user` — director + contracts_manager + engineer/area supervisors + field_team + contractor_user + property_manager (denies complaints_officer + investment_manager — operational contracts only).
+   * `get_current_oversight_module_user` — denies all 3 restricted roles (for violations).
+   * `get_current_admin_module_user` — denies all 3 restricted roles (for reports, settings read, dashboard).
+2. Replaced `get_current_internal_user` with the appropriate module-level dep in:
+   * `complaints.py`, `tasks.py`, `teams.py` → `get_current_field_module_user`.
+   * `violations.py` → `get_current_oversight_module_user`.
+   * `contracts.py` → `get_current_contracts_module_user` (operational contracts).
+   * `dashboard.py`, `reports.py`, `app_settings.py` → `get_current_admin_module_user`.
+   * `contract_intelligence.py` per-contract endpoint → `get_current_contracts_module_user` (the rest of that module already used the contract-intelligence dep which correctly excludes complaints_officer).
+3. `teams.py` `_team_managers` — removed CONTRACTS_MANAGER (per spec, contracts_manager must not see/manage executive teams).
+4. `app_settings.py` `_settings_managers` — restricted PUT to PROJECT_DIRECTOR only (was director + contracts_manager).
+5. Forbidden access returns the existing project-style 403 (`"Access denied. Required roles: …"`) — no new error formats introduced.
+
+**Tests added**
+
+`backend/tests/test_role_module_access.py` (24 new tests) — pins both the allowed AND forbidden endpoint set for the 3 restricted roles:
+
+* `TestComplaintsOfficerAllowed` — 200 on `/complaints/`, `/tasks/`, `/teams/`.
+* `TestContractsManagerAllowed` — 200 on `/contracts/`, `/investment-contracts/`, `/investment-properties/`, `/contract-intelligence/queue`.
+* `TestInvestmentManagerAllowed` — 200 on `/investment-properties/`, `/investment-contracts/`, `/contract-intelligence/queue`.
+* `TestComplaintsOfficerForbidden` — 403 on `/contracts/`, `/investment-contracts/`, `/investment-properties/`, `/contract-intelligence/queue`, `/violations/`, `/reports/summary`, `/settings/`, `/users/`.
+* `TestContractsManagerForbidden` — 403 on `/complaints/`, `/tasks/`, `/teams/`, `/violations/`, `/reports/summary`, `/settings/`, `/users/`.
+* `TestInvestmentManagerForbidden` — 403 on `/complaints/`, `/tasks/`, `/teams/`, `/contracts/`, `/violations/`, `/reports/summary`, `/settings/`, `/users/`.
+* `TestSettingsWriteRestriction` — all 3 restricted roles get 403 on `PUT /settings/`.
+
+**Tests updated**
+
+`backend/tests/test_complaint_corruption_visibility.py` — the 5 dashboard/reports tests that previously used `complaints_officer_token` now use `engineer_token`. Rationale: complaints_officer no longer has access to `/dashboard/*` or `/reports/*` under the new spec; engineer_supervisor retains access AND is still subject to corruption filtering, so it's the right stand-in. The `/complaints` list/detail tests (where complaints_officer is still allowed) were left unchanged.
+
+**Final allowed pages per role**
+
+| Role | Landing page | Allowed pages |
+| --- | --- | --- |
+| `project_director` | `/dashboard` | everything |
+| `complaints_officer` (رئيس القسم الفني) | `/complaints` | `/complaints*`, `/tasks*`, `/teams*` |
+| `contracts_manager` (مدير العقود) | `/manual-contracts` | `/manual-contracts`, `/contracts*`, `/investment-contracts*`, `/contract-intelligence*`, `/investment-properties*` |
+| `investment_manager` (مكتب الاستثمار) | `/investment-contracts` | `/investment-properties*`, `/investment-contracts*`, `/contract-intelligence*` |
+| `engineer_supervisor` / `area_supervisor` / `field_team` / `contractor_user` / `property_manager` | `/dashboard` | unchanged (this task did not widen or narrow their access beyond the role-specific forbids above) |
+
+**Files changed**
+
+* `src/App.tsx` — added `ROLE_HOME`, `homePathForRole`, per-module role constants, redirect-to-home on forbidden access, restricted route guards.
+* `src/pages/LoginPage.tsx` — role-specific landing page after login.
+* `src/components/navigation/nav-config.ts` — per-module role lists; restricted nav entries.
+* `backend/app/api/deps.py` — 3 new module-level role dependencies.
+* `backend/app/api/complaints.py`, `tasks.py`, `teams.py`, `violations.py`, `contracts.py`, `contract_intelligence.py`, `dashboard.py`, `reports.py`, `app_settings.py` — switched to the new per-module deps.
+* `backend/tests/test_role_module_access.py` *(new)* — 24 tests pinning the role allow/forbid matrix.
+* `backend/tests/test_complaint_corruption_visibility.py` — 5 dashboard/reports tests now use `engineer_token` instead of `complaints_officer_token`.
+
+**Commands run**
+
+* `npm install` — installed frontend deps.
+* `npm run build` — frontend builds clean (✓ built in 1.11s).
+* `cd backend && python -m pytest tests/ -q` — **664 passed, 0 failed** in 7m49s (was 640; +24 new role-access tests).
+
+**Current project state**
+
+Strict module-level RBAC is now enforced in both layers:
+* Restricted roles cannot reach forbidden routes via the SPA (route guard returns Navigate to their home) AND cannot reach forbidden API endpoints directly (backend returns 403).
+* Login redirects each restricted role to their landing page; sidebar shows only their allowed entries.
+* All 664 backend tests green; frontend build clean.
+
+**Recommended next step**
+
+Add Playwright/Cypress e2e tests that log in as each of the 3 restricted roles, verify the sidebar contents, then `goto()` a forbidden URL and assert the redirect to the role's landing page. The current backend tests cover the API surface; an e2e layer would lock in the SPA navigation contract too.
+
+---
+
+### Session: 2026-05-10 — Production User Repair Script (`ensure_demo_users.py`)
 
 **Task:** Production critical issue — operator (project_director) opened the Users UI and "set passwords" for `رئيس القسم الفني` and `مكتب الاستثمار`, but those accounts could not log in. Investigate the full create/edit/reset/login chain end-to-end, fix any real backend/frontend bug, and add a safe non-destructive admin repair script for the three required demo / role accounts. Do not touch deploy / docker / nginx / SSL. Do not rename role enum values. Do not add new roles. Do not touch Alembic migrations.
 

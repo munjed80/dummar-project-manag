@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_internal_user, get_current_user, require_role
+from app.api.deps import get_current_oversight_module_user, get_current_user, require_role
 from app.core import permissions as perms
 from app.core.database import get_db
 from app.models.user import User, UserRole
@@ -116,7 +116,7 @@ def list_violations(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_oversight_module_user),
 ):
     _ensure_can(db, current_user, perms.Action.READ)
 
@@ -216,7 +216,7 @@ def _get_or_404(db: Session, violation_id: int) -> Violation:
 def get_violation(
     violation_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_oversight_module_user),
 ):
     violation = _get_or_404(db, violation_id)
     _ensure_can(db, current_user, perms.Action.READ, resource=violation)

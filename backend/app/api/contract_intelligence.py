@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_current_contract_intelligence_user as get_current_contracts_manager,
-    get_current_internal_user,
+    get_current_contracts_module_user,
 )
 from app.core.config import settings
 from app.core.database import get_db
@@ -1025,7 +1025,7 @@ async def bulk_scan_import(
 @router.get("/contracts/{contract_id}/intelligence")
 def get_contract_intelligence(
     contract_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_contracts_module_user),
     db: Session = Depends(get_db),
 ):
     """

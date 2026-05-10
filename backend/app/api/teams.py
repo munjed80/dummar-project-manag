@@ -8,7 +8,7 @@ from app.models.user import User
 from app.models.location import Location
 from app.models.project import Project
 from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse
-from app.api.deps import get_current_internal_user, require_role
+from app.api.deps import get_current_field_module_user, require_role
 from app.models.user import UserRole
 from app.services.audit import write_audit_log
 
@@ -16,10 +16,10 @@ router = APIRouter(prefix="/teams", tags=["teams"])
 
 _team_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
-    UserRole.CONTRACTS_MANAGER,
     UserRole.ENGINEER_SUPERVISOR,
     # رئيس القسم الفني (complaints_officer) manages executive teams per spec.
-    # Team deletion remains director-only.
+    # Team deletion remains director-only. CONTRACTS_MANAGER must NOT see or
+    # manage executive teams per the role-access spec.
     UserRole.COMPLAINTS_OFFICER,
 )
 
@@ -49,7 +49,7 @@ def create_team(
 
 @router.get("/active", response_model=List[TeamResponse])
 def list_active_teams(
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db)
 ):
     teams = db.query(Team).filter(Team.is_active == True).order_by(Team.name).all()
@@ -65,7 +65,7 @@ def list_teams(
     project_id: Optional[int] = None,
     location_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Team)
@@ -100,7 +100,7 @@ def list_teams(
 @router.get("/{team_id}", response_model=TeamResponse)
 def get_team(
     team_id: int,
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_field_module_user),
     db: Session = Depends(get_db)
 ):
     team = db.query(Team).filter(Team.id == team_id).first()

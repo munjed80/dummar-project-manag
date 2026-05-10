@@ -159,12 +159,16 @@ class TestSensitiveComplaintTracking:
 
 class TestSensitiveComplaintDashboard:
     def test_dashboard_stats_exclude_corruption_for_officer(
-        self, client, db, complaints_officer_token
+        self, client, db, engineer_token
     ):
+        # Note: complaints_officer no longer has access to /dashboard at all
+        # under the strict role-access spec. Use engineer_supervisor (which
+        # retains dashboard access AND is subject to corruption filtering)
+        # to validate that CORRUPTION rows are still hidden.
         _seed_complaint(db, ctype=ComplaintType.CORRUPTION, tracking="CMP-D-1")
         _seed_complaint(db, ctype=ComplaintType.WATER, tracking="CMP-D-2")
         resp = client.get(
-            "/dashboard/stats", headers=_auth_headers(complaints_officer_token)
+            "/dashboard/stats", headers=_auth_headers(engineer_token)
         )
         assert resp.status_code == 200
         assert resp.json()["total_complaints"] == 1
@@ -181,13 +185,15 @@ class TestSensitiveComplaintDashboard:
         assert resp.json()["total_complaints"] == 2
 
     def test_recent_activity_excludes_corruption_for_officer(
-        self, client, db, complaints_officer_token
+        self, client, db, engineer_token
     ):
+        # See note above — engineer_supervisor stands in for the original
+        # complaints_officer because the latter is denied dashboard access.
         _seed_complaint(db, ctype=ComplaintType.CORRUPTION, tracking="CMP-RA-1")
         _seed_complaint(db, ctype=ComplaintType.WATER, tracking="CMP-RA-2")
         resp = client.get(
             "/dashboard/recent-activity",
-            headers=_auth_headers(complaints_officer_token),
+            headers=_auth_headers(engineer_token),
         )
         assert resp.status_code == 200
         types = {c["type"] for c in resp.json()["recent_complaints"]}
@@ -197,36 +203,38 @@ class TestSensitiveComplaintDashboard:
 
 class TestSensitiveComplaintReports:
     def test_reports_summary_excludes_corruption_for_officer(
-        self, client, db, complaints_officer_token
+        self, client, db, engineer_token
     ):
+        # complaints_officer is denied /reports under the strict spec — use
+        # engineer_supervisor to validate corruption filtering still works.
         _seed_complaint(db, ctype=ComplaintType.CORRUPTION, tracking="CMP-R-1")
         _seed_complaint(db, ctype=ComplaintType.WATER, tracking="CMP-R-2")
         resp = client.get(
-            "/reports/summary", headers=_auth_headers(complaints_officer_token)
+            "/reports/summary", headers=_auth_headers(engineer_token)
         )
         assert resp.status_code == 200
         assert resp.json()["complaints"]["total"] == 1
 
     def test_reports_complaints_excludes_corruption_for_officer(
-        self, client, db, complaints_officer_token
+        self, client, db, engineer_token
     ):
         _seed_complaint(db, ctype=ComplaintType.CORRUPTION, tracking="CMP-R-3")
         _seed_complaint(db, ctype=ComplaintType.WATER, tracking="CMP-R-4")
         resp = client.get(
-            "/reports/complaints", headers=_auth_headers(complaints_officer_token)
+            "/reports/complaints", headers=_auth_headers(engineer_token)
         )
         assert resp.status_code == 200
         types = {item["complaint_type"] for item in resp.json()["items"]}
         assert "corruption" not in types
 
     def test_reports_csv_excludes_corruption_for_officer(
-        self, client, db, complaints_officer_token
+        self, client, db, engineer_token
     ):
         _seed_complaint(db, ctype=ComplaintType.CORRUPTION, tracking="CMP-CSV-1")
         _seed_complaint(db, ctype=ComplaintType.WATER, tracking="CMP-CSV-2")
         resp = client.get(
             "/reports/complaints/csv",
-            headers=_auth_headers(complaints_officer_token),
+            headers=_auth_headers(engineer_token),
         )
         assert resp.status_code == 200
         body = resp.text

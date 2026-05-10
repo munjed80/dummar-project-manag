@@ -33,7 +33,16 @@ export default function LoginPage() {
         toast.success('تم تسجيل الدخول بنجاح');
         const cachedUserRaw = localStorage.getItem('cached_user');
         const cachedRole = cachedUserRaw ? JSON.parse(cachedUserRaw)?.role : null;
-        navigate(cachedRole === 'citizen' ? '/citizen' : '/dashboard');
+        // Role-specific landing page. The 3 module-restricted roles must
+        // NOT land on /dashboard — they don't have access to it.
+        const landingByRole: Record<string, string> = {
+          citizen: '/citizen',
+          complaints_officer: '/complaints',
+          contracts_manager: '/manual-contracts',
+          investment_manager: '/investment-contracts',
+        };
+        const landing = (cachedRole && landingByRole[cachedRole]) ?? '/dashboard';
+        navigate(landing);
       }
     } catch (error) {
       toast.error('فشل تسجيل الدخول. تحقق من اسم المستخدم وكلمة المرور.');

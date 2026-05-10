@@ -9,7 +9,7 @@ from app.models.contract import Contract, ContractStatus
 from app.models.investment_contract import InvestmentContract, InvestmentContractStatus
 from app.models.user import User
 from app.schemas.dashboard import DashboardStats, RecentActivity
-from app.api.deps import get_current_user, get_current_internal_user
+from app.api.deps import get_current_user, get_current_admin_module_user
 from app.core import permissions as perms
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("/stats", response_model=DashboardStats)
 def get_dashboard_stats(
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db)
 ):
     # Complaints: single GROUP BY instead of per-status queries.
@@ -129,7 +129,7 @@ def get_dashboard_stats(
 
 @router.get("/recent-activity", response_model=RecentActivity)
 def get_recent_activity(
-    current_user: User = Depends(get_current_internal_user),
+    current_user: User = Depends(get_current_admin_module_user),
     db: Session = Depends(get_db)
 ):
     recent_complaints = (
