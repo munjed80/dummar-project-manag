@@ -1192,6 +1192,17 @@ class ApiService {
     return response.json();
   }
 
+  // Lightweight list helper for the user create/edit dialog's org-unit
+  // selector. Backend already exposes /organization-units/ to all internal
+  // staff; we only need id/name/level for the dropdown.
+  async getOrganizationUnits(): Promise<Array<{ id: number; name: string; level: string; parent_id: number | null }>> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/organization-units/`, {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) await throwApiError(response, 'Failed to fetch organization units');
+    return response.json();
+  }
+
   async resetUserPassword(
     id: number,
     payload: { new_password: string; require_change_on_next_login?: boolean },

@@ -8,6 +8,52 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-10 (later) — Director User-Management Verification + UI Polish
+
+**Task:** Verify the project_director account (`username=director`, `د. ضياء`) can fully manage users from the UI without code changes; only fix what is missing.
+
+**Verification results — director (`project_director`)**
+
+- ✅ **Create users** — `POST /users/` (director-only); UI `+ إضافة مستخدم` opens dialog with username, full_name, password, role, phone, must_change_password (and now org_unit_id).
+- ✅ **Edit username / full_name / phone / role / is_active / must_change_password** — `PUT /users/{id}` accepts all fields via `UserUpdate` (`backend/app/schemas/user.py:22-33`); UI dialog binds each field; tested by `test_user_management.py::test_admin_can_change_role_and_phone_and_full_name` and `::test_director_full_user_management_flow`.
+- ✅ **Edit org_unit_id** — backend already supports `UserUpdate.org_unit_id`. **Was missing from UI** — added a "الوحدة التنظيمية" Select fed by the existing `GET /organization-units/` endpoint (lazy-loaded the first time the dialog opens).
+- ✅ **Activate / Deactivate** — Activate via `PUT /users/{id} {is_active:1}`; Deactivate via `DELETE /users/{id}` (soft delete). Both wired in UI with toast feedback.
+- ✅ **Reset password (admin)** — `POST /users/{id}/reset-password` with `require_change_on_next_login`; UI has dedicated "إعادة تعيين كلمة المرور" dialog.
+- ✅ **Force password change** — supported; checkbox in both create/edit dialog (`must_change_password`) and reset-password dialog (`require_change_on_next_login`).
+- ✅ **Read updated user after saving** — `PUT` returns the updated row; UI calls `fetchUsers()` so the list refreshes; reopening the edit dialog reads from the refreshed `users` array.
+- ✅ **Self-edit refreshes header/sidebar** — `apiService.updateUser` syncs `localStorage.cached_user` when the returned id matches the cached user; `UsersPage.handleSave` calls `refresh()` from `useAuth()` so AuthContext re-fetches `/auth/me` and the header / nav update without manual reload (verified in prior session, kept intact).
+
+**Security**
+
+- ✅ **No password is ever read or displayed.** `User` schema has no password/hash field; `UserResponse` returns hashed nothing. The form's password Input uses `type="password"` and is empty on edit.
+- ✅ Only three password operations exist:
+  1. set initial password at create — `password` field on `POST /users/`
+  2. admin reset — `POST /users/{id}/reset-password` with `new_password`
+  3. self-change — `POST /auth/change-password` with `current_password` + `new_password`
+
+**Backend?** Not changed in this session — all required endpoints already existed. No migration touched.
+
+**Files changed**
+
+- `src/services/api.ts` — added `getOrganizationUnits()` typed helper for the org-unit selector.
+- `src/pages/UsersPage.tsx`:
+  - Added `org_unit_id` to `formData`; added `orgUnits` state + `ensureOrgUnitsLoaded()`; render a "الوحدة التنظيمية" Select in create/edit dialog with a "بدون وحدة" option that maps to `null`.
+  - Send `org_unit_id` in both create and update payloads (clears with `null` on update, omits on create when "بدون وحدة").
+  - Added `resetPasswordConfirm` state + a "تأكيد كلمة المرور *" field in the reset dialog with inline mismatch hint and disabled submit when mismatched or short.
+- `PROJECT_CONTINUITY.md` — this entry.
+
+**Build/test results**
+
+- `npm run build` → ✓ built in 1.19s; `dist/assets/UsersPage-*.js` 23.18 kB gzipped 6.41 kB (was ~21.76 kB).
+- `cd backend && python -m pytest tests/test_user_management.py tests/test_role_management_refresh.py -q` → **35 passed**. (Backend unchanged this session; full 619-test suite from prior session still applies.)
+- `grep -rE "updateUser|resetPassword|password|force_password|must_change_password|cached_user|refreshAuth|project_director|UsersPage" src backend PROJECT_CONTINUITY.md` → 466 hits, all in expected files (auth context, services/api.ts, pages/UsersPage.tsx, backend users router/schema, tests).
+
+**Recommended next step**
+
+- If org-unit assignment is used widely, consider showing the assigned unit name in the Users list table (currently visible only inside the edit dialog).
+
+---
+
 ### Session: 2026-05-10 — User/Role Management Refresh + Demo Account Naming
 
 **Task:** Make `project_director` able to fully manage users from the UI, rename demo display names, give `complaints_officer` (now رئيس القسم الفني) full control of complaints/tasks/teams, give `investment_manager` (مكتب الاستثمار) access to investment properties + contracts + contract intelligence, and fix the bug where editing a user from the admin page did not refresh the header / cached user.
