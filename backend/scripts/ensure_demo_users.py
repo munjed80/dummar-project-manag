@@ -45,6 +45,7 @@ so an operator running it can never accidentally mass-edit other users.
 from __future__ import annotations
 
 import argparse
+import enum
 import os
 import sys
 from dataclasses import dataclass
@@ -113,7 +114,11 @@ class RepairResult:
     created: bool = False
     field_changes: List[str] = None  # type: ignore[assignment]
     password_changed: bool = False
-    skipped_password_reason: Optional[str] = None
+    # Why no password rotation happened, as a small enum (NOT a free-form
+    # string). Keeping this as an enum — and rendering the human text via a
+    # static lookup table at print time — guarantees the summary output can
+    # never accidentally include the operator-supplied password value.
+    skipped_password_reason: Optional["PasswordSkipReason"] = None
 
     def __post_init__(self) -> None:
         if self.field_changes is None:
@@ -122,6 +127,27 @@ class RepairResult:
     @property
     def is_noop(self) -> bool:
         return not (self.created or self.field_changes or self.password_changed)
+
+
+class PasswordSkipReason(enum.Enum):
+    # Account does not exist and no env-var password was supplied, so the
+    # script cannot create it. The summary tells the operator which env var
+    # to set.
+    MISSING_FOR_CREATE = "missing_for_create"
+    # Account exists and no env-var password was supplied, so the existing
+    # ``hashed_password`` is intentionally left untouched.
+    UNCHANGED_NO_ENV = "unchanged_no_env"
+
+
+# Static lookup used by the summary printer. The {env_var} placeholder is
+# substituted with the env-var *name* (e.g. "DIRECTOR_PASSWORD"), never the
+# value, so this string can never contain the password.
+_SKIP_REASON_TEMPLATES = {
+    PasswordSkipReason.MISSING_FOR_CREATE: (
+        "missing — set {env_var} to create this account"
+    ),
+    PasswordSkipReason.UNCHANGED_NO_ENV: "unchanged ({env_var} not set)",
+}
 
 
 def _read_password(spec: DemoUserSpec) -> Optional[str]:
@@ -146,9 +172,7 @@ def _plan_for_user(db: Session, spec: DemoUserSpec, password: Optional[str]) -> 
         result.created = True
         if password is None:
             # Cannot create an account without a password — flag it.
-            result.skipped_password_reason = (
-                f"missing — set {spec.password_env_var} to create this account"
-            )
+            result.skipped_password_reason = PasswordSkipReason.MISSING_FOR_CREATE
         else:
             result.password_changed = True
         return result
@@ -169,9 +193,7 @@ def _plan_for_user(db: Session, spec: DemoUserSpec, password: Optional[str]) -> 
         result.password_changed = True
     else:
         # Existing row, no env password — leave hashed_password alone.
-        result.skipped_password_reason = (
-            f"unchanged ({spec.password_env_var} not set)"
-        )
+        result.skipped_password_reason = PasswordSkipReason.UNCHANGED_NO_ENV
 
     return result
 
@@ -229,13 +251,21 @@ def _print_summary(results: Iterable[RepairResult], *, applied: bool) -> None:
     print(header)
     print("-" * len(header))
 
+    # Map username -> env-var name from the static DEMO_USERS table. This is
+    # the only source of the env-var *name* used in the rendered text — the
+    # password value never reaches the print path.
+    env_var_for = {spec.username: spec.password_env_var for spec in DEMO_USERS}
+
+    def _render_skip(reason: PasswordSkipReason, username: str) -> str:
+        return _SKIP_REASON_TEMPLATES[reason].format(env_var=env_var_for[username])
+
     any_change = False
     for r in results:
         prefix = "+" if r.created else "~"
         if r.is_noop:
             print(f"  . {r.username}: no changes needed")
-            if r.skipped_password_reason:
-                print(f"      password: {r.skipped_password_reason}")
+            if r.skipped_password_reason is not None:
+                print(f"      password: {_render_skip(r.skipped_password_reason, r.username)}")
             continue
 
         any_change = True
@@ -245,8 +275,8 @@ def _print_summary(results: Iterable[RepairResult], *, applied: bool) -> None:
             print(f"      {change}")
         if r.password_changed:
             print("      password: rotated (value not shown)")
-        elif r.skipped_password_reason:
-            print(f"      password: {r.skipped_password_reason}")
+        elif r.skipped_password_reason is not None:
+            print(f"      password: {_render_skip(r.skipped_password_reason, r.username)}")
 
     if not any_change:
         print("\nAll three demo accounts are already in the desired state.")

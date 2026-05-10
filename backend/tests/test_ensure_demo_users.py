@@ -74,7 +74,7 @@ def test_dry_run_does_not_write(client, db, monkeypatch):
     director = _by_username(results, "director")
     assert director.created is True
     assert director.password_changed is False
-    assert director.skipped_password_reason and "DIRECTOR_PASSWORD" in director.skipped_password_reason
+    assert director.skipped_password_reason is ensure_demo_users.PasswordSkipReason.MISSING_FOR_CREATE
 
 
 # ---------------------------------------------------------------------------

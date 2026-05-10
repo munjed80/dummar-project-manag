@@ -42,7 +42,7 @@ In short: **the password reset is not broken — the accounts the operator was t
    - Idempotent — second run with no env vars is a clean no-op.
    - Limited to the three accounts above so an operator running it can never accidentally mass-edit other users.
 
-2. **Added `backend/tests/test_ensure_demo_users.py`** (12 new tests) — proves:
+2. **Added `backend/tests/test_ensure_demo_users.py`** (9 new tests) — proves:
    - `project_director` can create a user via `POST /users/` and that user can immediately log in via `POST /auth/login`.
    - `project_director` resets a user's password and login succeeds with the new password while the old password fails (401).
    - The repair script creates `investment_office` when given `INVESTMENT_OFFICE_PASSWORD`, and the new account can log in via `/auth/login`.
@@ -58,7 +58,7 @@ In short: **the password reset is not broken — the accounts the operator was t
 
 - `backend/scripts/__init__.py` *(new)* — empty package marker.
 - `backend/scripts/ensure_demo_users.py` *(new)* — the repair script.
-- `backend/tests/test_ensure_demo_users.py` *(new)* — 12 tests covering the script + the production user-management flow.
+- `backend/tests/test_ensure_demo_users.py` *(new)* — 9 tests covering the script + the production user-management flow.
 - `PROJECT_CONTINUITY.md` — this entry.
 
 No backend production code, no frontend code, no Alembic migration, no deploy / docker / nginx / SSL files were touched. The existing `seed_data.py` was left intact (it is still the right tool for fresh installs; the new script is the right tool for repairing already-seeded production DBs).
@@ -95,7 +95,7 @@ Re-run with --apply to write these changes.
 
 **Build / test results**
 
-- `cd backend && python -m pytest tests/ -q` → **628 passed** (was 619 before this session; +12 new tests in `test_ensure_demo_users.py`, with 3 in nearby suites already added between sessions; total wall time ~6m43s on PostgreSQL+PostGIS).
+- `cd backend && python -m pytest tests/ -q` → **628 passed** (was 619 before this session; +9 new tests in `test_ensure_demo_users.py`; total wall time ~6m43s on PostgreSQL+PostGIS).
 - `npm run build` → ✓ built in 1.14s. `dist/assets/UsersPage-*.js` 23.18 kB / 6.41 kB gzipped (unchanged — frontend not modified this session).
 - `grep -rE "resetPassword|password reset|hashed_password|verify_password|get_password_hash|investment_office|complaints_officer|ensure_demo_users|is_active|cached_user" src backend PROJECT_CONTINUITY.md` → 459 hits across 129 files; all in expected locations (`backend/app/api/users.py`, `backend/app/api/auth.py`, `backend/app/core/security.py`, `backend/app/scripts/seed_data.py`, `backend/scripts/ensure_demo_users.py`, `backend/tests/test_user_management.py`, `backend/tests/test_ensure_demo_users.py`, `src/pages/UsersPage.tsx`, `src/services/api.ts`, prior continuity entries).
 
