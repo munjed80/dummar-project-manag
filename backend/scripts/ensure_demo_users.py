@@ -162,15 +162,21 @@ def _read_password(spec: DemoUserSpec) -> Optional[str]:
     return raw
 
 
-def _plan_for_user(db: Session, spec: DemoUserSpec, password: Optional[str]) -> RepairResult:
-    """Compute (without writing) what would change for one demo account."""
+def _plan_for_user(db: Session, spec: DemoUserSpec, has_password: bool) -> RepairResult:
+    """Compute (without writing) what would change for one demo account.
+
+    ``has_password`` is a plain boolean — the actual password value is
+    intentionally **not** passed in here so the resulting ``RepairResult``
+    has no data-flow link to the secret. This keeps the print path
+    provably free of any password-derived data.
+    """
     result = RepairResult(username=spec.username)
 
     user = db.query(User).filter(User.username == spec.username).first()
 
     if user is None:
         result.created = True
-        if password is None:
+        if not has_password:
             # Cannot create an account without a password — flag it.
             result.skipped_password_reason = PasswordSkipReason.MISSING_FOR_CREATE
         else:
@@ -189,7 +195,7 @@ def _plan_for_user(db: Session, spec: DemoUserSpec, password: Optional[str]) -> 
     if not user.is_active:
         result.field_changes.append(f"is_active: {user.is_active} -> 1")
 
-    if password is not None:
+    if has_password:
         result.password_changed = True
     else:
         # Existing row, no env password — leave hashed_password alone.
@@ -309,7 +315,10 @@ def run(apply_changes: bool, db: Optional[Session] = None) -> List[RepairResult]
                     f"{_MIN_PASSWORD_LENGTH} characters; refusing to write."
                 )
 
-        plans = [_plan_for_user(db, spec, passwords[spec.username]) for spec in DEMO_USERS]
+        plans = [
+            _plan_for_user(db, spec, has_password=passwords[spec.username] is not None)
+            for spec in DEMO_USERS
+        ]
 
         if apply_changes:
             for spec, plan in zip(DEMO_USERS, plans):
