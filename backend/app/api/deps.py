@@ -158,10 +158,15 @@ def get_current_field_module_user(
 
 
 # Contract / investment modules (operational contracts, investment contracts,
-# investment properties, contract intelligence). complaints_officer is denied.
-# Note: investment_manager is intentionally EXCLUDED from this allowlist for
-# operational contracts (`/contracts`) — per the role-access spec, مكتب
-# الاستثمار only reaches investment-contracts/properties/intelligence.
+# investment properties, contract intelligence).
+#
+# This allowlist intentionally excludes BOTH complaints_officer AND
+# investment_manager:
+#   * complaints_officer — that role's whitelist is field-operations only
+#     (complaints / tasks / teams).
+#   * investment_manager — مكتب الاستثمار only reaches investment-specific
+#     endpoints (which use their own viewer dependencies); they must NOT
+#     see operational `/contracts`.
 _contracts_module_users = require_role(
     UserRole.PROJECT_DIRECTOR,
     UserRole.CONTRACTS_MANAGER,
@@ -187,8 +192,10 @@ def get_current_contracts_module_user(
 
 
 # Oversight modules (violations, licenses, inspection teams). Same role set
-# as field operations EXCEPT complaints_officer is denied — رئيس القسم
-# الفني only sees complaints/tasks/teams per the role-access spec.
+# as field operations EXCEPT all 3 module-restricted roles (complaints_officer,
+# contracts_manager, investment_manager) are denied — رئيس القسم الفني only
+# sees complaints/tasks/teams per the role-access spec, and the two
+# contract-only roles never reach oversight modules.
 _oversight_module_users = require_role(
     UserRole.PROJECT_DIRECTOR,
     UserRole.ENGINEER_SUPERVISOR,
