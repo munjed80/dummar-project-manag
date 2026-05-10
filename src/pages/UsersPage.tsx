@@ -26,19 +26,7 @@ import { toast } from 'sonner';
 import { describeLoadError } from '@/lib/loadError';
 import { ApiError } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
-
-const roleLabels: Record<string, string> = {
-  project_director: 'مدير المشروع',
-  contracts_manager: 'مدير العقود',
-  engineer_supervisor: 'مشرف هندسي',
-  complaints_officer: 'مسؤول الشكاوى',
-  area_supervisor: 'مشرف المنطقة',
-  field_team: 'فريق ميداني',
-  contractor_user: 'مستخدم مقاول',
-  citizen: 'مواطن',
-  property_manager: 'مسؤول الأصول',
-  investment_manager: 'مسؤول الاستثمار',
-};
+import { ROLE_LABELS as roleLabels } from '@/lib/roleLabels';
 
 const roleColors: Record<string, string> = {
   project_director: 'bg-purple-100 text-purple-800',
@@ -62,7 +50,7 @@ const ROLES = [
 const PAGE_SIZE = 15;
 
 export default function UsersPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, refresh: refreshAuth } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -80,13 +68,21 @@ export default function UsersPage() {
     role: 'field_team',
     phone: '',
     must_change_password: false,
+    org_unit_id: '' as string, // empty string = unassigned (sent as null)
   });
   const [saving, setSaving] = useState(false);
+
+  // Org units for the optional org-unit selector. The list is fetched lazily
+  // the first time the create/edit dialog opens to avoid an extra request on
+  // every page load.
+  const [orgUnits, setOrgUnits] = useState<Array<{ id: number; name: string; level: string; parent_id: number | null }>>([]);
+  const [orgUnitsLoaded, setOrgUnitsLoaded] = useState(false);
 
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
   const [activateTarget, setActivateTarget] = useState<User | null>(null);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const [resetForceChange, setResetForceChange] = useState(true);
   const [resetting, setResetting] = useState(false);
 
@@ -121,6 +117,18 @@ export default function UsersPage() {
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
+  const ensureOrgUnitsLoaded = useCallback(async () => {
+    if (orgUnitsLoaded) return;
+    try {
+      const units = await apiService.getOrganizationUnits();
+      setOrgUnits(units);
+    } catch {
+      // Non-fatal — the org-unit field becomes a no-op if the list fails.
+    } finally {
+      setOrgUnitsLoaded(true);
+    }
+  }, [orgUnitsLoaded]);
+
   const openCreateDialog = () => {
     setEditingUser(null);
     setFormData({
@@ -130,7 +138,9 @@ export default function UsersPage() {
       role: 'field_team',
       phone: '',
       must_change_password: true,
+      org_unit_id: '',
     });
+    void ensureOrgUnitsLoaded();
     setDialogOpen(true);
   };
 
@@ -143,7 +153,9 @@ export default function UsersPage() {
       role: user.role,
       phone: user.phone || '',
       must_change_password: !!user.must_change_password,
+      org_unit_id: user.org_unit_id != null ? String(user.org_unit_id) : '',
     });
+    void ensureOrgUnitsLoaded();
     setDialogOpen(true);
   };
 
@@ -160,9 +172,17 @@ export default function UsersPage() {
           role: formData.role,
           is_active: editingUser.is_active,
           must_change_password: formData.must_change_password,
+          // org_unit_id: empty string clears, otherwise pass the integer.
+          org_unit_id: formData.org_unit_id === '' ? null : Number(formData.org_unit_id),
         };
         await apiService.updateUser(editingUser.id, updateData);
         toast.success('تم تحديث المستخدم بنجاح');
+        // If the director edited their own account, refresh the auth
+        // context so the header / navigation immediately reflects the new
+        // full_name / role instead of keeping the stale cached_user.
+        if (currentUser?.id === editingUser.id) {
+          await refreshAuth();
+        }
       } else {
         if (!formData.username || !formData.password || !formData.full_name) {
           toast.error('يرجى ملء الحقول المطلوبة');
@@ -181,6 +201,7 @@ export default function UsersPage() {
           role: formData.role,
           phone: formData.phone || undefined,
           must_change_password: formData.must_change_password,
+          org_unit_id: formData.org_unit_id === '' ? undefined : Number(formData.org_unit_id),
         };
         await apiService.createUser(createPayload);
         toast.success('تم إنشاء المستخدم بنجاح');
@@ -200,6 +221,10 @@ export default function UsersPage() {
       toast.error('يجب أن تكون كلمة المرور 8 أحرف على الأقل');
       return;
     }
+    if (resetPassword !== resetPasswordConfirm) {
+      toast.error('كلمتا المرور غير متطابقتين');
+      return;
+    }
     setResetting(true);
     try {
       await apiService.resetUserPassword(resetTarget.id, {
@@ -209,6 +234,7 @@ export default function UsersPage() {
       toast.success('تم تغيير كلمة المرور بنجاح');
       setResetTarget(null);
       setResetPassword('');
+      setResetPasswordConfirm('');
       setResetForceChange(true);
       await fetchUsers();
     } catch (err) {
@@ -415,6 +441,23 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>الوحدة التنظيمية</Label>
+              <Select
+                value={formData.org_unit_id === '' ? '__none__' : formData.org_unit_id}
+                onValueChange={(v) => setFormData(f => ({ ...f, org_unit_id: v === '__none__' ? '' : v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="بدون وحدة" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">بدون وحدة</SelectItem>
+                  {orgUnits.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -436,7 +479,7 @@ export default function UsersPage() {
       </Dialog>
 
       {/* Reset Password Dialog */}
-      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setResetPassword(''); } }}>
+      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setResetPassword(''); setResetPasswordConfirm(''); } }}>
         <DialogContent className="sm:max-w-[450px]" dir="rtl">
           <DialogHeader>
             <DialogTitle>إعادة تعيين كلمة المرور</DialogTitle>
@@ -457,6 +500,20 @@ export default function UsersPage() {
                 autoComplete="new-password"
               />
             </div>
+            <div className="space-y-2">
+              <Label>تأكيد كلمة المرور *</Label>
+              <Input
+                type="password"
+                value={resetPasswordConfirm}
+                onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                minLength={8}
+                placeholder="أعد إدخال كلمة المرور"
+                autoComplete="new-password"
+              />
+              {resetPasswordConfirm.length > 0 && resetPassword !== resetPasswordConfirm && (
+                <p className="text-xs text-destructive">كلمتا المرور غير متطابقتين</p>
+              )}
+            </div>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -468,8 +525,11 @@ export default function UsersPage() {
             </label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setResetTarget(null)}>إلغاء</Button>
-            <Button onClick={handleResetPassword} disabled={resetting}>
+            <Button variant="outline" onClick={() => { setResetTarget(null); setResetPassword(''); setResetPasswordConfirm(''); }}>إلغاء</Button>
+            <Button
+              onClick={handleResetPassword}
+              disabled={resetting || resetPassword.length < 8 || resetPassword !== resetPasswordConfirm}
+            >
               {resetting && <Spinner className="animate-spin ml-2" size={16} />}
               تعيين كلمة المرور
             </Button>

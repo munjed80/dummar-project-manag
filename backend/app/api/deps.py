@@ -73,6 +73,18 @@ def get_current_contracts_manager(
     return current_user
 
 
+def get_current_contract_intelligence_user(
+    current_user: User = Depends(require_role(
+        UserRole.PROJECT_DIRECTOR,
+        UserRole.CONTRACTS_MANAGER,
+        # مكتب الاستثمار (investment_manager) needs access to the Contract
+        # Intelligence center per the user-management spec.
+        UserRole.INVESTMENT_MANAGER,
+    ))
+) -> User:
+    return current_user
+
+
 def get_current_complaints_officer(
     current_user: User = Depends(require_role(
         UserRole.PROJECT_DIRECTOR,

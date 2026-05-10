@@ -1,5 +1,6 @@
 import type { ElementType } from 'react';
 import type { UserRole } from '@/hooks/useAuth';
+import { ROLE_LABELS } from '@/lib/roleLabels';
 import {
   Briefcase,
   Buildings,
@@ -133,7 +134,7 @@ export const NAV_ENTRIES: NavEntry[] = [
     items: [
       { path: '/manual-contracts', icon: Rows, label: 'العقود التشغيلية', roles: OPERATIONAL_CONTRACT_ROLES },
       { path: '/investment-contracts', icon: ClipboardText, label: 'العقود الاستثمارية', roles: CONTRACTS_ROLES },
-      { path: '/contract-intelligence', icon: Brain, label: 'مركز ذكاء العقود', roles: ['project_director', 'contracts_manager'], badge: 'ai' },
+      { path: '/contract-intelligence', icon: Brain, label: 'مركز ذكاء العقود', roles: ['project_director', 'contracts_manager', 'investment_manager'], badge: 'ai' },
       // Note: route preserved as /investment-properties — labelled الأصول.
       { path: '/investment-properties', icon: Buildings, label: 'الأصول', roles: CONTRACTS_ROLES },
     ],
@@ -199,17 +200,5 @@ export function filterEntriesByRole(entries: NavEntry[], role: UserRole | null):
 
 export function formatRoleLabel(role: UserRole | null | undefined): string {
   if (!role) return 'مستخدم';
-  const roleMap: Record<UserRole, string> = {
-    project_director: 'مدير المشروع',
-    contracts_manager: 'مدير العقود',
-    engineer_supervisor: 'مشرف هندسي',
-    complaints_officer: 'مسؤول الشكاوى',
-    area_supervisor: 'مشرف منطقة',
-    field_team: 'فريق ميداني',
-    contractor_user: 'مستخدم متعهد',
-    citizen: 'مواطن',
-    property_manager: 'مدير الأصول',
-    investment_manager: 'مدير الاستثمار',
-  };
-  return roleMap[role] ?? role;
+  return ROLE_LABELS[role] ?? role;
 }

@@ -21,7 +21,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from sqlalchemy import func as sql_func, String
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_contracts_manager, get_current_internal_user
+from app.api.deps import (
+    get_current_contract_intelligence_user as get_current_contracts_manager,
+    get_current_internal_user,
+)
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.contract import Contract, ContractStatus, ContractType
