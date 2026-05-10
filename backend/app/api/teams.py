@@ -18,6 +18,9 @@ _team_managers = require_role(
     UserRole.PROJECT_DIRECTOR,
     UserRole.CONTRACTS_MANAGER,
     UserRole.ENGINEER_SUPERVISOR,
+    # رئيس القسم الفني (complaints_officer) manages executive teams per spec.
+    # Team deletion remains director-only.
+    UserRole.COMPLAINTS_OFFICER,
 )
 
 

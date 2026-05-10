@@ -26,19 +26,7 @@ import { toast } from 'sonner';
 import { describeLoadError } from '@/lib/loadError';
 import { ApiError } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
-
-const roleLabels: Record<string, string> = {
-  project_director: 'مدير المشروع',
-  contracts_manager: 'مدير العقود',
-  engineer_supervisor: 'مشرف هندسي',
-  complaints_officer: 'مسؤول الشكاوى',
-  area_supervisor: 'مشرف المنطقة',
-  field_team: 'فريق ميداني',
-  contractor_user: 'مستخدم مقاول',
-  citizen: 'مواطن',
-  property_manager: 'مسؤول الأصول',
-  investment_manager: 'مسؤول الاستثمار',
-};
+import { ROLE_LABELS as roleLabels } from '@/lib/roleLabels';
 
 const roleColors: Record<string, string> = {
   project_director: 'bg-purple-100 text-purple-800',
@@ -62,7 +50,7 @@ const ROLES = [
 const PAGE_SIZE = 15;
 
 export default function UsersPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, refresh: refreshAuth } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -163,6 +151,12 @@ export default function UsersPage() {
         };
         await apiService.updateUser(editingUser.id, updateData);
         toast.success('تم تحديث المستخدم بنجاح');
+        // If the director edited their own account, refresh the auth
+        // context so the header / navigation immediately reflects the new
+        // full_name / role instead of keeping the stale cached_user.
+        if (currentUser?.id === editingUser.id) {
+          await refreshAuth();
+        }
       } else {
         if (!formData.username || !formData.password || !formData.full_name) {
           toast.error('يرجى ملء الحقول المطلوبة');

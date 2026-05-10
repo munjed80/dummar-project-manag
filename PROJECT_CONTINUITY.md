@@ -8,6 +8,68 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-10 — User/Role Management Refresh + Demo Account Naming
+
+**Task:** Make `project_director` able to fully manage users from the UI, rename demo display names, give `complaints_officer` (now رئيس القسم الفني) full control of complaints/tasks/teams, give `investment_manager` (مكتب الاستثمار) access to investment properties + contracts + contract intelligence, and fix the bug where editing a user from the admin page did not refresh the header / cached user.
+
+**Files changed**
+
+Backend:
+- `backend/app/scripts/seed_data.py` — director full_name `م. أحمد الخطيب` → `د. ضياء`; added `investment_office` user (`مكتب الاستثمار`, role `investment_manager`). Skip-if-exists is preserved so production accounts and passwords are never overwritten.
+- `backend/app/api/deps.py` — added `get_current_contract_intelligence_user` (director + contracts_manager + investment_manager). `get_current_contracts_manager` is unchanged so operational contracts permissions don't widen.
+- `backend/app/api/contract_intelligence.py` — single import line now aliases `get_current_contract_intelligence_user as get_current_contracts_manager`, so all 26 contract-intelligence endpoints accept `investment_manager`.
+- `backend/app/api/teams.py` — `_team_managers` now includes `COMPLAINTS_OFFICER` (create/update teams). Delete remains director-only as required.
+- `backend/app/core/permissions.py` — added `(TASK, ASSIGN)` to the `COMPLAINTS_OFFICER` matrix entry so `/auth/me/permissions` reflects the team-assign capability the team_managers dependency already permits.
+- `backend/tests/test_role_management_refresh.py` — new suite (7 tests) covering: complaints_officer can create/update teams but cannot delete; complaints_officer has `task:assign` in matrix; investment_manager reaches `/contract-intelligence/dashboard`; field_team blocked from contract intelligence; director self-edit returns the updated full_name on both PUT and `/auth/me`.
+
+Frontend:
+- `src/lib/roleLabels.ts` — **new** central source of truth for Arabic role labels. Required labels per spec: `project_director=مدير المشروع`, `complaints_officer=رئيس القسم الفني`, `investment_manager=مكتب الاستثمار`, `property_manager=مسؤول الأصول`, `contracts_manager=مدير العقود`, `engineer_supervisor=مشرف هندسي`, `area_supervisor=مشرف منطقة`, `field_team=فريق تنفيذي`, `contractor_user=مقاول`, `citizen=مواطن`.
+- `src/pages/UsersPage.tsx`, `src/pages/UsersListPage.tsx`, `src/pages/SettingsPage.tsx`, `src/components/navigation/nav-config.ts` — replaced four duplicated `roleLabels` maps with imports from `@/lib/roleLabels`. `formatRoleLabel` in nav-config now reads from the same map.
+- `src/services/api.ts` — `updateUser` now syncs `localStorage.cached_user` when the returned user.id matches the cached user (fixes stale header on self-edit).
+- `src/pages/UsersPage.tsx` — `handleSave` calls `refresh()` on `useAuth()` after a successful self-edit so the header / nav update immediately.
+- `src/App.tsx` — `CONTRACT_INTELLIGENCE_ROLES` now includes `investment_manager`, opening `/contract-intelligence/*` routes.
+- `src/components/navigation/nav-config.ts` — `/contract-intelligence` nav entry now lists `investment_manager`.
+
+**Role-label changes (centralized)**
+- `complaints_officer`: `مسؤول الشكاوى` → **رئيس القسم الفني**
+- `investment_manager`: `مسؤول الاستثمار` / `مدير الاستثمار` → **مكتب الاستثمار**
+- `field_team`: `فريق ميداني` → **فريق تنفيذي**
+- `contractor_user`: `مستخدم مقاول` / `مستخدم متعهد` → **مقاول**
+- All other labels normalized to the single canonical form across pages.
+
+**Demo user changes**
+- `director` (`username` unchanged): `full_name` = **د. ضياء** (was `م. أحمد الخطيب`). Login is unaffected — same username/password and skip-if-exists guards production data.
+- New seed account: `username=investment_office`, `full_name=مكتب الاستثمار`, `role=investment_manager`. Created only if missing.
+
+**User-edit bug — root cause + fix**
+- Root cause: when the project_director used the admin Users page to edit their **own** record, `apiService.updateUser` returned the new user but nothing updated `localStorage.cached_user` or the `AuthContext` state. The page-level `fetchUsers()` re-rendered the table, but the header / sidebar continued reading the stale cached user, so the previously-displayed name persisted across navigations until a manual reload.
+- Fix:
+  1. `apiService.updateUser` now writes the response back to `cached_user` whenever the updated user matches the cached current-user id (defensive — covers any future caller, not just the Users page).
+  2. `UsersPage.handleSave` calls `refresh()` from `useAuth()` after a successful self-edit, which refetches `/auth/me` and `/auth/me/permissions` and propagates them through the AuthContext, so the header / nav reflect the change immediately.
+  3. Errors continue to surface as Arabic toasts via the existing `toArabicActionError` helper (401 / 403 / 400+detail / generic).
+
+**Permissions changed for رئيس القسم الفني (`complaints_officer`)**
+- Already had complaints CRUD/assign and tasks create/update.
+- Added: tasks `assign` (in role matrix, so `/auth/me/permissions` is honest); teams `create` and `update` (via `_team_managers`).
+- Unchanged: teams `delete` is still director-only (safe behavior preserved per spec).
+
+**Permissions changed for مكتب الاستثمار (`investment_manager`)**
+- Already had: investment_property `read`, investment_contract CRUD, all-internal-read.
+- Added: full access to **all** `/contract-intelligence/*` endpoints (dashboard, queue, documents, risks, duplicates, reports, exports, etc.) via the new `get_current_contract_intelligence_user` dependency.
+- Frontend: investment_manager can now navigate to `/contract-intelligence` and all its sub-routes (`/queue`, `/documents/:id`, `/bulk-import`, `/risks`, `/duplicates`, `/reports`).
+
+**Backend changed?** Yes — see files above. No new migrations (no schema/enum changes).
+
+**Validation results**
+- `cd backend && python -m pytest tests/ -q` — **619 passed, 33 warnings in 444s** (was 612 — added 7 new tests).
+- `npm run build` — **✓ built in 1.43s** (no TS errors).
+- `grep` sweep for `أحمد الخطيب|ضياء|مسؤول الشكاوى|رئيس القسم الفني|مكتب الاستثمار|investment_office|complaints_officer|investment_manager|project_director|get_current_contracts_manager|contract-intelligence|updateUser|cached_user` confirms: no stale `أحمد الخطيب` outside this log; the only remaining `مسؤول الشكاوى` references are documentation comments in `roleLabels.ts` that explicitly note the rename.
+
+**Recommended next step**
+- Communicate the رئيس القسم الفني / مكتب الاستثمار label changes to operators so existing user briefs / training material match the new UI text.
+
+---
+
 ### Session: 2026-05-05 — Citizen Complaint UI Polish + Smart Assistant Quality Improvement
 
 **Task:** Improve the citizen complaint landing/submission UI and the Smart Assistant quality/UX. Keep Arabic RTL UI, navy/blue premium look. No migrations, no route renames, no docker/nginx changes.

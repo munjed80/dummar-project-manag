@@ -112,9 +112,10 @@ const REPORT_ROLES: UserRole[] = [
   'complaints_officer', 'area_supervisor',
 ];
 
-// Roles that can access contract intelligence
+// Roles that can access contract intelligence (per spec: director,
+// contracts_manager, investment_manager / مكتب الاستثمار)
 const CONTRACT_INTELLIGENCE_ROLES: UserRole[] = [
-  'project_director', 'contracts_manager',
+  'project_director', 'contracts_manager', 'investment_manager',
 ];
 
 // Roles that can access investment properties (per spec: director, property

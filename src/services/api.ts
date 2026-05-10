@@ -1165,7 +1165,22 @@ class ApiService {
       body: JSON.stringify(sanitizeJsonPayload(data)),
     });
     if (!response.ok) await throwApiError(response, 'Failed to update user');
-    return response.json();
+    const updated: User = await response.json();
+    // Keep the cached current-user in sync when the admin edits their own
+    // record — otherwise the navigation/header keeps showing the stale
+    // full_name from localStorage until the next /auth/me refresh.
+    try {
+      const rawCached = localStorage.getItem('cached_user');
+      if (rawCached) {
+        const cached = JSON.parse(rawCached);
+        if (cached && cached.id === updated.id) {
+          localStorage.setItem('cached_user', JSON.stringify(updated));
+        }
+      }
+    } catch {
+      // Cache sync is best-effort — never let it break the API call.
+    }
+    return updated;
   }
 
   async deactivateUser(id: number): Promise<any> {

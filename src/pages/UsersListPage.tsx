@@ -13,19 +13,7 @@ import {
   EmptyState, ErrorState, LoadingSkeleton, MobileEntityCard,
   type StatusTone,
 } from '@/components/data';
-
-const roleLabels: Record<string, string> = {
-  project_director: 'مدير المشروع',
-  contracts_manager: 'مدير العقود',
-  engineer_supervisor: 'مهندس مشرف',
-  complaints_officer: 'مسؤول الشكاوى',
-  area_supervisor: 'مشرف منطقة',
-  field_team: 'فريق ميداني',
-  contractor_user: 'مستخدم مقاول',
-  citizen: 'مواطن',
-  property_manager: 'مسؤول الأصول',
-  investment_manager: 'مسؤول الاستثمار',
-};
+import { ROLE_LABELS as roleLabels } from '@/lib/roleLabels';
 
 // Soft, semantic tones — no saturated brand colors on a per-row basis.
 const roleTones: Record<string, StatusTone> = {

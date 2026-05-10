@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Spinner, GearSix, Buildings, Info, Upload, Database, Heartbeat, CheckCircle, XCircle, Warning, FloppyDisk } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import { ROLE_LABELS } from '@/lib/roleLabels';
 
 interface HealthData {
   status: string;
@@ -156,16 +157,7 @@ export default function SettingsPage() {
     </div>
   );
 
-  const roleLabels: Record<string, string> = {
-    project_director: 'مدير المشروع',
-    contracts_manager: 'مدير العقود',
-    engineer_supervisor: 'مشرف هندسي',
-    complaints_officer: 'مسؤول الشكاوى',
-    area_supervisor: 'مشرف المنطقة',
-    field_team: 'فريق ميداني',
-    contractor_user: 'مستخدم مقاول',
-    citizen: 'مواطن',
-  };
+  const roleLabels = ROLE_LABELS;
 
   const renderSettingInput = (item: SettingItem) => {
     const currentValue = item.key in edited ? edited[item.key] : (item.value ?? '');

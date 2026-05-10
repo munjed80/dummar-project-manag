@@ -108,6 +108,7 @@ ROLE_PERMISSIONS: dict[UserRole, Set[Tuple[ResourceType, Action]]] = {
         (ResourceType.COMPLAINT, Action.ASSIGN),
         (ResourceType.TASK, Action.CREATE),
         (ResourceType.TASK, Action.UPDATE),
+        (ResourceType.TASK, Action.ASSIGN),
         (ResourceType.VIOLATION, Action.CREATE),
         (ResourceType.VIOLATION, Action.UPDATE),
     },
