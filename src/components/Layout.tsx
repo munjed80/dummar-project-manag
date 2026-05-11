@@ -32,10 +32,12 @@ function readCachedRole(): UserRole | null {
   }
 }
 
-/** Roles that have access to the internal-messages module. */
+/** Roles that have access to the internal-messages module. complaints_officer
+ *  is restricted to /complaints, /tasks, /teams only and does not see the
+ *  الرسائل الداخلية sidebar entry, so we also skip the badge poll for them. */
 const MESSAGES_ROLES: UserRole[] = [
   'project_director', 'contracts_manager', 'engineer_supervisor',
-  'complaints_officer', 'area_supervisor', 'field_team', 'contractor_user',
+  'area_supervisor', 'field_team', 'contractor_user',
   'property_manager', 'investment_manager',
 ];
 
@@ -103,10 +105,11 @@ export function Layout({ children }: LayoutProps) {
       ),
   );
 
-  // The smart-assistant icon is only meaningful for internal staff
-  // (the /internal-bot route requires an internal role).
+  // The smart-assistant icon routes to /internal-bot, which is restricted to
+  // internal staff. complaints_officer is excluded per the role-access spec
+  // (the assistant exposes data outside their three-module scope).
   const canUseSmartAssistant = Boolean(
-    effectiveRole && effectiveRole !== 'citizen',
+    effectiveRole && effectiveRole !== 'citizen' && effectiveRole !== 'complaints_officer',
   );
 
   if (!loading && !effectiveRole && !apiService.isAuthenticated()) {

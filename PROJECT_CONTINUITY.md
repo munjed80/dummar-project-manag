@@ -8,6 +8,74 @@ This file is updated after every agent session. It serves as the single source o
 
 ---
 
+### Session: 2026-05-11 — Tighten complaints_officer sidebar/route allowlist (الرقابة والتراخيص hidden)
+
+**Task:** When a user with role `complaints_officer` / رئيس القسم الفني logged in, the sidebar still rendered the entire **الرقابة والتراخيص** group (التراخيص، المخالفات، فرق التفتيش) plus **خريطة العمليات** and **المشاريع**. Spec: complaints_officer must see only **العمليات الميدانية → الشكاوى، المهام، الفرق التنفيذية**, and direct URL access to forbidden pages must be blocked. Do not touch Alembic, docker/nginx, role names, or RTL.
+
+**Root cause**
+
+* `src/components/navigation/nav-config.ts` — `INSPECTION_ROLES` was aliased to `FIELD_ROLES`, and `FIELD_ROLES` itself includes `complaints_officer`. The inline comment claimed the 3 module-restricted roles were denied, but in fact `complaints_officer` matched `INSPECTION_ROLES`, `FIELD_ROLES` (used for `/violations`, `/projects`, `/complaints-map`) — so every "field-oversight" item was visible. `filterEntriesByRole` already drops empty groups, so the **only** reason الرقابة والتراخيص still rendered was that all three of its items resolved as visible for the role.
+* `src/App.tsx` — the route guards used `OVERSIGHT_ROLES = FIELD_MODULE_ROLES` and `FIELD_MODULE_ROLES` for `/complaints-map`, `INTERNAL_ROLES` for `/projects`, `/locations*`, `/messages`, `/internal-bot`. All of those allowed `complaints_officer` through, breaking task-spec rule #5 (direct URL access must be blocked).
+
+**Frontend fixes**
+
+1. `src/components/navigation/nav-config.ts`
+   * Added `FIELD_OVERSIGHT_ROLES` = `FIELD_ROLES` minus `complaints_officer` (project_director, engineer_supervisor, area_supervisor, field_team, contractor_user).
+   * `INSPECTION_ROLES` now aliases `FIELD_OVERSIGHT_ROLES` so التراخيص + فرق التفتيش are hidden for complaints_officer (matching the existing comment).
+   * `/projects`, `/violations`, `/complaints-map` items switched from `FIELD_ROLES` → `FIELD_OVERSIGHT_ROLES`.
+   * Result: with `complaints_officer`, `filterEntriesByRole` collapses الرقابة والتراخيص (all 3 items hidden) and الإدارة والتحكم (all 5 items hidden), and removes المشاريع from العمليات الميدانية.
+2. `src/App.tsx`
+   * Added `FIELD_OVERSIGHT_ROLES`, `PROJECTS_ROLES` (= `INTERNAL_ROLES` minus complaints_officer), and `INTERNAL_NON_COMPLAINTS_OFFICER_ROLES`.
+   * `OVERSIGHT_ROLES` (used by `/violations`, `/licenses`, `/inspection-teams`) now aliases `FIELD_OVERSIGHT_ROLES`.
+   * `/complaints-map` switched from `FIELD_MODULE_ROLES` → `FIELD_OVERSIGHT_ROLES`.
+   * `/projects`, `/projects/new`, `/projects/:id` switched from `INTERNAL_ROLES` → `PROJECTS_ROLES`.
+   * `/locations`, `/locations/:id`, `/messages`, `/internal-bot` switched from `INTERNAL_ROLES` → `INTERNAL_NON_COMPLAINTS_OFFICER_ROLES`.
+   * `/complaints`, `/tasks`, `/teams` (and `:id` siblings) **unchanged** — still allow complaints_officer.
+   * `RoleProtectedRoute` already redirects denied users to `homePathForRole(role)` (= `/complaints` for complaints_officer), so direct URL hits to e.g. `/violations` now bounce silently to `/complaints` instead of rendering.
+3. `src/components/Layout.tsx`
+   * `MESSAGES_ROLES` no longer includes complaints_officer → no useless background polling for the unread-messages badge.
+   * `canUseSmartAssistant` now also excludes complaints_officer, so the header المساعد الذكي button is hidden (the route was already blocked above; this prevents a click-then-bounce UX).
+
+**Files changed**
+
+* `src/components/navigation/nav-config.ts`
+* `src/App.tsx`
+* `src/components/Layout.tsx`
+* `PROJECT_CONTINUITY.md` (this entry)
+
+**Roles NOT affected** (per spec rule #6)
+
+* `project_director` — present in every relevant role set (`FIELD_ROLES`, `FIELD_OVERSIGHT_ROLES`, `INTERNAL_ROLES`, `ADMIN_ROLES`, etc.); sidebar and routes unchanged.
+* `contracts_manager` / `investment_manager` — never were in `FIELD_ROLES` or `FIELD_OVERSIGHT_ROLES`, and `INTERNAL_NON_COMPLAINTS_OFFICER_ROLES` keeps them. No change to their visible nav.
+* All other internal roles (`engineer_supervisor`, `area_supervisor`, `field_team`, `contractor_user`, `property_manager`) remain in both `FIELD_ROLES` and `FIELD_OVERSIGHT_ROLES`, so their sidebar is unchanged.
+
+**Final sidebar for complaints_officer / رئيس القسم الفني**
+
+```
+العمليات الميدانية
+├── الشكاوى            (/complaints)
+├── المهام             (/tasks)
+└── الفرق التنفيذية     (/teams)
+```
+
+(All other top-level entries — لوحة القيادة، موجز المحافظ، العقود والأصول، الرقابة والتراخيص، الإدارة والتحكم — are hidden. Header buttons: تقديم شكوى داخلية ✓, الإشعارات ✓, المساعد الذكي ✗, الإعدادات/الرسائل ✗.)
+
+**Commands run**
+
+* `npm install` — 270 packages, ok.
+* `npm run build` — `✓ built in 1.09s`, no errors.
+* `grep -rln "الرقابة والتراخيص|complaints_officer|nav-config|allowedRoles|sidebar|العمليات الميدانية" src` — 16 files matched (App, nav-config, Layout, GeoSubNav, ui/sidebar, Sidebar, SmartAssistantButton, PublicHeader, ComplaintsMapPage, UsersPage/ListPage, ViolationsPage, LoginPage, AuthContext, roleLabels, main.css) — confirms the role identifier and labels are still referenced consistently after the change.
+
+**Backend / migrations**
+
+* Untouched. The previous session's backend RBAC (`get_current_field_module_user`, `_ALL_INTERNAL_READ` exclusions in `app/core/permissions.py`) already blocks complaints_officer from oversight/contracts/admin endpoints, so no backend change was needed for this navigation-only fix.
+
+**Recommended next step**
+
+* Manual smoke test: log in as `complaints_officer` and confirm the sidebar renders only العمليات الميدانية with 3 children; type `/violations`, `/licenses`, `/inspection-teams`, `/complaints-map`, `/projects`, `/messages`, `/internal-bot` directly into the URL bar and confirm each redirects to `/complaints`. Repeat for `project_director` to confirm no regression.
+
+---
+
 ### Session: 2026-05-10 (latest) — Strict module-level RBAC for the 3 restricted roles
 
 **Task:** Critical RBAC issue — after login, restricted roles (complaints_officer, contracts_manager, investment_manager) could still see and reach the full platform. Enforce strict role-based access in BOTH frontend and backend, redirect restricted roles to their landing page after login, and forbid direct URL access to disallowed routes/endpoints. Don't touch Alembic, deploy/docker/nginx, role names, or RTL UI.

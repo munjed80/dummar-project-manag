@@ -59,12 +59,21 @@ export type NavEntry =
   | ({ kind: 'single' } & NavItem)
   | ({ kind: 'group' } & NavGroup);
 
-/** Field-operations modules — complaints, tasks, teams, violations,
- *  complaints map. The 3 contract/investment-only roles are excluded so
- *  their sidebar won't even show these entries (and the route guards back
- *  this up). */
+/** Field-operations core — complaints, tasks, teams. complaints_officer
+ *  (رئيس القسم الفني) is restricted to exactly these three modules per the
+ *  role-access spec, so this set keeps them included. The 3 contract/
+ *  investment-only roles are excluded. */
 const FIELD_ROLES: UserRole[] = [
   'project_director', 'engineer_supervisor', 'complaints_officer',
+  'area_supervisor', 'field_team', 'contractor_user',
+];
+
+/** Field-oversight modules — projects, violations, licenses, inspection
+ *  teams, complaints map. Same roster as FIELD_ROLES MINUS
+ *  complaints_officer, who must NOT see الرقابة والتراخيص or خريطة
+ *  العمليات (only الشكاوى / المهام / الفرق التنفيذية). */
+const FIELD_OVERSIGHT_ROLES: UserRole[] = [
+  'project_director', 'engineer_supervisor',
   'area_supervisor', 'field_team', 'contractor_user',
 ];
 
@@ -79,7 +88,7 @@ const OPERATIONAL_CONTRACT_ROLES: UserRole[] = [
   'area_supervisor', 'investment_manager', 'property_manager',
 ];
 
-const INSPECTION_ROLES: UserRole[] = FIELD_ROLES;
+const INSPECTION_ROLES: UserRole[] = FIELD_OVERSIGHT_ROLES;
 
 // Reports & oversight admin modules — the 3 module-restricted roles are
 // denied; remaining internal staff retain visibility.
@@ -128,7 +137,7 @@ export const NAV_ENTRIES: NavEntry[] = [
       { path: '/complaints', icon: ChatCircleDots, label: 'الشكاوى', roles: FIELD_ROLES },
       { path: '/tasks', icon: ListChecks, label: 'المهام', roles: FIELD_ROLES },
       { path: '/teams', icon: UsersThree, label: 'الفرق التنفيذية', roles: FIELD_ROLES },
-      { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: FIELD_ROLES },
+      { path: '/projects', icon: FolderOpen, label: 'المشاريع', roles: FIELD_OVERSIGHT_ROLES },
     ],
   },
   {
@@ -154,7 +163,7 @@ export const NAV_ENTRIES: NavEntry[] = [
       // — the 3 module-restricted roles (complaints_officer, contracts_manager,
       // investment_manager) are denied per the role-access spec.
       { path: '/licenses', icon: IdentificationCard, label: 'التراخيص', roles: INSPECTION_ROLES },
-      { path: '/violations', icon: Gavel, label: 'المخالفات', roles: FIELD_ROLES },
+      { path: '/violations', icon: Gavel, label: 'المخالفات', roles: FIELD_OVERSIGHT_ROLES },
       { path: '/inspection-teams', icon: Users, label: 'فرق التفتيش', roles: INSPECTION_ROLES },
     ],
   },
@@ -167,7 +176,7 @@ export const NAV_ENTRIES: NavEntry[] = [
       { path: '/users', icon: UsersThree, label: 'المستخدمون', roles: ['project_director'] },
       { path: '/reports', icon: ChartBar, label: 'التقارير', roles: REPORT_ROLES },
       // Note: route preserved as /complaints-map — labelled خريطة العمليات.
-      { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', roles: FIELD_ROLES },
+      { path: '/complaints-map', icon: MapTrifold, label: 'خريطة العمليات', roles: FIELD_OVERSIGHT_ROLES },
       { path: '/messages', icon: ChatsCircle, label: 'الرسائل الداخلية', roles: ADMIN_ROLES, badge: 'messages' },
       { path: '/settings', icon: GearSix, label: 'الإعدادات', roles: ADMIN_ROLES },
     ],
