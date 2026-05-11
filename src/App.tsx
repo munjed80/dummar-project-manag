@@ -156,11 +156,20 @@ const INTERNAL_ROLES: UserRole[] = [
 // previous access (we do not widen permissions for unrelated roles).
 // ---------------------------------------------------------------------------
 
-// Field-operations modules: complaints, tasks, teams, violations, complaints
-// map. complaints_officer is included; contracts_manager / investment_manager
-// are explicitly excluded.
+// Field-operations modules: complaints, tasks, teams. complaints_officer is
+// the strict-whitelist role that may ONLY see these three field modules
+// (الشكاوى / المهام / الفرق التنفيذية), so it is included here.
+// contracts_manager / investment_manager are explicitly excluded.
 const FIELD_MODULE_ROLES: UserRole[] = [
   'project_director', 'engineer_supervisor', 'complaints_officer',
+  'area_supervisor', 'field_team', 'contractor_user', 'property_manager',
+];
+
+// Field-oversight modules: projects, violations, licenses, inspection-teams,
+// complaints map. Same as FIELD_MODULE_ROLES MINUS complaints_officer, who
+// must NOT see الرقابة والتراخيص or خريطة العمليات per the role-access spec.
+const FIELD_OVERSIGHT_ROLES: UserRole[] = [
+  'project_director', 'engineer_supervisor',
   'area_supervisor', 'field_team', 'contractor_user', 'property_manager',
 ];
 
@@ -211,9 +220,22 @@ const OPERATIONAL_CONTRACT_ROLES: UserRole[] = [
 ];
 
 // Licenses, inspection-teams, violations: oversight modules — same roles as
-// FIELD_MODULE_ROLES (field staff + director); the 3 restricted roles are
-// denied.
-const OVERSIGHT_ROLES: UserRole[] = FIELD_MODULE_ROLES;
+// FIELD_OVERSIGHT_ROLES (field staff + director, NO complaints_officer); the
+// 3 restricted roles (complaints_officer, contracts_manager, investment_manager)
+// are denied.
+const OVERSIGHT_ROLES: UserRole[] = FIELD_OVERSIGHT_ROLES;
+
+// /projects: same as INTERNAL_ROLES but with complaints_officer removed —
+// complaints_officer is restricted to /complaints, /tasks, /teams only.
+const PROJECTS_ROLES: UserRole[] = INTERNAL_ROLES.filter(r => r !== 'complaints_officer');
+
+// Internal modules that complaints_officer must NOT reach (الرسائل الداخلية،
+// المساعد الذكي، الخريطة، المواقع، التقارير) — INTERNAL_ROLES minus
+// complaints_officer. Used as the route-guard equivalent for items the
+// sidebar already hides for that role.
+const INTERNAL_NON_COMPLAINTS_OFFICER_ROLES: UserRole[] = INTERNAL_ROLES.filter(
+  r => r !== 'complaints_officer',
+);
 
 // /users — admin only.
 const USERS_ROLES: UserRole[] = ['project_director'];
@@ -254,14 +276,14 @@ function App() {
           <Route path="/violations" element={<RoleProtectedRoute roles={OVERSIGHT_ROLES}><ViolationsPage /></RoleProtectedRoute>} />
           <Route path="/complaints" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><ComplaintsListPage /></RoleProtectedRoute>} />
           <Route path="/complaints/:id" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><ComplaintDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/complaints-map" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
+          <Route path="/complaints-map" element={<RoleProtectedRoute roles={FIELD_OVERSIGHT_ROLES}><ComplaintsMapPage /></RoleProtectedRoute>} />
           <Route path="/tasks" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TasksListPage /></RoleProtectedRoute>} />
           <Route path="/tasks/:id" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TaskDetailsPage /></RoleProtectedRoute>} />
           <Route path="/contracts" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractsListPage /></RoleProtectedRoute>} />
           <Route path="/contracts/:id" element={<RoleProtectedRoute roles={OPERATIONAL_CONTRACT_ROLES}><ContractDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/projects" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
-          <Route path="/projects/new" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
-          <Route path="/projects/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/projects" element={<RoleProtectedRoute roles={PROJECTS_ROLES}><ProjectsListPage /></RoleProtectedRoute>} />
+          <Route path="/projects/new" element={<RoleProtectedRoute roles={PROJECTS_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
+          <Route path="/projects/:id" element={<RoleProtectedRoute roles={PROJECTS_ROLES}><ProjectDetailsPage /></RoleProtectedRoute>} />
           <Route path="/inspection-teams" element={<RoleProtectedRoute roles={OVERSIGHT_ROLES}><InspectionTeamsPage /></RoleProtectedRoute>} />
           <Route path="/teams" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TeamsListPage /></RoleProtectedRoute>} />
           <Route path="/teams/new" element={<RoleProtectedRoute roles={FIELD_MODULE_ROLES}><TeamDetailsPage /></RoleProtectedRoute>} />
@@ -275,10 +297,10 @@ function App() {
           <Route path="/contract-intelligence/risks" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><RiskInsightsPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/duplicates" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><DuplicateReviewPage /></RoleProtectedRoute>} />
           <Route path="/contract-intelligence/reports" element={<RoleProtectedRoute roles={CONTRACT_INTELLIGENCE_ROLES}><IntelligenceReportsPage /></RoleProtectedRoute>} />
-          <Route path="/locations" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
+          <Route path="/locations" element={<RoleProtectedRoute roles={INTERNAL_NON_COMPLAINTS_OFFICER_ROLES}><LocationsListPage /></RoleProtectedRoute>} />
           <Route path="/locations/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><LocationReportsPage /></RoleProtectedRoute>} />
           <Route path="/locations/geo-dashboard" element={<RoleProtectedRoute roles={REPORT_ROLES}><GeoDashboardPage /></RoleProtectedRoute>} />
-          <Route path="/locations/:id" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
+          <Route path="/locations/:id" element={<RoleProtectedRoute roles={INTERNAL_NON_COMPLAINTS_OFFICER_ROLES}><LocationDetailPage /></RoleProtectedRoute>} />
           <Route path="/users" element={<RoleProtectedRoute roles={USERS_ROLES}><UsersPage /></RoleProtectedRoute>} />
           <Route path="/reports" element={<RoleProtectedRoute roles={REPORT_ROLES}><ReportsPage /></RoleProtectedRoute>} />
           <Route path="/settings" element={<RoleProtectedRoute roles={ADMIN_MODULE_ROLES}><SettingsPage /></RoleProtectedRoute>} />
@@ -286,8 +308,8 @@ function App() {
           <Route path="/investment-properties/:id" element={<RoleProtectedRoute roles={INVESTMENT_PROPERTIES_ROLES}><InvestmentPropertyDetailsPage /></RoleProtectedRoute>} />
           <Route path="/investment-contracts" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractsPage /></RoleProtectedRoute>} />
           <Route path="/investment-contracts/:id" element={<RoleProtectedRoute roles={INVESTMENT_CONTRACTS_ROLES}><InvestmentContractDetailsPage /></RoleProtectedRoute>}/>
-          <Route path="/messages" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalMessagesPage /></RoleProtectedRoute>} />
-          <Route path="/internal-bot" element={<RoleProtectedRoute roles={INTERNAL_ROLES}><InternalBotPage /></RoleProtectedRoute>} />
+          <Route path="/messages" element={<RoleProtectedRoute roles={INTERNAL_NON_COMPLAINTS_OFFICER_ROLES}><InternalMessagesPage /></RoleProtectedRoute>} />
+          <Route path="/internal-bot" element={<RoleProtectedRoute roles={INTERNAL_NON_COMPLAINTS_OFFICER_ROLES}><InternalBotPage /></RoleProtectedRoute>} />
           <Route path="/executive-briefing" element={<RoleProtectedRoute roles={ADMIN_MODULE_ROLES}><ExecutiveBriefingPage /></RoleProtectedRoute>} />
         </Routes>
       </Suspense>
