@@ -21,6 +21,12 @@ class ComplaintBase(BaseModel):
 
 class ComplaintCreate(ComplaintBase):
     images: Optional[List[str]] = None
+    # Citizen-uploaded identity document (national ID or passport image/PDF).
+    # Stored privately and never returned by ComplaintResponse — only accessible
+    # via the dedicated admin-only endpoint, see api/complaints.py.
+    identity_document: Optional[str] = None
+    # Citizen-written address from the public form. Stored as `location_text`.
+    address_text: Optional[str] = None
 
 
 class ComplaintUpdate(BaseModel):

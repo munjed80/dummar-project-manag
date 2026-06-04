@@ -11,9 +11,15 @@ import { toast } from 'sonner';
 import { UploadSimple, X, CheckCircle, Copy, ArrowLeft, Info, FileText, User, Phone, MapPin, PaperPlaneTilt, IdentificationCard } from '@phosphor-icons/react';
 import { PublicShell } from '@/components/PublicHeader';
 
-const IDENTITY_IMAGE_ACCEPTED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-const IDENTITY_IMAGE_ACCEPTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
-const IDENTITY_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
+const IDENTITY_DOCUMENT_ACCEPTED_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+];
+const IDENTITY_DOCUMENT_ACCEPTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+const IDENTITY_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const ADDRESS_TEXT_MIN_LENGTH = 10;
 
 export default function ComplaintSubmitPage() {
@@ -22,7 +28,7 @@ export default function ComplaintSubmitPage() {
   const [complaintType, setComplaintType] = useState('');
   const [description, setDescription] = useState('');
   const [addressText, setAddressText] = useState('');
-  const [identityImage, setIdentityImage] = useState<File | null>(null);
+  const [identityDocument, setIdentityDocument] = useState<File | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -50,34 +56,34 @@ export default function ComplaintSubmitPage() {
     setImageFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const validateIdentityImage = (file: File): string | null => {
+  const validateIdentityDocument = (file: File): string | null => {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     const typeOk =
-      IDENTITY_IMAGE_ACCEPTED_TYPES.includes(file.type.toLowerCase()) ||
-      IDENTITY_IMAGE_ACCEPTED_EXTENSIONS.includes(ext);
+      IDENTITY_DOCUMENT_ACCEPTED_TYPES.includes(file.type.toLowerCase()) ||
+      IDENTITY_DOCUMENT_ACCEPTED_EXTENSIONS.includes(ext);
     if (!typeOk) {
-      return 'صيغة صورة الهوية غير مدعومة. الصيغ المسموحة: jpg, jpeg, png, webp';
+      return 'صيغة وثيقة الهوية غير مدعومة. الصيغ المسموحة: jpg, jpeg, png, webp, pdf';
     }
-    if (file.size > IDENTITY_IMAGE_MAX_BYTES) {
-      return 'حجم صورة الهوية يتجاوز الحد الأقصى المسموح (5 ميغابايت)';
+    if (file.size > IDENTITY_DOCUMENT_MAX_BYTES) {
+      return 'حجم وثيقة الهوية يتجاوز الحد الأقصى المسموح (5 ميغابايت)';
     }
     return null;
   };
 
-  const handleIdentityImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIdentityDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = '';
     if (!file) return;
-    const error = validateIdentityImage(file);
+    const error = validateIdentityDocument(file);
     if (error) {
       toast.error(error);
       return;
     }
-    setIdentityImage(file);
+    setIdentityDocument(file);
   };
 
-  const removeIdentityImage = () => {
-    setIdentityImage(null);
+  const removeIdentityDocument = () => {
+    setIdentityDocument(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,12 +94,12 @@ export default function ComplaintSubmitPage() {
       return;
     }
 
-    if (!identityImage) {
-      toast.error('يرجى رفع صورة الهوية الشخصية للتحقق من اسم مقدم الشكوى');
+    if (!identityDocument) {
+      toast.error('يرجى رفع صورة الهوية أو جواز السفر للتحقق من اسم مقدم الشكوى');
       return;
     }
 
-    const identityError = validateIdentityImage(identityImage);
+    const identityError = validateIdentityDocument(identityDocument);
     if (identityError) {
       toast.error(identityError);
       return;
@@ -101,14 +107,14 @@ export default function ComplaintSubmitPage() {
 
     const trimmedAddress = addressText.trim();
     if (trimmedAddress.length < ADDRESS_TEXT_MIN_LENGTH) {
-      toast.error(`يرجى إدخال العنوان التفصيلي / المنطقة / الحي (لا يقل عن ${ADDRESS_TEXT_MIN_LENGTH} أحرف)`);
+      toast.error(`يرجى إدخال العنوان التفصيلي (لا يقل عن ${ADDRESS_TEXT_MIN_LENGTH} أحرف)`);
       return;
     }
 
     setSubmitting(true);
     try {
       setUploading(true);
-      const identityUpload = await apiService.uploadFilePublic(identityImage);
+      const identityUpload = await apiService.uploadFilePublic(identityDocument);
       setUploading(false);
 
       const result = await apiService.submitComplaintWithAttachments({
@@ -118,7 +124,7 @@ export default function ComplaintSubmitPage() {
         description,
         address_text: trimmedAddress,
         location_text: trimmedAddress,
-        identity_image: identityUpload?.path,
+        identity_document: identityUpload?.path,
       }, imageFiles);
 
       if (result?.queued) {
@@ -259,6 +265,46 @@ export default function ComplaintSubmitPage() {
                     />
                   </div>
                 </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="identity_document" className="text-sm font-medium">
+                    رفع صورة الهوية أو جواز السفر <span className="text-destructive">*</span>
+                  </Label>
+                  {!identityDocument ? (
+                    <div
+                      className="border-2 border-dashed border-border/60 rounded-xl p-6 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-all duration-200"
+                      onClick={() => identityInputRef.current?.click()}
+                    >
+                      <IdentificationCard className="mx-auto mb-2 text-muted-foreground" size={28} />
+                      <p className="text-sm font-medium">اضغط لاختيار وثيقة الهوية أو جواز السفر</p>
+                      <p className="text-xs text-muted-foreground mt-1">JPG، JPEG، PNG، WEBP، PDF — حتى 5 ميغابايت</p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 text-sm border border-border/40">
+                      <span className="truncate text-xs text-foreground/80 max-w-[80%]">{identityDocument.name}</span>
+                      <button
+                        type="button"
+                        onClick={removeIdentityDocument}
+                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ms-2"
+                        aria-label="حذف وثيقة الهوية"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    ref={identityInputRef}
+                    id="identity_document"
+                    name="identity_document"
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    onChange={handleIdentityDocumentSelect}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    تستخدم الوثيقة فقط للتحقق من اسم مقدم الشكوى ولا تظهر للعامة.
+                  </p>
+                </div>
               </div>
 
               {/* Section: Complaint details */}
@@ -306,7 +352,7 @@ export default function ComplaintSubmitPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="addressText" className="text-sm font-medium">
-                    العنوان التفصيلي / المنطقة / الحي <span className="text-destructive">*</span>
+                    العنوان التفصيلي <span className="text-destructive">*</span>
                   </Label>
                   <Textarea
                     id="addressText"
@@ -315,58 +361,11 @@ export default function ComplaintSubmitPage() {
                     required
                     minLength={ADDRESS_TEXT_MIN_LENGTH}
                     rows={3}
-                    placeholder="مثال: دمر الشرقية، الجزيرة 16، قرب المدرسة، البناء رقم…"
+                    placeholder="مثال: الجزيرة، الشارع، الطابق، رقم الشقة، أقرب معلم…"
                     className="resize-none rounded-lg text-sm leading-relaxed"
                   />
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    اكتب العنوان بالتفصيل (المنطقة، الحي، أقرب معلم، رقم البناء) — لا يقل عن {ADDRESS_TEXT_MIN_LENGTH} أحرف.
-                  </p>
-                </div>
-              </div>
-
-              {/* Section: Identity verification */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 pb-1 border-b border-border/50">
-                  <IdentificationCard size={15} className="text-muted-foreground" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">التحقق من الهوية</span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="identityImage" className="text-sm font-medium">
-                    صورة الهوية الشخصية للتحقق من اسم مقدم الشكوى <span className="text-destructive">*</span>
-                  </Label>
-                  {!identityImage ? (
-                    <div
-                      className="border-2 border-dashed border-border/60 rounded-xl p-6 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-all duration-200"
-                      onClick={() => identityInputRef.current?.click()}
-                    >
-                      <IdentificationCard className="mx-auto mb-2 text-muted-foreground" size={28} />
-                      <p className="text-sm font-medium">اضغط لاختيار صورة الهوية</p>
-                      <p className="text-xs text-muted-foreground mt-1">JPG، JPEG، PNG، WEBP — حتى 5 ميغابايت</p>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 text-sm border border-border/40">
-                      <span className="truncate text-xs text-foreground/80 max-w-[80%]">{identityImage.name}</span>
-                      <button
-                        type="button"
-                        onClick={removeIdentityImage}
-                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ms-2"
-                        aria-label="حذف صورة الهوية"
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                  )}
-                  <input
-                    ref={identityInputRef}
-                    id="identityImage"
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={handleIdentityImageSelect}
-                  />
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    تستخدم صورة الهوية فقط للتحقق من اسم مقدم الشكوى ولن تُعرض للعموم.
+                    اكتب العنوان بالتفصيل (المنطقة، الشارع، الطابق، رقم الشقة، أقرب معلم) — لا يقل عن {ADDRESS_TEXT_MIN_LENGTH} أحرف.
                   </p>
                 </div>
               </div>

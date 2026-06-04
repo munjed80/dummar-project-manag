@@ -57,6 +57,7 @@ class Complaint(Base):
         Integer, ForeignKey("organization_units.id"), nullable=True, index=True
     )
     images = Column(Text, nullable=True)
+    identity_document = Column(String(500), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
