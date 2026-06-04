@@ -96,7 +96,12 @@ def generate_tracking_number(db: Session) -> str:
 @limiter.limit("5/minute")
 def create_complaint(complaint: ComplaintCreate, request: Request, db: Session = Depends(get_db)):
     tracking_number = generate_tracking_number(db)
-    
+
+    # Public form may send the citizen-written address as `address_text`.
+    # Persist it as `location_text` (existing column) so downstream code
+    # (location inference, search, reports) keeps working unchanged.
+    location_text = complaint.location_text or complaint.address_text
+
     # Auto-assign location_id if not explicitly provided
     resolved_location_id = infer_location_id(
         db,
@@ -104,21 +109,22 @@ def create_complaint(complaint: ComplaintCreate, request: Request, db: Session =
         area_id=complaint.area_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
-        location_text=complaint.location_text,
+        location_text=location_text,
     )
-    
+
     db_complaint = Complaint(
         tracking_number=tracking_number,
         full_name=complaint.full_name,
         phone=complaint.phone,
         complaint_type=complaint.complaint_type,
         description=complaint.description,
-        location_text=complaint.location_text,
+        location_text=location_text,
         area_id=complaint.area_id,
         location_id=resolved_location_id,
         latitude=complaint.latitude,
         longitude=complaint.longitude,
         images=serialize_file_list(complaint.images),
+        identity_document=complaint.identity_document,
         status=ComplaintStatus.NEW,
         priority=ComplaintPriority.MEDIUM,
     )
@@ -324,6 +330,32 @@ def get_complaint(
     ):
         raise HTTPException(status_code=403, detail="Out of organization scope")
     return complaint
+
+
+@router.get("/{complaint_id}/identity-document")
+def get_complaint_identity_document(
+    complaint_id: int,
+    current_user: User = Depends(_complaint_managers),
+    db: Session = Depends(get_db),
+):
+    """Return the citizen-uploaded identity document path for a complaint.
+
+    The identity document (national ID or passport image/PDF) is private and
+    must never be exposed to the public, citizens, field teams, or
+    contractors. Access is restricted to complaint-manager roles
+    (project director, complaints officer, engineer/area supervisors) so
+    only authorized admin-dashboard users can retrieve it.
+    """
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if perms.is_sensitive_complaint(complaint) and not perms.can_view_sensitive_complaints(current_user):
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if not perms.authorize(
+        db, current_user, perms.Action.READ, perms.ResourceType.COMPLAINT, resource=complaint
+    ):
+        raise HTTPException(status_code=403, detail="Out of organization scope")
+    return {"identity_document": complaint.identity_document}
 
 
 @router.put("/{complaint_id}", response_model=ComplaintResponse)
